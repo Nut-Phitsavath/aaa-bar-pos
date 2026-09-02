@@ -1,0 +1,745 @@
+"use client"
+
+import { useState, useEffect, useMemo } from "react"
+import { Card } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Badge } from "@/components/ui/badge"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog"
+import { Plus, Edit, Trash2, Package, ShoppingCart, Minus, Settings, Search, ArrowUpDown, Store, Warehouse } from "lucide-react"
+import { formatLAK } from "@/lib/currency"
+import { Header } from "@/components/header"
+import { FormattedNumberInput } from "@/components/ui/formatted-number-input"
+import { FormattedTextInput } from "@/components/ui/formatted-text-input"
+import { DepositDialog } from "@/components/inventory/deposit-dialog"
+import { WithdrawDialog } from "@/components/inventory/withdraw-dialog"
+import { ShopAdjustDialog } from "@/components/inventory/shop-adjust-dialog"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { useTranslation } from "@/hooks/use-translation"
+import { notify } from "@/components/ui/sonner"
+import { useConfirm } from "@/components/confirm-provider"
+
+type Ingredient = {
+  id: string
+  name: string
+  unit: string
+  mainStock: number
+  subStock: number
+  minStock: number
+  maxStock: number
+  minStockSub: number
+  maxStockSub: number
+  cost: number
+  categoryId: string | null
+  category?: { id: string, name: string }
+}
+
+type Category = {
+  id: string
+  name: string
+  _count?: { ingredients: number }
+}
+
+type SortConfig = {
+  key: keyof Ingredient | 'status' | null
+  direction: 'asc' | 'desc'
+}
+
+export default function InventoryPage() {
+  const { t } = useTranslation()
+  const confirm = useConfirm()
+  const [ingredients, setIngredients] = useState<Ingredient[]>([])
+  const [categories, setCategories] = useState<Category[]>([])
+  const [isDialogOpen, setIsDialogOpen] = useState(false)
+  const [isCatDialogOpen, setIsCatDialogOpen] = useState(false)
+  const [newCatName, setNewCatName] = useState("")
+  const [editingItem, setEditingItem] = useState<Ingredient | null>(null)
+  const [activeTab, setActiveTab] = useState<"SUB" | "MAIN">("SUB")
+  const [isTransferOpen, setIsTransferOpen] = useState(false)
+  const [transferItem, setTransferItem] = useState<Ingredient | null>(null)
+  const [transferQty, setTransferQty] = useState("")
+  const [isDepositOpen, setIsDepositOpen] = useState(false)
+  const [depositItem, setDepositItem] = useState<Ingredient | null>(null)
+  const [isWithdrawOpen, setIsWithdrawOpen] = useState(false)
+  const [withdrawItem, setWithdrawItem] = useState<Ingredient | null>(null)
+  const [shopAdjustItem, setShopAdjustItem] = useState<Ingredient | null>(null)
+  const [isShopAdjustOpen, setIsShopAdjustOpen] = useState(false)
+
+  // Search and Sort
+  const [searchQuery, setSearchQuery] = useState("")
+  const [categoryFilter, setCategoryFilter] = useState("ALL")
+  const [sortConfig, setSortConfig] = useState<SortConfig>({ key: null, direction: 'asc' })
+
+  const [formData, setFormData] = useState({
+    name: "",
+    unit: "kg",
+    mainStock: "",
+    minStock: "",
+    maxStock: "",
+    minStockSub: "",
+    maxStockSub: "",
+    cost: "",
+    categoryId: ""
+  })
+
+  useEffect(() => {
+    fetchInventory()
+    fetchCategories()
+  }, [])
+
+  const fetchCategories = async () => {
+    try {
+      const res = await fetch('/api/inventory-categories')
+      if (res.ok) setCategories(await res.json())
+    } catch (e) { console.error(e) }
+  }
+
+  const fetchInventory = async () => {
+    try {
+      const res = await fetch('/api/inventory')
+      if (res.ok) {
+        setIngredients(await res.json())
+      }
+    } catch (e) {
+      console.error(e)
+    }
+  }
+
+  const handleSubmit = async () => {
+    try {
+      const url = editingItem ? `/api/inventory/${editingItem.id}` : '/api/inventory'
+      const method = editingItem ? 'PUT' : 'POST'
+
+      // Convert string values to numbers for API
+      const payload = {
+        name: formData.name,
+        unit: formData.unit,
+        mainStock: parseFloat(formData.mainStock) || 0,
+        minStock: parseFloat(formData.minStock) || 0,
+        maxStock: parseFloat(formData.maxStock) || 0,
+        minStockSub: parseFloat(formData.minStockSub) || 0,
+        maxStockSub: parseFloat(formData.maxStockSub) || 0,
+        cost: parseFloat(formData.cost) || 0,
+        categoryId: formData.categoryId || null
+      }
+
+      const res = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      })
+
+      if (res.ok) {
+        setIsDialogOpen(false)
+        resetForm()
+        fetchInventory()
+      }
+    } catch (e) {
+      console.error(e)
+    }
+  }
+
+  const handleEdit = (item: Ingredient) => {
+    item.subStock = Number(item.subStock) || 0;
+    item.mainStock = Number(item.mainStock) || 0;
+    item.minStock = Number(item.minStock) || 0;
+    item.maxStock = Number(item.maxStock) || 0;
+    item.minStockSub = Number(item.minStockSub) || 0;
+    item.maxStockSub = Number(item.maxStockSub) || 0;
+    item.cost = Number(item.cost) || 0;
+
+    setEditingItem(item)
+
+    setFormData({
+      name: item.name,
+      unit: item.unit,
+      mainStock: item.mainStock.toString(),
+      minStock: item.minStock.toString(),
+      maxStock: item.maxStock.toString(),
+      minStockSub: item.minStockSub.toString(),
+      maxStockSub: item.maxStockSub.toString(),
+      cost: item.cost.toString(),
+      categoryId: item.categoryId || ""
+    })
+    setIsDialogOpen(true)
+  }
+
+  const handleTransfer = async () => {
+    if (!transferItem || !transferQty) return
+    try {
+      // Record transaction
+      const res = await fetch('/api/stock-transactions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ingredientId: transferItem.id,
+          type: 'TRANSFER',
+          quantity: parseFloat(transferQty),
+          fromStore: 'MAIN',
+          toStore: 'SUB'
+        })
+      })
+
+      if (res.ok) {
+        notify.success(t.transfer_success, { description: `${transferQty} ${transferItem.unit} — ${transferItem.name} → ${t.to_shop}` })
+        setIsTransferOpen(false)
+        setTransferQty("")
+        fetchInventory()
+      } else {
+        notify.error(t.transfer_failed)
+      }
+    } catch (e) {
+      console.error(e)
+      notify.error(t.transfer_failed)
+    }
+  }
+
+  const handleDelete = async (id: string) => {
+    if (!(await confirm({ title: t.delete_confirm_title, description: t.cannot_be_undone, confirmLabel: t.delete, destructive: true }))) return
+
+    try {
+      const res = await fetch(`/api/inventory/${id}`, { method: 'DELETE' })
+      if (res.ok) {
+        notify.success(t.deleted_success)
+        fetchInventory()
+      } else {
+        notify.error((await res.json()).error || t.delete_failed)
+      }
+    } catch (e) {
+      console.error(e)
+      notify.error(t.delete_failed)
+    }
+  }
+
+  const resetForm = () => {
+    setEditingItem(null)
+    setFormData({
+      name: "",
+      unit: "kg",
+      mainStock: "",
+      minStock: "",
+      maxStock: "",
+      minStockSub: "",
+      maxStockSub: "",
+      cost: "",
+      categoryId: ""
+    })
+  }
+
+  const getStockStatus = (item: Ingredient) => {
+    const isSub = activeTab === "SUB"
+    const stock = isSub ? item.subStock : item.mainStock
+    const min = isSub ? item.minStockSub : item.minStock
+    const max = isSub ? item.maxStockSub : item.maxStock
+
+    if (stock <= min) {
+      return { label: t.low_stock, color: "bg-red-100 text-red-800" }
+    } else if (stock >= max) {
+      return { label: t.overstock, color: "bg-yellow-100 text-yellow-800" }
+    }
+    return { label: t.normal, color: "bg-green-100 text-green-800" }
+  }
+
+  const handleSort = (key: keyof Ingredient | 'status') => {
+    let direction: 'asc' | 'desc' = 'asc';
+    if (sortConfig.key === key && sortConfig.direction === 'asc') {
+      direction = 'desc';
+    }
+    setSortConfig({ key, direction });
+  };
+
+  const sortedIngredients = useMemo(() => {
+    let sortableItems = [...ingredients];
+
+    // Filter
+    if (searchQuery) {
+      sortableItems = sortableItems.filter(item =>
+        item.name.toLowerCase().includes(searchQuery.toLowerCase())
+      )
+    }
+
+    if (categoryFilter !== "ALL") {
+      sortableItems = sortableItems.filter(item => item.categoryId === categoryFilter)
+    }
+
+    // Sort
+    if (sortConfig.key) {
+      sortableItems.sort((a, b) => {
+        if (sortConfig.key === 'status') {
+          // Helper to get priority (1: Low, 2: Over, 3: Normal)
+          const getP = (i: Ingredient) => {
+            const isSub = activeTab === "SUB"
+            const stock = isSub ? i.subStock : i.mainStock
+            const min = isSub ? i.minStockSub : i.minStock
+            const max = isSub ? i.maxStockSub : i.maxStock
+
+            if (stock <= min) return 1
+            if (stock >= max) return 2
+            return 3
+          }
+          const pA = getP(a)
+          const pB = getP(b)
+          if (pA < pB) return sortConfig.direction === 'asc' ? -1 : 1
+          if (pA > pB) return sortConfig.direction === 'asc' ? 1 : -1
+          return 0
+        }
+
+        // @ts-ignore
+        if (a[sortConfig.key] < b[sortConfig.key]) {
+          return sortConfig.direction === 'asc' ? -1 : 1;
+        }
+        // @ts-ignore
+        if (a[sortConfig.key] > b[sortConfig.key]) {
+          return sortConfig.direction === 'asc' ? 1 : -1;
+        }
+        return 0;
+      });
+    }
+    return sortableItems;
+  }, [ingredients, sortConfig, searchQuery, categoryFilter]);
+
+  return (
+    <div className="min-h-screen bg-background">
+      <Header title={t.inventory_management} />
+
+      <div className="p-6 space-y-6">
+        {/* Inventory View Tabs */}
+        <Tabs value={activeTab} onValueChange={(val) => setActiveTab(val as "SUB" | "MAIN")} className="w-full">
+          <div className="flex justify-between items-center mb-6">
+            <TabsList className="grid w-full grid-cols-2 lg:w-[400px]">
+              <TabsTrigger value="SUB" className="font-bold h-11">
+                <Store className="w-4 h-4 mr-2" />
+                {t.shop_inventory || "Shop Inventory"}
+              </TabsTrigger>
+              <TabsTrigger value="MAIN" className="font-bold h-11">
+                <Warehouse className="w-4 h-4 mr-2" />
+                {t.warehouse || "Warehouse"}
+              </TabsTrigger>
+            </TabsList>
+
+            <div className="flex gap-2">
+              <div className="relative w-64">
+                <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder={t.search_items}
+                  className="pl-8"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                />
+              </div>
+              <select
+                className="h-10 px-3 rounded-md border border-input bg-background text-sm ring-offset-background"
+                value={categoryFilter}
+                onChange={(e) => setCategoryFilter(e.target.value)}
+              >
+                <option value="ALL">{t.all_categories || "All Categories"}</option>
+                {categories.map(cat => (
+                  <option key={cat.id} value={cat.id}>{cat.name}</option>
+                ))}
+              </select>
+              
+              <Dialog open={isCatDialogOpen} onOpenChange={setIsCatDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button variant="outline" className="border-amber-200 text-amber-700 hover:bg-amber-50">
+                    <Settings className="w-4 h-4 mr-2" />
+                    {t.manage_categories || "Categories"}
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>{t.manage_categories || "Manage Ingredient Categories"}</DialogTitle>
+                  </DialogHeader>
+                  <div className="space-y-4 py-4">
+                    <div className="flex gap-2">
+                      <Input 
+                        placeholder={t.new_category_name || "New category name"} 
+                        value={newCatName}
+                        onChange={e => setNewCatName(e.target.value)}
+                      />
+                      <Button onClick={async () => {
+                        if(!newCatName) return;
+                        const res = await fetch('/api/inventory-categories', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ name: newCatName })
+                        });
+                        if (res.ok) {
+                          notify.success(t.saved_success, { description: newCatName });
+                          setNewCatName("");
+                          fetchCategories();
+                        } else {
+                          notify.error((await res.json()).error || t.save_failed);
+                        }
+                      }}>
+                        {t.add || "Add"}
+                      </Button>
+                    </div>
+                    <div className="border rounded-md max-h-[300px] overflow-y-auto">
+                      <Table>
+                        <TableBody>
+                          {categories.map(cat => (
+                            <TableRow key={cat.id}>
+                              <TableCell className="font-medium">
+                                {cat.name}
+                              </TableCell>
+                              <TableCell className="text-right text-muted-foreground text-xs">
+                                {cat._count?.ingredients || 0} {t.items || "items"}
+                              </TableCell>
+                              <TableCell className="text-right flex gap-1 justify-end">
+                                <Button 
+                                  variant="ghost" 
+                                  size="icon" 
+                                  className="h-11 w-11 text-slate-400 hover:text-amber-600"
+                                  onClick={async () => {
+                                    const newName = prompt("Rename to:", cat.name);
+                                    if(newName && newName !== cat.name) {
+                                      const res = await fetch(`/api/inventory-categories/${cat.id}`, {
+                                        method: 'PUT',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({ name: newName })
+                                      });
+                                      if (res.ok) { notify.success(t.saved_success, { description: newName }); fetchCategories(); }
+                                      else notify.error((await res.json()).error || t.save_failed);
+                                    }
+                                  }}
+                                >
+                                  <ArrowUpDown className="h-4 w-4 rotate-90" />
+                                </Button>
+                                <Button 
+                                  variant="ghost" 
+                                  size="icon" 
+                                  className="h-11 w-11 text-slate-400 hover:text-red-600"
+                                  onClick={async () => {
+                                    if (await confirm({ title: t.delete_category_confirm, description: `${cat.name} — ${t.delete_category_desc}`, confirmLabel: t.delete, destructive: true })) {
+                                      const res = await fetch(`/api/inventory-categories/${cat.id}`, {
+                                        method: 'DELETE'
+                                      });
+                                      if (res.ok) { notify.success(t.deleted_success); fetchCategories(); }
+                                      else notify.error((await res.json()).error || t.delete_failed);
+                                    }
+                                  }}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </div>
+                </DialogContent>
+              </Dialog>
+
+              {(activeTab == "MAIN" || activeTab == "SUB") ? (
+                <Dialog open={isDialogOpen} onOpenChange={(open) => { setIsDialogOpen(open); if (!open) resetForm(); }}>
+                  <DialogTrigger asChild>
+                    <Button className="bg-amber-600 hover:bg-amber-700">
+                      <Plus className="w-4 h-4 mr-2" />
+                      {t.add_ingredient}
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent>
+                    <DialogHeader>
+                      <DialogTitle>{editingItem ? t.edit : t.add_item} {t.inventory}</DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-4">
+                      <div className="space-y-2">
+                        <Label>{t.name}</Label>
+                        <FormattedTextInput value={formData.name} onChange={val => setFormData({ ...formData, name: val })} />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>{t.category || "Category"}</Label>
+                        <select
+                          className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                          value={formData.categoryId}
+                          onChange={(e) => setFormData({ ...formData, categoryId: e.target.value })}
+                        >
+                          <option value="">{t.no_category || "No Category"}</option>
+                          {categories.map((cat) => (
+                            <option key={cat.id} value={cat.id}>{cat.name}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label>{t.unit}</Label>
+                          <FormattedTextInput
+                            placeholder="e.g. kg, L, pcs"
+                            value={formData.unit}
+                            onChange={val => setFormData({ ...formData, unit: val })}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>{t.initial_warehouse_stock}</Label>
+                          <FormattedNumberInput value={formData.mainStock} onChange={val => setFormData({ ...formData, mainStock: val })} />
+                          <p className="text-xs text-muted-foreground">{t.shop_stock_starts_zero}</p>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2 p-3 bg-slate-50 rounded-lg">
+                          <Label className="text-amber-800 font-bold">🏭 Warehouse Limits</Label>
+                          <div className="space-y-2 mt-2">
+                            <Label>{t.min_stock}</Label>
+                            <FormattedNumberInput value={formData.minStock} onChange={val => setFormData({ ...formData, minStock: val })} />
+                          </div>
+                          <div className="space-y-2">
+                            <Label>{t.max_stock}</Label>
+                            <FormattedNumberInput value={formData.maxStock} onChange={val => setFormData({ ...formData, maxStock: val })} />
+                          </div>
+                        </div>
+                        <div className="space-y-2 p-3 bg-amber-50 rounded-lg">
+                          <Label className="text-amber-800 font-bold">🏪 Shop Limits</Label>
+                          <div className="space-y-2 mt-2">
+                            <Label>{t.min_stock}</Label>
+                            <FormattedNumberInput value={formData.minStockSub} onChange={val => setFormData({ ...formData, minStockSub: val })} />
+                          </div>
+                          <div className="space-y-2">
+                            <Label>{t.max_stock}</Label>
+                            <FormattedNumberInput value={formData.maxStockSub} onChange={val => setFormData({ ...formData, maxStockSub: val })} />
+                          </div>
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        <Label>{t.cost_per_unit} (LAK)</Label>
+                        <FormattedNumberInput allowDecimals={true} value={formData.cost} onChange={val => setFormData({ ...formData, cost: val })} />
+                      </div>
+                    </div>
+                    <DialogFooter>
+                      <Button variant="outline" onClick={() => setIsDialogOpen(false)}>{t.cancel}</Button>
+                      <Button className="bg-amber-600 hover:bg-amber-700" onClick={handleSubmit}>
+                        {editingItem ? t.update : t.save}
+                      </Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
+              ) : null}
+            </div>
+          </div>
+
+          {/* Stats */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+            <Card className="p-6">
+              <p className="text-sm text-muted-foreground mb-1">{t.total_items}</p>
+              <p className="text-3xl font-bold">{ingredients.length}</p>
+            </Card>
+            <Card className="p-6">
+              <p className="text-sm text-muted-foreground mb-1">{t.low_stock} ({activeTab === "SUB" ? "Shop" : "Whse"})</p>
+              <p className="text-3xl font-bold text-red-600">
+                {ingredients.filter(i => {
+                  const stock = activeTab === "SUB" ? i.subStock : i.mainStock
+                  const min = activeTab === "SUB" ? i.minStockSub : i.minStock
+                  return stock <= min
+                }).length}
+              </p>
+            </Card>
+            <Card className="p-6">
+              <p className="text-sm text-muted-foreground mb-1">{t.total_value} ({activeTab === "SUB" ? "Shop" : "Whse"})</p>
+              <p className="text-2xl font-bold text-green-600">
+                {formatLAK(ingredients.reduce((sum, i) => sum + ((activeTab === "SUB" ? i.subStock : i.mainStock) * i.cost), 0))}
+              </p>
+            </Card>
+          </div>
+
+          {/* Inventory Table */}
+          <Card className="p-6">
+            <div className="rounded-md border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-[300px] cursor-pointer" onClick={() => handleSort('name')}>
+                      <div className="flex items-center gap-1">
+                        {t.item}
+                        <ArrowUpDown className="h-3 w-3" />
+                      </div>
+                    </TableHead>
+                    <TableHead>{t.category || "Category"}</TableHead>
+                    <TableHead className="cursor-pointer" onClick={() => handleSort(activeTab === 'SUB' ? 'subStock' : 'mainStock')}>
+                      <div className="flex items-center gap-1">
+                        Stock ({activeTab === 'SUB' ? 'Shop' : 'Whse'})
+                        <ArrowUpDown className="h-3 w-3" />
+                      </div>
+                    </TableHead>
+                    <TableHead>{t.unit}</TableHead>
+                    <TableHead className="cursor-pointer" onClick={() => handleSort(activeTab === 'SUB' ? 'minStockSub' : 'minStock')}>
+                      <div className="flex items-center gap-1">
+                        {t.min_stock}
+                        <ArrowUpDown className="h-3 w-3" />
+                      </div>
+                    </TableHead>
+                    <TableHead>{t.cost}</TableHead>
+                    <TableHead>{t.value}</TableHead>
+                    <TableHead className="w-[300px] cursor-pointer" onClick={() => handleSort('status')}>
+                      <div className="flex items-center gap-1">
+                        {t.status}
+                        <ArrowUpDown className="h-3 w-3" />
+                      </div>
+                    </TableHead>
+                    <TableHead className="text-right">{t.actions}</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {sortedIngredients.length > 0 ? (
+                    sortedIngredients.map((item) => {
+                      const status = getStockStatus(item)
+                      return (
+                        <TableRow key={item.id}>
+                          <TableCell className="font-medium">
+                            <div className="flex items-center gap-2">
+                              <Package className="h-4 w-4 text-muted-foreground" />
+                              {item.name}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className="text-xs">
+                              {item.category?.name || t.no_category || "Uncategorized"}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="font-bold text-lg">
+                            {activeTab === "SUB" ? item.subStock : item.mainStock}
+                          </TableCell>
+                          <TableCell>{item.unit}</TableCell>
+                          <TableCell>{activeTab === "SUB" ? item.minStockSub : item.minStock}</TableCell>
+                          <TableCell>{formatLAK(item.cost)}</TableCell>
+                          <TableCell>{formatLAK((activeTab === 'SUB' ? item.subStock : item.mainStock) * item.cost)}</TableCell>
+                          <TableCell>
+                            <Badge className={status.color}>{status.label}</Badge>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex justify-end gap-2">
+                              {activeTab === "MAIN" ? (
+                                <>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-11 border-green-200 text-green-700 bg-green-50 hover:bg-green-100"
+                                    onClick={() => { setDepositItem(item); setIsDepositOpen(true); }}
+                                  >
+                                    <ShoppingCart className="w-3 h-3 mr-1" />
+                                    In
+                                  </Button>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-11 border-rose-200 text-rose-700 bg-rose-50 hover:bg-rose-100"
+                                    onClick={() => { setWithdrawItem(item); setIsWithdrawOpen(true); }}
+                                  >
+                                    <Minus className="w-3 h-3 mr-1" />
+                                    Out
+                                  </Button>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-11 border-amber-200 text-amber-700 bg-amber-50 hover:bg-amber-100"
+                                    onClick={() => { setTransferItem(item); setIsTransferOpen(true); }}
+                                  >
+                                    To Shop
+                                  </Button>
+                                  <Button variant="ghost" size="icon" className="h-11 w-11 hover:bg-red-50 hover:text-red-600" onClick={() => handleDelete(item.id)}>
+                                    <Trash2 className="w-4 h-4" />
+                                  </Button>
+                                  <Button variant="ghost" size="icon" className="h-11 w-11" onClick={() => handleEdit(item)}>
+                                    <Edit className="w-4 h-4" />
+                                  </Button>
+                                </>
+                              ) : (
+                                <>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-11 border-amber-200 text-amber-700 bg-amber-50 hover:bg-amber-100"
+                                    onClick={() => { setShopAdjustItem(item); setIsShopAdjustOpen(true); }}
+                                  >
+                                    <Settings className="w-4 h-4 mr-1" />
+                                    Adjust
+                                  </Button>
+                                  <Button variant="ghost" size="icon" className="h-11 w-11" onClick={() => handleEdit(item)}>
+                                    <Edit className="w-4 h-4" />
+                                  </Button>
+                                </>
+                              )}
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      )
+                    })
+                  ) : (
+                    <TableRow>
+                      <TableCell colSpan={8} className="h-24 text-center">
+                        {t.no_items_found}
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          </Card>
+
+          {/* Stock Transfer Dialog */}
+          <Dialog open={isTransferOpen} onOpenChange={setIsTransferOpen}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Transfer Stock: {transferItem?.name}</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4">
+                <p className="text-sm text-muted-foreground">
+                  Move stock from Warehouse to Shop for daily operations
+                </p>
+                <div className="space-y-2">
+                  <Label>{t.available_in_warehouse} {transferItem?.mainStock} {transferItem?.unit}</Label>
+                  <Label>{t.quantity_to_transfer}</Label>
+                  <Input
+                    type="number"
+                    placeholder={t.enter_quantity}
+                    value={transferQty}
+                    onChange={e => setTransferQty(e.target.value)}
+                    max={transferItem?.mainStock}
+                  />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setIsTransferOpen(false)}>{t.cancel}</Button>
+                <Button
+                  className="bg-amber-600 hover:bg-amber-700"
+                  onClick={handleTransfer}
+                  disabled={!transferQty || parseFloat(transferQty) <= 0 || parseFloat(transferQty) > (transferItem?.mainStock || 0)}
+                >
+                  Transfer to Shop
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          {/* New Transaction Dialogs */}
+          <DepositDialog
+            open={isDepositOpen}
+            onOpenChange={setIsDepositOpen}
+            ingredient={depositItem}
+            onSuccess={() => { fetchInventory(); setDepositItem(null); }}
+          />
+          <WithdrawDialog
+            open={isWithdrawOpen}
+            onOpenChange={setIsWithdrawOpen}
+            ingredient={withdrawItem}
+            onSuccess={() => { fetchInventory(); setWithdrawItem(null); }}
+          />
+          <ShopAdjustDialog
+            open={isShopAdjustOpen}
+            onOpenChange={setIsShopAdjustOpen}
+            ingredient={shopAdjustItem}
+            onSuccess={() => { fetchInventory(); setShopAdjustItem(null); }}
+          />
+        </Tabs>
+      </div>
+    </div>
+  )
+}

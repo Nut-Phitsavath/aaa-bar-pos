@@ -1,0 +1,283 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                String             @id @default(uuid())
+  name              String
+  username          String             @unique
+  role              String
+  pin               String
+  isActive          Boolean            @default(true)
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  orders            Order[]
+  shifts            Shift[]
+  stockCounts       StockCount[]
+  stockTransactions StockTransaction[]
+}
+
+model Category {
+  id            String   @id @default(uuid())
+  name          String
+  hasSugarLevel Boolean  @default(false)
+  hasShotType   Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  menus         Menu[]
+}
+
+model Menu {
+  id          String          @id @default(uuid())
+  name        String
+  description String?
+  isAvailable Boolean         @default(true)
+  image       String?         @default("/placeholder.svg")
+  categoryId  String
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  localName   String?
+  category    Category        @relation(fields: [categoryId], references: [id])
+  variations  MenuVariation[]
+  recipes     Recipe[]
+}
+
+model MenuVariation {
+  id           String          @id @default(uuid())
+  menuId       String
+  type         String
+  isEnabled    Boolean         @default(true)
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+  displayOrder Int             @default(0)
+  menu         Menu            @relation(fields: [menuId], references: [id], onDelete: Cascade)
+  sizes        VariationSize[]
+
+  @@unique([menuId, type])
+}
+
+model VariationSize {
+  id           String        @id @default(uuid())
+  variationId  String
+  size         String
+  price        Float
+  isAvailable  Boolean       @default(true)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  displayOrder Int           @default(0)
+  orderItems   OrderItem[]
+  recipes      Recipe[]
+  variation    MenuVariation @relation(fields: [variationId], references: [id], onDelete: Cascade)
+
+  @@unique([variationId, size])
+}
+
+model IngredientCategory {
+  id          String       @id @default(uuid())
+  name        String       @unique
+  ingredients Ingredient[]
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+}
+
+model Ingredient {
+  id           String              @id @default(uuid())
+  name         String
+  unit         String
+  mainStock    Float               @default(0)
+  subStock     Float               @default(0)
+  minStock     Float
+  maxStock     Float
+  minStockSub  Float               @default(0)
+  maxStockSub  Float               @default(0)
+  cost         Float
+  categoryId   String?
+  category     IngredientCategory? @relation(fields: [categoryId], references: [id])
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+  recipes      Recipe[]
+  stockCounts  StockCount[]
+  transactions StockTransaction[]
+}
+
+model StockCount {
+  id               String     @id @default(uuid())
+  ingredientId     String
+  theoreticalStock Float
+  actualStock      Float
+  difference       Float
+  notes            String?
+  userId           String?
+  createdAt        DateTime   @default(now())
+  user             User?      @relation(fields: [userId], references: [id])
+  ingredient       Ingredient @relation(fields: [ingredientId], references: [id])
+}
+
+model StockTransaction {
+  id           String     @id @default(uuid())
+  ingredientId String
+  type         String
+  quantity     Float
+  fromStore    String?
+  toStore      String?
+  notes        String?
+  reason       String?
+  cost         Float?
+  userId       String?
+  createdAt    DateTime   @default(now())
+  user         User?      @relation(fields: [userId], references: [id])
+  ingredient   Ingredient @relation(fields: [ingredientId], references: [id])
+
+  @@index([createdAt])
+  @@index([ingredientId])
+}
+
+model Recipe {
+  id              String         @id @default(uuid())
+  menuId          String
+  variationSizeId String?        // For e.g. "Standard" or "Large" deduction
+  ingredientId    String
+  quantity        Float
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  variationSize   VariationSize? @relation(fields: [variationSizeId], references: [id], onDelete: Cascade)
+  menu            Menu           @relation(fields: [menuId], references: [id], onDelete: Cascade)
+  ingredient      Ingredient     @relation(fields: [ingredientId], references: [id])
+
+  @@unique([menuId, variationSizeId, ingredientId])
+}
+
+model Customer {
+  id            String    @id @default(uuid())
+  name          String
+  phone         String?
+  email         String?
+  dateOfBirth   DateTime?
+  loyaltyPoints Int       @default(0)
+  totalSpent    Float     @default(0)
+  visitCount    Int       @default(0)
+  lastVisit     DateTime  @default(now())
+  type          String    @default("NORMAL")
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  orders        Order[]
+}
+
+model Promotion {
+  id            String   @id @default(uuid())
+  name          String
+  description   String?
+  code          String   @unique
+  discountType  String
+  discountValue Float
+  startDate     DateTime
+  endDate       DateTime
+  isActive      Boolean  @default(true)
+  // Staff pick this from a list on the till. Customer-facing coupon codes get
+  // this unchecked so they still have to be typed in.
+  staffPickable Boolean  @default(true)
+  // Minimum items in the cart before the promo applies. "15 Free 5" means 20
+  // units rung up; null means no minimum.
+  // NOTE: counts EVERY item, bakery included - so a drinks deal can currently
+  // be triggered by croissants. Scoping this to a Category is the open fix.
+  minItems      Int?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  orders        Order[]
+}
+
+model Order {
+  id                 String      @id @default(uuid())
+  orderNumber        String
+  status             String      @default("COMPLETED")
+  total              Float
+  subtotal           Float
+  tax                Float
+  discount           Float       @default(0)
+  promoId            String?
+  paymentMethod      String      @default("CASH")
+  customerId         String?
+  createdAt          DateTime    @default(now())
+  updatedAt          DateTime    @updatedAt
+  cancellationReason String?
+  beeperNumber       String?
+  pointsRedeemed     Int?        @default(0)
+  taxAmount          Float?      @default(0)
+  cashReceived       Float?      @default(0)
+  changeAmount       Float?      @default(0)
+  isReportable       Boolean     @default(true)
+  userId             String?
+  bankReference      String?     @unique
+  paymentStatus      String?     @default("PENDING")
+  qrCodeData         String?
+  shiftId            String?
+  promotion          Promotion?  @relation(fields: [promoId], references: [id])
+  user               User?       @relation(fields: [userId], references: [id])
+  customer           Customer?   @relation(fields: [customerId], references: [id])
+  shift              Shift?      @relation(fields: [shiftId], references: [id])
+  items              OrderItem[]
+
+  // Without these every orders/reports/dashboard query does a full table scan.
+  // Measured on a copy of dev.db inflated to ~52k orders: a one-day range went
+  // from SCAN 10.3ms to SEARCH 0.2ms. Harmless at today's 501 rows; the point
+  // is that the cost grows with trading history and nobody would connect the
+  // slowdown to a cause.
+  @@index([createdAt])
+  @@index([status])
+  @@index([customerId])
+  @@index([userId])
+}
+
+model Setting {
+  key   String @id
+  value String
+}
+
+model Shift {
+  id                String    @id @default(uuid())
+  userId            String?
+  startTime         DateTime  @default(now())
+  endTime           DateTime?
+  startCash         Float     @default(0)
+  endCash           Float?
+  actualCash        Float?
+  difference        Float?
+  cashPayments      Float     @default(0)
+  status            String    @default("OPEN")
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  responsiblePerson String?
+  user              User?     @relation(fields: [userId], references: [id])
+  orders            Order[]
+
+  // findFirst({ where: { status: 'OPEN' } }) runs on every completed order.
+  @@index([status])
+  @@index([startTime])
+}
+
+model OrderItem {
+  id              String         @id @default(uuid())
+  orderId         String
+  variationSizeId String?
+  name            String
+  price           Float
+  quantity        Int
+  total           Float
+  sugarLevel      String?
+  shotType        String?
+  cupSize         String?
+  isTakeaway      Boolean        @default(false)
+  order           Order          @relation(fields: [orderId], references: [id])
+  // Nullable so menu items can be deleted without wiping historical order lines
+  // (name/price snapshots remain on the order item).
+  variationSize   VariationSize? @relation(fields: [variationSizeId], references: [id], onDelete: SetNull)
+
+  // orderId is looked up once per order on any query that includes items.
+  @@index([orderId])
+  @@index([variationSizeId])
+}

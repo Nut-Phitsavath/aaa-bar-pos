@@ -1,0 +1,57 @@
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+
+# dependencies
+/node_modules
+/.pnp
+.pnp.js
+
+# next.js
+/.next/
+/out/
+
+# production
+/build
+/dist
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# env files
+.env*
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# vercel
+.vercel
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts
+
+# prisma
+/lib/generated/prisma
+
+# SQLite
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+/backups/
+
+# cloudflared
+.cloudflared/
+
+# misc
+.DS_Store
+*.pem
+current_main_pos.tsx
+
+# Ad-hoc database copies (dev.db.backup, dev.db.before-<x>) - "*.db" does not
+# match these, and one slipped into a commit as 2.5MB of real sales data.
+*.db.*
+*.db-*
