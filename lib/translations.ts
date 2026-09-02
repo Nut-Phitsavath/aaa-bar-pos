@@ -602,6 +602,7 @@ export const translations = {
         print_not_implemented: "Printing functionality will be implemented here.",
         // --- Split tender ---
         balance_due: "Balance Due",
+        add_order: "Add Order",
         take_payment: "Take Payment",
         pay_cash: "Cash",
         pay_onepay: "BCEL QR",
@@ -1370,6 +1371,7 @@ export const translations = {
         print_not_implemented: "ຟັງຊັນການພິມຈະຖືກເພີ່ມໃນພາຍຫຼັງ.",
         // --- Split tender ---
         balance_due: "ຍອດຄ້າງ",
+        add_order: "ສັ່ງເພີ່ມ",
         take_payment: "ຮັບເງິນ",
         pay_cash: "ເງິນສົດ",
         pay_onepay: "BCEL QR",

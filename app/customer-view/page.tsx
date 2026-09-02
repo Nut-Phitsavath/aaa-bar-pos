@@ -72,6 +72,8 @@ export default function CustomerViewPage() {
     const [settings, setSettings] = useState<any>(null)
     const [customer, setCustomer] = useState<any>(null)
     const [isComplimentary, setIsComplimentary] = useState(false)
+    // Set when a table bill is partly settled; zero for a walk-in sale.
+    const [amountPaid, setAmountPaid] = useState(0)
     const [successInfo, setSuccessInfo] = useState<{ total: number, cashReceived: number, change: number } | null>(null)
 
     useEffect(() => {
@@ -97,6 +99,7 @@ export default function CustomerViewPage() {
                 setPromoName(event.data.promoName || "")
                 setCustomer(event.data.customer || null)
                 setIsComplimentary(event.data.isComplimentary || false)
+                setAmountPaid(event.data.amountPaid || 0)
                 setIsIdle(event.data.cart.length === 0)
                 setSuccessInfo(null) // Clear success when cart updates
             } else if (event.data.type === "PAYMENT_SUCCESS") {
@@ -109,6 +112,7 @@ export default function CustomerViewPage() {
             } else if (event.data.type === "ORDER_RESET") {
                 setSuccessInfo(null)
                 setCart([])
+                setAmountPaid(0)
                 setIsIdle(true)
                 setIsComplimentary(false)
             } else if (event.data.type === "ONEPAY_PENDING") {
@@ -502,7 +506,7 @@ export default function CustomerViewPage() {
                     {paymentDisplayState.type === 'NONE' && (
                         <div className="space-y-2">
                             {/* Show subtotal row only if there's a discount, so customer can see what was deducted */}
-                            {(promoDiscount > 0 || loyaltyDiscount > 0) && (
+                            {(promoDiscount > 0 || loyaltyDiscount > 0 || amountPaid > 0) && (
                                 // This panel is only as wide as the 216px QR above it, so a
                                 // "Lao · English" label plus an amount cannot share a line.
                                 // Stacking the two languages is what the Total row below
@@ -522,6 +526,18 @@ export default function CustomerViewPage() {
                                         <span className="text-[11px] uppercase tracking-tight text-rose-400 truncate">Promotion</span>
                                     </span>
                                     <span className="shrink-0 whitespace-nowrap text-base">-{formatTHB(promoDiscount)}</span>
+                                </div>
+                            )}
+                            {/* Part of a table bill already settled. Without this the
+                                amount owing reads lower than the items add up to and
+                                nothing on screen explains why. */}
+                            {amountPaid > 0 && (
+                                <div className="flex justify-between items-center gap-3 text-emerald-600">
+                                    <span className="flex flex-col min-w-0 leading-tight">
+                                        <span className="text-base truncate">ຈ່າຍແລ້ວ</span>
+                                        <span className="text-[11px] uppercase tracking-tight text-emerald-500 truncate">Already Paid</span>
+                                    </span>
+                                    <span className="shrink-0 whitespace-nowrap text-base">-{formatTHB(amountPaid)}</span>
                                 </div>
                             )}
                             {loyaltyDiscount > 0 && (

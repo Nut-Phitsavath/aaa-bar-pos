@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback, use } from "react"
+import { useState, useEffect, useCallback, useRef, use } from "react"
 import { useRouter } from "next/navigation"
 import { useTranslation } from "@/hooks/use-translation"
 import { Button } from "@/components/ui/button"
@@ -18,7 +18,11 @@ type BillOrder = {
   total: number
   createdAt: string
   waiter: { id: string; name: string } | null
-  items: { id: string; name: string; quantity: number; total: number }[]
+  items: {
+    id: string; name: string; quantity: number; total: number
+    // Resolved server-side from the menu; null if the item was since deleted.
+    image: string | null; localName: string | null; category: string | null
+  }[]
 }
 
 type Bill = {
@@ -63,6 +67,9 @@ export default function BillPage({ params }: { params: Promise<{ sessionId: stri
   const [payOpen, setPayOpen] = useState(false)
   const [payAmount, setPayAmount] = useState("")
   const [pendingQr, setPendingQr] = useState<{ paymentId: string; qr: string; amount: number } | null>(null)
+  // The poll closure captures `bill` at the time it was armed; this keeps the
+  // settled-total it announces current.
+  const billRef = useRef<Bill | null>(null)
 
   const load = useCallback(async () => {
     try {
@@ -75,6 +82,91 @@ export default function BillPage({ params }: { params: Promise<{ sessionId: stri
   }, [sessionId, router])
 
   useEffect(() => { load() }, [load])
+
+  /**
+   * Mirror the bill onto the customer screen.
+   *
+   * Same BroadcastChannel and the same message shapes the walk-in till already
+   * uses, so /customer-view needs no new protocol. It only reaches a display on
+   * this machine - opening a bill on a tablet at the table will not drive the
+   * screen at the counter.
+   *
+   * Lines are consolidated across rounds: a customer checking their bill wants
+   * "12x Beer Lao", not the same drink on six separate lines. The bill screen
+   * itself keeps the per-round grouping, which is what staff need.
+   */
+  useEffect(() => {
+    if (!bill) return
+    billRef.current = bill
+
+    type Line = {
+      name: string; quantity: number; total: number
+      image: string | null; localName: string | null; category: string | null
+    }
+    const consolidated = new Map<string, Line>()
+    for (const order of bill.orders) {
+      if (order.status === "CANCELLED" || order.status === "HOLD") continue
+      for (const item of order.items) {
+        // Key on name AND unit price: the same drink at two sizes is two lines
+        // on a bill, and merging them would misstate what was ordered.
+        const unit = item.quantity > 0 ? item.total / item.quantity : 0
+        const key = `${item.name}::${unit}`
+        const existing = consolidated.get(key)
+        if (existing) {
+          existing.quantity += item.quantity
+          existing.total += item.total
+        } else {
+          consolidated.set(key, {
+            name: item.name,
+            quantity: item.quantity,
+            total: item.total,
+            image: item.image ?? null,
+            localName: item.localName ?? null,
+            category: item.category ?? null,
+          })
+        }
+      }
+    }
+
+    const channel = new BroadcastChannel("pos_channel")
+    channel.postMessage({
+      type: "CART_UPDATE",
+      cart: Array.from(consolidated.values()).map((line, i) => ({
+        id: `${bill.id}-${i}`,
+        name: line.name,
+        price: line.quantity > 0 ? line.total / line.quantity : 0,
+        quantity: line.quantity,
+        modifiers: [],
+        // The customer display groups on category and renders the photo; both
+        // must survive the trip or every drink lands under "Other" with no image.
+        category: line.category || "",
+        image: line.image || undefined,
+        localName: line.localName || undefined,
+      })),
+      subtotal: bill.total,
+      tax: 0,
+      total: bill.balance,
+      discount: 0,
+      promoDiscount: 0,
+      loyaltyPoints: 0,
+      // Without this a half-paid bill shows a figure lower than the items add
+      // up to, with nothing on screen explaining the difference.
+      amountPaid: bill.total - bill.balance,
+      tableName: bill.table.name,
+      customer: null,
+      isComplimentary: false,
+    })
+    channel.close()
+  }, [bill])
+
+  // Leaving the bill returns the customer screen to idle.
+  useEffect(() => {
+    return () => {
+      const channel = new BroadcastChannel("pos_channel")
+      channel.postMessage({ type: "ORDER_RESET" })
+      channel.close()
+    }
+  }, [])
 
   // BCEL has no callback into this app - the till asks until the bank says
   // yes. Same mechanism the walk-in checkout already uses, pointed at a
@@ -94,9 +186,15 @@ export default function BillPage({ params }: { params: Promise<{ sessionId: stri
           setPendingQr(null)
           setPayOpen(false)
           if (data.closed) {
+            announceSettled(billRef.current?.total ?? 0, billRef.current?.total ?? 0)
             toast.success(t.session_closed)
             router.push("/tables")
           } else {
+            // Clear the QR off the customer screen; the refreshed bill lands
+            // right behind it with the reduced balance.
+            const ch = new BroadcastChannel("pos_channel")
+            ch.postMessage({ type: "PAYMENT_COMPLETE" })
+            ch.close()
             toast.success(t.payment_confirmed)
             await load()
           }
@@ -122,6 +220,19 @@ export default function BillPage({ params }: { params: Promise<{ sessionId: stri
     } finally { setBusy(false) }
   }
 
+  /** Show the customer screen the same success panel a walk-in sale ends on. */
+  const announceSettled = useCallback((total: number, tendered: number) => {
+    const channel = new BroadcastChannel("pos_channel")
+    channel.postMessage({
+      type: "PAYMENT_SUCCESS",
+      total,
+      cashReceived: tendered,
+      change: Math.max(0, tendered - total),
+      isComplimentary: false,
+    })
+    channel.close()
+  }, [])
+
   /** Take one tender. Cash lands immediately; a QR opens the waiting dialog. */
   const takePayment = async (method: "CASH" | "ONEPAY") => {
     if (!bill) return
@@ -140,7 +251,12 @@ export default function BillPage({ params }: { params: Promise<{ sessionId: stri
 
       if (method === "CASH") {
         setPayOpen(false)
-        if (data.closed) { toast.success(t.session_closed); router.push("/tables"); return }
+        if (data.closed) {
+          announceSettled(bill.total, amount)
+          toast.success(t.session_closed)
+          router.push("/tables")
+          return
+        }
         toast.success(t.payment_confirmed)
         await load()
       } else {
@@ -154,6 +270,20 @@ export default function BillPage({ params }: { params: Promise<{ sessionId: stri
         const genData = await gen.json().catch(() => ({}))
         if (!gen.ok) { toast.error(genData.error || "Failed"); await load(); return }
         setPendingQr({ paymentId: data.payment.id, qr: genData.qrCode, amount })
+
+        // Put the same QR on the customer screen, in the shape it already
+        // handles from the walk-in till.
+        const ch = new BroadcastChannel("pos_channel")
+        ch.postMessage({
+          type: "ONEPAY_GENERATED",
+          payload: {
+            qrData: genData.qrCode,
+            amount,
+            orderNumber: bill.table.name,
+            items: [],
+          },
+        })
+        ch.close()
       }
     } finally { setBusy(false) }
   }
@@ -164,6 +294,7 @@ export default function BillPage({ params }: { params: Promise<{ sessionId: stri
     try {
       const res = await fetch(`/api/table-sessions/${sessionId}/close`, { method: "POST" })
       if (res.ok) {
+        announceSettled(bill?.total ?? 0, bill?.total ?? 0)
         toast.success(t.session_closed)
         router.push("/tables")
       } else {
@@ -203,7 +334,7 @@ export default function BillPage({ params }: { params: Promise<{ sessionId: stri
         >
           <ArrowLeft className="w-5 h-5" />
         </button>
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <h1 className="text-lg font-bold text-slate-900 leading-none truncate">
             {bill.table.name} · {t.bill}
           </h1>
@@ -212,6 +343,20 @@ export default function BillPage({ params }: { params: Promise<{ sessionId: stri
             {bill.closedAt && ` · ${t.closed_at} ${clock(bill.closedAt)}`}
           </p>
         </div>
+
+        {/* A customer asking for one more on the way out is the normal case, so
+            ordering has to be reachable from the bill. Without this staff had to
+            go back to the floor plan and re-enter the table. */}
+        {!closed && (
+          <Button
+            variant="outline"
+            className="h-11 shrink-0 border-slate-300"
+            onClick={() => router.push(`/pos?session=${bill.id}`)}
+          >
+            <Plus className="w-4 h-4 sm:mr-1.5" />
+            <span className="hidden sm:inline">{t.add_order}</span>
+          </Button>
+        )}
       </header>
 
       <main className="flex-1 p-3 md:p-4 pb-40">

@@ -17,7 +17,30 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
                 orders: {
                     orderBy: { createdAt: 'asc' },
                     include: {
-                        items: true,
+                        // The photo and category are not on the order line - they
+                        // are snapshotted only as name and price - so walk the
+                        // relation to fetch them. The customer display groups by
+                        // category and shows the photo, exactly as it does for a
+                        // walk-in cart.
+                        items: {
+                            include: {
+                                variationSize: {
+                                    include: {
+                                        variation: {
+                                            include: {
+                                                menu: {
+                                                    select: {
+                                                        image: true,
+                                                        localName: true,
+                                                        category: { select: { name: true } }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        },
                         waiter: { select: { id: true, name: true } }
                     }
                 },
@@ -56,8 +79,26 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
 
         const total = sessionTotal(session.orders)
 
+        // Flatten the menu lookup onto each line so no screen has to walk the
+        // relation itself. A deleted menu item leaves variationSize null, and
+        // the line still renders from its snapshotted name and price.
+        const orders = session.orders.map((order) => ({
+            ...order,
+            items: order.items.map((item) => {
+                const menu = item.variationSize?.variation?.menu
+                const { variationSize, ...line } = item
+                return {
+                    ...line,
+                    image: menu?.image ?? null,
+                    localName: menu?.localName ?? null,
+                    category: menu?.category?.name ?? null
+                }
+            })
+        }))
+
         return NextResponse.json({
             ...session,
+            orders,
             total,
             // Derived here so the screen and the settle endpoint can never
             // disagree about whether this bill is paid.

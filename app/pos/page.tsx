@@ -250,6 +250,18 @@ function POSPageInner() {
   // Broadcast cart update to customer view
   useEffect(() => {
     document.title = "POS | Memories Lane"
+
+    // A round being keyed into a table is not a payment moment, and its total
+    // is not what the customer owes - broadcasting it would show someone a
+    // figure far below their real bill. The table's bill drives the customer
+    // screen instead, from the bill page.
+    if (session) {
+      const idle = new BroadcastChannel("pos_channel")
+      idle.postMessage({ type: "ORDER_RESET" })
+      idle.close()
+      return
+    }
+
     const payload = {
       type: "CART_UPDATE",
       cart,
@@ -269,7 +281,7 @@ function POSPageInner() {
     channel.postMessage(payload)
 
     return () => channel.close()
-  }, [cart, appliedPromo, loyaltyDiscount, total, selectedCustomer, subtotal, tax, discount, promoDiscount, isComplimentary])
+  }, [cart, appliedPromo, loyaltyDiscount, total, selectedCustomer, subtotal, tax, discount, promoDiscount, isComplimentary, session])
 
   // The customer view keeps no state of its own - it only ever learns the cart
   // from a broadcast. So after it reloads it shows an empty order until the
