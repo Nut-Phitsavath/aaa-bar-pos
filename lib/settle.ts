@@ -70,6 +70,14 @@ export async function closeSessionIfSettled(sessionId: string): Promise<{
             }
         })
 
+        // A QR printed on the bill that the customer never used would sit on a
+        // settled bill looking unresolved. It never counted towards the balance,
+        // so retiring it changes no money - only the reading.
+        await tx.payment.updateMany({
+            where: { sessionId, method: 'ONEPAY', paymentStatus: 'PENDING' },
+            data: { paymentStatus: 'CANCELLED' }
+        })
+
         await tx.tableSession.update({
             where: { id: sessionId },
             data: { status: 'CLOSED', closedAt, fxRateLAK, fxRateUSD }

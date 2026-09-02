@@ -205,6 +205,7 @@ export async function POST(request: Request) {
         const result = await prisma.$transaction(async (tx) => {
             // 1. Determine Order Number
             let orderNumber = ""
+            let tableOrderNumber: number | null = null
             let isNew = false
             const orderId = id || crypto.randomUUID()
 
@@ -216,6 +217,8 @@ export async function POST(request: Request) {
 
             if (previousOrder) {
                 orderNumber = previousOrder.orderNumber
+                // Editing a round keeps the number it was served under.
+                tableOrderNumber = previousOrder.tableOrderNumber
             } else {
                 isNew = true
                 const today = startOfDay(new Date())
@@ -223,6 +226,20 @@ export async function POST(request: Request) {
                     where: { createdAt: { gte: today } }
                 })
                 orderNumber = `No. ${String(count + 1).padStart(2, '0')}`
+
+                // A table bill numbers its own rounds from 1, which is what the
+                // printed bill and the customer talk about ("order #2"). Taken
+                // as max+1 rather than count+1 so a voided round keeps its
+                // number and the sequence never shifts under an audit. Inside
+                // this transaction, so two devices sending at once cannot both
+                // claim the same number.
+                if (sessionId) {
+                    const highest = await tx.order.aggregate({
+                        where: { sessionId },
+                        _max: { tableOrderNumber: true }
+                    })
+                    tableOrderNumber = (highest._max.tableOrderNumber ?? 0) + 1
+                }
             }
 
             // 2. Prepare Payload. For non-cancellations we store the SERVER-computed
@@ -233,6 +250,7 @@ export async function POST(request: Request) {
 
             const orderData = {
                 orderNumber,
+                tableOrderNumber,
                 status: status || 'COMPLETED',
                 total: isCancelling ? parseFloat(total) : serverTotal,
                 subtotal: isCancelling ? parseFloat(subtotal) : serverSubtotal,

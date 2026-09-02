@@ -41,7 +41,10 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
                                 }
                             }
                         },
-                        waiter: { select: { id: true, name: true } }
+                        // waiter is the server who took the order; user is the
+                        // POS staff who keyed it. The printed bill names both.
+                        waiter: { select: { id: true, name: true } },
+                        user: { select: { id: true, name: true } }
                     }
                 },
                 payments: {

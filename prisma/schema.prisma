@@ -229,6 +229,12 @@ model Order {
   // Set when this order was rung into an open table bill. Null for walk-in
   // counter sales, which keeps every existing flow working untouched.
   sessionId          String?
+  /// This round's number within its table bill: 1, 2, 3... Null for walk-in
+  /// sales, which keep the global daily orderNumber instead.
+  ///
+  /// Assigned as max+1, never count+1, so a voided round keeps its number and
+  /// the sequence on a printed bill can never silently shift under an audit.
+  tableOrderNumber   Int?
   waiterId           String?
   session            TableSession? @relation(fields: [sessionId], references: [id])
   waiter             User?         @relation("OrderWaiter", fields: [waiterId], references: [id])
