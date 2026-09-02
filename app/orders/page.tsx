@@ -5,7 +5,7 @@ import { useState, useEffect } from "react"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Clock, CheckCircle, XCircle, Play, Printer, DollarSign } from "lucide-react"
+import { Clock, CheckCircle, XCircle, Play, Printer, DollarSign, Utensils } from "lucide-react"
 import Link from "next/link"
 import { formatTHB } from "@/lib/currency"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -140,13 +140,23 @@ export default function ActiveOrdersPage() {
 
     const getStatusBadge = (status: string) => {
         const variants: Record<string, { color: string; icon: any; label: string }> = {
-            // PENDING: { color: "bg-yellow-100 text-yellow-800", icon: Clock, label: t.pending_status },
+            PENDING: { color: "bg-yellow-100 text-yellow-800", icon: Clock, label: t.pending_status },
+            // A round sitting on an open table bill: served and deducted from
+            // stock, but not yet paid for.
+            SENT: { color: "bg-amber-100 text-amber-900", icon: Utensils, label: t.sent_status },
             COMPLETED: { color: "bg-green-100 text-green-800", icon: CheckCircle, label: t.completed_status },
             HOLD: { color: "bg-orange-100 text-orange-800", icon: Clock, label: t.hold_status },
             CANCELLED: { color: "bg-red-100 text-red-800", icon: XCircle, label: t.cancelled_status }
         }
 
-        const config = variants[status] || variants.PENDING
+        // Never index the map for the fallback: a key that is missing or later
+        // commented out makes every unknown status crash the whole page rather
+        // than render a plain badge.
+        const config = variants[status] ?? {
+            color: "bg-slate-100 text-slate-700",
+            icon: Clock,
+            label: status,
+        }
         const Icon = config.icon
 
         return (
@@ -165,7 +175,7 @@ export default function ActiveOrdersPage() {
                 {/* Filter Tabs */}
                 <div className="flex flex-col gap-4">
                     <div className="flex gap-2 overflow-x-auto pb-2">
-                        {["ALL", "HOLD", "COMPLETED", "CANCELLED"].map((status) => (
+                        {["ALL", "SENT", "HOLD", "COMPLETED", "CANCELLED"].map((status) => (
                             <Button
                                 key={status}
                                 variant={filter === status ? "default" : "outline"}
