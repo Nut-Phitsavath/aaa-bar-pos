@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog"
 import { Plus, Edit, Trash2, Package, ShoppingCart, Minus, Settings, Search, ArrowUpDown, Store, Warehouse } from "lucide-react"
-import { formatLAK } from "@/lib/currency"
+import { formatTHB } from "@/lib/currency"
 import { Header } from "@/components/header"
 import { FormattedNumberInput } from "@/components/ui/formatted-number-input"
 import { FormattedTextInput } from "@/components/ui/formatted-text-input"
@@ -545,7 +545,7 @@ export default function InventoryPage() {
             <Card className="p-6">
               <p className="text-sm text-muted-foreground mb-1">{t.total_value} ({activeTab === "SUB" ? "Shop" : "Whse"})</p>
               <p className="text-2xl font-bold text-green-600">
-                {formatLAK(ingredients.reduce((sum, i) => sum + ((activeTab === "SUB" ? i.subStock : i.mainStock) * i.cost), 0))}
+                {formatTHB(ingredients.reduce((sum, i) => sum + ((activeTab === "SUB" ? i.subStock : i.mainStock) * i.cost), 0))}
               </p>
             </Card>
           </div>
@@ -609,8 +609,8 @@ export default function InventoryPage() {
                           </TableCell>
                           <TableCell>{item.unit}</TableCell>
                           <TableCell>{activeTab === "SUB" ? item.minStockSub : item.minStock}</TableCell>
-                          <TableCell>{formatLAK(item.cost)}</TableCell>
-                          <TableCell>{formatLAK((activeTab === 'SUB' ? item.subStock : item.mainStock) * item.cost)}</TableCell>
+                          <TableCell>{formatTHB(item.cost)}</TableCell>
+                          <TableCell>{formatTHB((activeTab === 'SUB' ? item.subStock : item.mainStock) * item.cost)}</TableCell>
                           <TableCell>
                             <Badge className={status.color}>{status.label}</Badge>
                           </TableCell>

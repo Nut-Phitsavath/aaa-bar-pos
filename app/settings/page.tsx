@@ -41,6 +41,9 @@ export default function SettingsPage() {
           taxRate: data.taxRate || data.tax_rate || "",
           loyaltyRate: data.loyaltyRate || data.loyalty_rate || "",
           shopName: data.shopName || data.shop_name || "",
+          rate_lak: data.rate_lak || "",
+          rate_usd: data.rate_usd || "",
+          show_usd: data.show_usd || "false",
         })
       }
     } catch (e) {
@@ -297,6 +300,46 @@ export default function SettingsPage() {
                 onChange={(e) => setSettings({ ...settings, loyaltyRate: e.target.value })}
               />
             </div>
+          </div>
+
+          {/* Exchange rates. Prices are held in baht; these only drive the
+              converted figures shown on a bill. Changing them never touches a
+              bill that has already been settled - each one stores the rate it
+              was closed at. */}
+          <div className="mt-6 pt-5 border-t">
+            <h3 className="font-semibold text-slate-900">{t.exchange_rates}</h3>
+            <p className="text-sm text-muted-foreground mt-0.5">{t.exchange_rates_desc}</p>
+
+            <div className="grid grid-cols-2 gap-4 mt-4">
+              <div className="space-y-2">
+                <Label>{t.rate_lak_label}</Label>
+                <Input
+                  type="number"
+                  inputMode="decimal"
+                  placeholder="680"
+                  value={settings.rate_lak || ""}
+                  onChange={(e) => setSettings({ ...settings, rate_lak: e.target.value })}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>{t.rate_usd_label}</Label>
+                <Input
+                  type="number"
+                  inputMode="decimal"
+                  placeholder="32"
+                  value={settings.rate_usd || ""}
+                  onChange={(e) => setSettings({ ...settings, rate_usd: e.target.value })}
+                />
+              </div>
+            </div>
+
+            <label className="flex items-center gap-3 mt-4 cursor-pointer">
+              <Switch
+                checked={settings.show_usd === "true"}
+                onCheckedChange={(v) => setSettings({ ...settings, show_usd: v ? "true" : "false" })}
+              />
+              <span className="text-sm text-slate-700">{t.show_usd_label}</span>
+            </label>
           </div>
         </Card>
 

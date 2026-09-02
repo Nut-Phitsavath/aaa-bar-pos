@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { DollarSign, ShoppingCart, TrendingUp, AlertTriangle, Play, Calendar, Wallet } from "lucide-react"
 import { useTranslation } from "@/hooks/use-translation"
 import { useRouter } from "next/navigation"
-import { formatLAK } from "@/lib/currency"
+import { formatTHB } from "@/lib/currency"
 import { useShift } from "@/components/shift-provider"
 import { ShiftDialog } from "@/components/shift-dialog"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
@@ -199,7 +199,7 @@ export default function DashboardPage() {
                           stat.title === "Low Stock Items" ? t.low_stock_items : stat.title}
                   </p>
                   <p className="text-2xl font-black text-slate-900 mb-1">
-                    {stat.type === "currency" ? formatLAK(stat.value) : stat.value}
+                    {stat.type === "currency" ? formatTHB(stat.value) : stat.value}
                   </p>
                   <div className="flex items-center gap-1.5">
                     <span className={cn(
@@ -232,7 +232,7 @@ export default function DashboardPage() {
             </div>
             <div className="p-3 bg-amber-50 rounded-xl text-center min-w-[100px]">
               <p className="text-[10px] text-amber-700 font-bold uppercase tracking-wider">{t.peak_revenue}</p>
-              <p className="text-lg font-black text-amber-900 leading-tight">{formatLAK(peakHour?.revenue)}</p>
+              <p className="text-lg font-black text-amber-900 leading-tight">{formatTHB(peakHour?.revenue)}</p>
             </div>
           </div>
 
@@ -260,7 +260,7 @@ export default function DashboardPage() {
                       return (
                         <div className="bg-white p-3 shadow-xl rounded-lg border border-slate-100">
                           <p className="text-xs font-bold text-slate-500 mb-1">{payload[0].payload.hour}:00</p>
-                          <p className="text-sm font-black text-amber-900">{formatLAK(payload[0].value as number)}</p>
+                          <p className="text-sm font-black text-amber-900">{formatTHB(payload[0].value as number)}</p>
                           <p className="text-[10px] text-slate-400 font-medium">{payload[0].payload.orders} orders</p>
                         </div>
                       )
@@ -295,15 +295,15 @@ export default function DashboardPage() {
             </div>
             <div className="relative z-10">
               <p className="text-amber-200/80 font-bold text-xs uppercase tracking-widest mb-2">{t.cash_in_drawer || "Current Cash in Drawer"}</p>
-              <h3 className="text-4xl font-black mb-4">{formatLAK(currentCash)}</h3>
+              <h3 className="text-4xl font-black mb-4">{formatTHB(currentCash)}</h3>
               <div className="flex items-center gap-4 text-sm font-medium">
                 <div className="bg-white/10 px-3 py-1.5 rounded-lg border border-white/10">
                   <span className="text-amber-200/60 mr-1.5">{t.start_label}</span>
-                  <span className="font-bold">{formatLAK(startCash || 0)}</span>
+                  <span className="font-bold">{formatTHB(startCash || 0)}</span>
                 </div>
                 <div className="bg-white/10 px-3 py-1.5 rounded-lg border border-white/10">
                   <span className="text-amber-200/60 mr-1.5">{t.sales_label}</span>
-                  <span className="font-bold">{formatLAK(cashPayments || 0)}</span>
+                  <span className="font-bold">{formatTHB(cashPayments || 0)}</span>
                 </div>
               </div>
             </div>
@@ -370,16 +370,16 @@ export default function DashboardPage() {
             <div className="p-4 bg-muted rounded-lg space-y-2">
               <div className="flex justify-between text-sm">
                 <span>{t.starting_cash_with_colon || "Starting Cash:"}</span>
-                <span>{formatLAK(startCash || 0)}</span>
+                <span>{formatTHB(startCash || 0)}</span>
               </div>
               <div className="flex justify-between text-sm">
                 <span>{t.cash_sales_with_colon || "Cash Sales:"}</span>
-                <span>{formatLAK(cashPayments || 0)}</span>
+                <span>{formatTHB(cashPayments || 0)}</span>
               </div>
               <div className="flex justify-between font-bold border-t pt-2">
                 <span>{t.expected_cash_with_colon || "Expected Cash:"}</span>
                 <span className="text-amber-600">
-                  {formatLAK((startCash || 0) + (cashPayments || 0))}
+                  {formatTHB((startCash || 0) + (cashPayments || 0))}
                 </span>
               </div>
             </div>
@@ -403,7 +403,7 @@ export default function DashboardPage() {
                   ? 'bg-green-50 text-green-700'
                   : 'bg-red-50 text-red-700'
               )}>
-                {t.difference_label || "Difference"}: {formatLAK(parseFloat(actualCash) - ((startCash || 0) + (cashPayments || 0)))}
+                {t.difference_label || "Difference"}: {formatTHB(parseFloat(actualCash) - ((startCash || 0) + (cashPayments || 0)))}
               </div>
             )}
           </div>

@@ -6,7 +6,7 @@ import { useTranslation } from "@/hooks/use-translation"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Users, Clock, Receipt, ShoppingCart } from "lucide-react"
-import { formatLAK } from "@/lib/currency"
+import { formatTHB } from "@/lib/currency"
 import { formatDuration } from "@/lib/sessions"
 
 type TableWithSession = {
@@ -231,7 +231,7 @@ export default function TablesPage() {
                     {session ? (
                       <>
                         <p className="text-xl font-bold text-slate-900 leading-none tabular-nums">
-                          {formatLAK(session.total)}
+                          {formatTHB(session.total)}
                         </p>
                         <p className="text-xs text-slate-500 mt-1.5 flex items-center gap-1 tabular-nums">
                           <Clock className="w-3.5 h-3.5" aria-hidden />

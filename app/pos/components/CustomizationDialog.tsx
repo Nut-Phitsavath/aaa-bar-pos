@@ -5,7 +5,7 @@ import { useState, useEffect } from "react"
 import { createPortal } from "react-dom"
 import { useTranslation } from "@/hooks/use-translation"
 import { notify } from "@/components/ui/sonner"
-import { formatLAK } from "@/lib/currency"
+import { formatTHB } from "@/lib/currency"
 import {
     Droplet,
     Droplets,
@@ -220,7 +220,7 @@ export function CustomizationDialog({
             )}
             <DialogContent className="sm:max-w-[500px]" onPointerDownOutside={(e) => e.preventDefault()}>
                 <DialogHeader>
-                    <DialogTitle className="text-xl">{menuName} - {formatLAK(finalPrice)}</DialogTitle>
+                    <DialogTitle className="text-xl">{menuName} - {formatTHB(finalPrice)}</DialogTitle>
                     <DialogDescription className="text-md">
                         {t.customization}
                     </DialogDescription>
@@ -261,7 +261,7 @@ export function CustomizationDialog({
                                     >
                                         <div className="flex flex-col items-center">
                                             <span className="text-lg font-bold">{size.size === 'S' ? t.s_size : size.size === 'M' ? t.m_size : size.size === 'L' ? t.l_size : size.size}</span>
-                                            <span className="text-xs">{formatLAK(size.price)}</span>
+                                            <span className="text-xs">{formatTHB(size.price)}</span>
                                         </div>
                                     </Button>
                                 ))}
@@ -337,7 +337,7 @@ export function CustomizationDialog({
                 <DialogFooter>
                     <Button variant="outline" onClick={onClose}>{t.cancel || "Cancel"}</Button>
                     <Button onClick={handleConfirm}>
-                        {t.add_to_cart || "Add to Cart"} - {formatLAK(finalPrice)}
+                        {t.add_to_cart || "Add to Cart"} - {formatTHB(finalPrice)}
                     </Button>
                 </DialogFooter>
             </DialogContent>

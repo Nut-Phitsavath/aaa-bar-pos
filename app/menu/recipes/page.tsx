@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog"
 import { Plus, Search, Trash2, ChevronRight, Package, Coffee } from "lucide-react"
 import Link from "next/link"
-import { formatLAK } from "@/lib/currency"
+import { formatTHB } from "@/lib/currency"
 
 type Size = {
     id: string

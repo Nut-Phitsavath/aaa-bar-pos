@@ -4,7 +4,7 @@ import { useEffect, useState } from "react"
 import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { ShoppingBag, CheckCircle, Clock, Coffee, Star, CandyOff, Droplet, Candy, Minus, Loader2 } from "lucide-react"
-import { formatLAK } from "@/lib/currency"
+import { formatTHB } from "@/lib/currency"
 import Image from "next/image"
 import { useShift } from "@/components/shift-provider"
 import { useTranslation } from "@/hooks/use-translation"
@@ -202,7 +202,7 @@ export default function CustomerViewPage() {
                                         <span className="text-sm font-bold uppercase tracking-widest text-slate-500">ຈຳນວນເງິນທີ່ຈ່າຍ</span>
                                         <span className="text-[10px] font-bold text-slate-300 uppercase leading-none">Amount Paid</span>
                                     </div>
-                                    <span className="text-2xl font-black text-slate-700">{formatLAK(successInfo.cashReceived)}</span>
+                                    <span className="text-2xl font-black text-slate-700">{formatTHB(successInfo.cashReceived)}</span>
                                 </div>
                                 <div className="h-px bg-slate-200/50"></div>
                                 <div className="flex justify-between items-center">
@@ -210,7 +210,7 @@ export default function CustomerViewPage() {
                                         <span className="text-sm font-bold uppercase tracking-widest text-slate-500">ຍອດລວມທັງໝົດ</span>
                                         <span className="text-[10px] font-bold text-slate-300 uppercase leading-none">Billed Total</span>
                                     </div>
-                                    <span className="text-xl font-bold text-slate-400">{formatLAK(successInfo.total)}</span>
+                                    <span className="text-xl font-bold text-slate-400">{formatTHB(successInfo.total)}</span>
                                 </div>
                                 <div className="bg-emerald-500 rounded-2xl px-5 py-4 text-white flex justify-between items-center shadow-md shadow-emerald-100 relative overflow-hidden">
                                     <div className="absolute top-0 right-0 p-3 opacity-10">
@@ -220,7 +220,7 @@ export default function CustomerViewPage() {
                                         <span className="text-lg font-black uppercase tracking-tight">ເງິນທອນຂອງທ່ານ</span>
                                         <span className="text-xs font-bold text-emerald-200 uppercase leading-none">Your Change</span>
                                     </div>
-                                    <span className="text-4xl font-black tabular-nums">{formatLAK(successInfo.change)}</span>
+                                    <span className="text-4xl font-black tabular-nums">{formatTHB(successInfo.change)}</span>
                                 </div>
                             </div>
 
@@ -350,9 +350,9 @@ export default function CustomerViewPage() {
                                                 </div>
 
                                                 <div className="flex flex-col items-end gap-1 shrink-0">
-                                                    <p className="text-[20px] font-bold text-amber-700 leading-none whitespace-nowrap">{formatLAK(item.price * item.quantity)}</p>
+                                                    <p className="text-[20px] font-bold text-amber-700 leading-none whitespace-nowrap">{formatTHB(item.price * item.quantity)}</p>
                                                     <Badge variant="secondary" className="bg-slate-100/50 text-slate-400 px-1.5 py-0 text-[12px] font-bold border-none shadow-none whitespace-nowrap">
-                                                        x{item.quantity} @ {formatLAK(item.price)}
+                                                        x{item.quantity} @ {formatTHB(item.price)}
                                                     </Badge>
                                                 </div>
                                             </div>
@@ -428,7 +428,7 @@ export default function CustomerViewPage() {
                         <div className="space-y-4 animate-in fade-in zoom-in duration-500">
                             <div className="text-center">
                                 <h2 className="text-xl font-bold text-slate-800 mb-1">BCEL OnePay</h2>
-                                <p className="text-base font-semibold text-red-600">{formatLAK(total)}</p>
+                                <p className="text-base font-semibold text-red-600">{formatTHB(total)}</p>
                             </div>
                             <Card className="p-8 bg-red-50/50 border-red-100 flex items-center justify-center min-h-[200px]">
                                 <div className="text-center flex flex-col items-center">
@@ -451,7 +451,7 @@ export default function CustomerViewPage() {
                             <div className="text-center">
                                 <h2 className="text-xl font-bold text-slate-800 leading-tight">ສະແກນຈ່າຍຜ່ານ BCEL OnePay</h2>
                                 <span className="text-xs font-bold text-slate-400 uppercase tracking-tight mb-1">Scan BCEL OnePay</span>
-                                <p className="text-base font-semibold text-red-600">{formatLAK(paymentDisplayState.data.amount || paymentDisplayState.data.total)}</p>
+                                <p className="text-base font-semibold text-red-600">{formatTHB(paymentDisplayState.data.amount || paymentDisplayState.data.total)}</p>
                             </div>
                             <Card className="p-4 bg-slate-50 border-slate-200">
                                 <div className="flex justify-center bg-white p-2 rounded-xl">
@@ -476,7 +476,7 @@ export default function CustomerViewPage() {
                             <div className="text-center flex flex-col items-center">
                                 <h2 className="text-xl font-bold text-slate-800 leading-tight">ຄິວອາໂຄດໂອນເງິນ</h2>
                                 <span className="text-xs font-bold text-slate-400 uppercase tracking-tight -mt-1 mb-1">Store Transfer</span>
-                                <p className="text-2xl font-semibold text-purple-600">{formatLAK(total)}</p>
+                                <p className="text-2xl font-semibold text-purple-600">{formatTHB(total)}</p>
                             </div>
                             <div className="text-center space-y-2 mt-2">
                                 <div className="flex flex-col items-center">
@@ -512,7 +512,7 @@ export default function CustomerViewPage() {
                                         <span className="text-base truncate">ລວມ</span>
                                         <span className="text-[11px] uppercase tracking-tight text-slate-400 truncate">Subtotal</span>
                                     </span>
-                                    <span className="shrink-0 whitespace-nowrap text-base">{formatLAK(subtotal)}</span>
+                                    <span className="shrink-0 whitespace-nowrap text-base">{formatTHB(subtotal)}</span>
                                 </div>
                             )}
                             {promoDiscount > 0 && (
@@ -521,7 +521,7 @@ export default function CustomerViewPage() {
                                         <span className="text-base truncate">{promoName || 'ໂປຣໂມຊັ່ນ'}</span>
                                         <span className="text-[11px] uppercase tracking-tight text-rose-400 truncate">Promotion</span>
                                     </span>
-                                    <span className="shrink-0 whitespace-nowrap text-base">-{formatLAK(promoDiscount)}</span>
+                                    <span className="shrink-0 whitespace-nowrap text-base">-{formatTHB(promoDiscount)}</span>
                                 </div>
                             )}
                             {loyaltyDiscount > 0 && (
@@ -530,7 +530,7 @@ export default function CustomerViewPage() {
                                         <span className="text-base truncate">ໃຊ້ຄະແນນສະສົມ</span>
                                         <span className="text-[11px] uppercase tracking-tight text-amber-400 truncate">Points Redeemed</span>
                                     </span>
-                                    <span className="shrink-0 whitespace-nowrap text-base">-{formatLAK(loyaltyDiscount)}</span>
+                                    <span className="shrink-0 whitespace-nowrap text-base">-{formatTHB(loyaltyDiscount)}</span>
                                 </div>
                             )}
 
@@ -540,7 +540,7 @@ export default function CustomerViewPage() {
                                         <span className="text-2xl font-bold text-slate-800 leading-none">ລວມທັງໝົດ</span>
                                         <span className="text-md font-bold text-slate-400 uppercase tracking-tighter">Total</span>
                                     </div>
-                                    <span className="text-2xl font-extrabold text-amber-600">{isComplimentary ? formatLAK(0) : formatLAK(total)}</span>
+                                    <span className="text-2xl font-extrabold text-amber-600">{isComplimentary ? formatTHB(0) : formatTHB(total)}</span>
                                 </div>
                             </div>
 

@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Clock, CheckCircle, XCircle, Play, Printer, DollarSign } from "lucide-react"
 import Link from "next/link"
-import { formatLAK } from "@/lib/currency"
+import { formatTHB } from "@/lib/currency"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
@@ -300,7 +300,7 @@ export default function ActiveOrdersPage() {
                                                 {order.items?.reduce((sum, item) => sum + item.quantity, 0) || 0}
                                             </TableCell>
                                             <TableCell className="text-right font-black text-amber-600">
-                                                {formatLAK(order.total)}
+                                                {formatTHB(order.total)}
                                             </TableCell>
                                             <TableCell>
                                                 <div className="flex items-center gap-1.5 text-xs font-bold text-slate-600">
@@ -382,7 +382,7 @@ export default function ActiveOrdersPage() {
                                                                                     )}
                                                                                 </TableCell>
                                                                                 <TableCell className="text-center font-black">x{item.quantity}</TableCell>
-                                                                                <TableCell className="text-right font-bold text-slate-600">{formatLAK(item.total)}</TableCell>
+                                                                                <TableCell className="text-right font-bold text-slate-600">{formatTHB(item.total)}</TableCell>
                                                                             </TableRow>
                                                                         ))}
                                                                     </TableBody>
@@ -398,27 +398,27 @@ export default function ActiveOrdersPage() {
                                                             <div className="bg-slate-100/50 p-4 rounded-xl border border-slate-200 space-y-3">
                                                                 <div className="flex justify-between text-sm py-1 border-b border-slate-200/50">
                                                                     <span className="text-slate-500 font-bold uppercase text-[10px] tracking-tight">{t.subtotal}</span>
-                                                                    <span className="font-bold text-slate-700">{formatLAK(order.subtotal || order.total + (order.discount || 0))}</span>
+                                                                    <span className="font-bold text-slate-700">{formatTHB(order.subtotal || order.total + (order.discount || 0))}</span>
                                                                 </div>
                                                                 {order.discount > 0 && (
                                                                     <div className="flex justify-between text-sm py-1 border-b border-slate-200/50 text-rose-600">
                                                                         <span className="font-bold uppercase text-[10px] tracking-tight">{t.discount}</span>
-                                                                        <span className="font-black">-{formatLAK(order.discount)}</span>
+                                                                        <span className="font-black">-{formatTHB(order.discount)}</span>
                                                                     </div>
                                                                 )}
                                                                 <div className="flex justify-between text-lg py-2">
                                                                     <span className="text-slate-800 font-black uppercase text-xs tracking-widest">{t.total}</span>
-                                                                    <span className="font-black text-amber-600">{formatLAK(order.total)}</span>
+                                                                    <span className="font-black text-amber-600">{formatTHB(order.total)}</span>
                                                                 </div>
                                                                 { (order.paymentMethod === 'CASH' || order.paymentMethod === 'BANK_NOTE') && order.cashReceived !== undefined && order.cashReceived > 0 && (
                                                                     <div className="pt-2 mt-2 border-t border-slate-300 border-dashed space-y-2">
                                                                         <div className="flex justify-between text-xs">
                                                                             <span className="text-slate-500 font-bold uppercase tracking-tight">{t.received_label}</span>
-                                                                            <span className="font-bold text-slate-800">{formatLAK(order.cashReceived || 0)}</span>
+                                                                            <span className="font-bold text-slate-800">{formatTHB(order.cashReceived || 0)}</span>
                                                                         </div>
                                                                         <div className="flex justify-between text-xs text-emerald-600 bg-emerald-50 p-2 rounded-lg border border-emerald-100">
                                                                             <span className="font-black uppercase tracking-tight">{t.change_due}</span>
-                                                                            <span className="font-black">{formatLAK(order.changeAmount || ((order.cashReceived || 0) - order.total))}</span>
+                                                                            <span className="font-black">{formatTHB(order.changeAmount || ((order.cashReceived || 0) - order.total))}</span>
                                                                         </div>
                                                                     </div>
                                                                 )}

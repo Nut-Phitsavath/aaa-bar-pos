@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { ArrowLeft, Calendar, ChevronRight, LogOut } from "lucide-react"
 import Link from "next/link"
 import { format24Hour, formatDateTime24 } from "@/lib/utils"
+import { formatTHB } from "@/lib/currency"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
@@ -84,9 +85,8 @@ export default function ShiftsPage() {
         }
     }
 
-    const formatCurrency = (amount: number) => {
-        return new Intl.NumberFormat('en-US').format(amount)
-    }
+    // Baht is the till currency now; the shared formatter owns the symbol.
+    const formatCurrency = (amount: number) => formatTHB(amount)
 
     const getShiftDuration = (start: string, end: string | null) => {
         if (!end) return t.ongoing
@@ -203,16 +203,16 @@ export default function ShiftsPage() {
                         <div className="p-4 bg-muted rounded-lg space-y-2">
                             <div className="flex justify-between text-sm">
                                 <span>{t.starting_cash_with_colon}</span>
-                                <span>{activeShift ? formatCurrency(activeShift.startCash) : 0} LAK</span>
+                                <span>{activeShift ? formatCurrency(activeShift.startCash) : 0}</span>
                             </div>
                             <div className="flex justify-between text-sm">
                                 <span>{t.cash_sales_with_colon}</span>
-                                <span>{activeShift ? formatCurrency(activeShift.cashPayments) : 0} LAK</span>
+                                <span>{activeShift ? formatCurrency(activeShift.cashPayments) : 0}</span>
                             </div>
                             <div className="flex justify-between font-bold border-t pt-2">
                                 <span>{t.expected_cash_with_colon}</span>
                                 <span className="text-amber-600">
-                                    {activeShift ? formatCurrency(activeShift.startCash + activeShift.cashPayments) : 0} LAK
+                                    {activeShift ? formatCurrency(activeShift.startCash + activeShift.cashPayments) : 0}
                                 </span>
                             </div>
                         </div>
@@ -236,7 +236,7 @@ export default function ShiftsPage() {
                                 ? 'bg-green-50 text-green-700'
                                 : 'bg-red-50 text-red-700'
                                 }`}>
-                                {t.difference_label}: {formatCurrency(parseFloat(actualCash) - (activeShift.startCash + activeShift.cashPayments))} LAK
+                                {t.difference_label}: {formatCurrency(parseFloat(actualCash) - (activeShift.startCash + activeShift.cashPayments))}
                             </div>
                         )}
                     </div>

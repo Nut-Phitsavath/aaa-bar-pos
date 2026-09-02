@@ -1,7 +1,7 @@
 "use client"
 
 import { useTranslation } from "@/hooks/use-translation"
-import { formatLAK } from "@/lib/currency"
+import { formatTHB } from "@/lib/currency"
 import { ShoppingBag } from "lucide-react"
 
 interface ReceiptProps {
@@ -114,7 +114,7 @@ export function Receipt({ order }: ReceiptProps) {
                                         {item.isTakeaway && <div className="text-[10px] font-black uppercase italic text-black">+ {t.takeaway || "TAKE AWAY"}</div>}
                                     </td>
                                     <td className="text-right py-2 font-black text-black">{item.quantity}</td>
-                                    <td className="text-right py-2 font-black text-black">{formatLAK(item.price * item.quantity)}</td>
+                                    <td className="text-right py-2 font-black text-black">{formatTHB(item.price * item.quantity)}</td>
                                 </tr>
                             )
                         })}
@@ -125,17 +125,17 @@ export function Receipt({ order }: ReceiptProps) {
             <div className="border-t border-dashed pt-2 space-y-1">
                 <div className="flex justify-between text-xs">
                     <span>{t.subtotal}:</span>
-                    <span>{formatLAK(order.subtotal)}</span>
+                    <span>{formatTHB(order.subtotal)}</span>
                 </div>
                 {order.discount > 0 && (
                     <div className="flex justify-between font-bold text-rose-600">
                         <span>{t.discount}:</span>
-                        <span>-{formatLAK(order.discount)}</span>
+                        <span>-{formatTHB(order.discount)}</span>
                     </div>
                 )}
                 <div className="flex justify-between font-bold text-[14px] pt-1 border-t border-dashed border-black">
                     <span>{t.total_caps}:</span>
-                    <span>{formatLAK(order.total)}</span>
+                    <span>{formatTHB(order.total)}</span>
                 </div>
             </div>
 
@@ -143,11 +143,11 @@ export function Receipt({ order }: ReceiptProps) {
                 <div className="mt-2 text-xs space-y-0.5 opacity-90 font-black border-t border-dashed pt-1">
                     <div className="flex justify-between">
                         <span>{t.received_label}:</span>
-                        <span>{formatLAK(order.cashReceived)}</span>
+                        <span>{formatTHB(order.cashReceived)}</span>
                     </div>
                     <div className="flex justify-between text-[13px]">
                         <span>{t.change}:</span>
-                        <span>{formatLAK(Math.max(0, order.cashReceived - order.total))}</span>
+                        <span>{formatTHB(Math.max(0, order.cashReceived - order.total))}</span>
                     </div>
                 </div>
             )}

@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
 import { Plus, Search, Star, Eye } from "lucide-react"
-import { formatLAK } from "@/lib/currency"
+import { formatTHB } from "@/lib/currency"
 import { useTranslation } from "@/hooks/use-translation"
 
 type Customer = {
@@ -113,7 +113,7 @@ export function CustomersTab() {
                 <Card className="p-6">
                     <p className="text-sm text-muted-foreground mb-1">{t.total} {t.revenue}</p>
                     <p className="text-3xl font-bold text-purple-600">
-                        {formatLAK(customers.reduce((sum, c) => sum + c.totalSpent, 0))}
+                        {formatTHB(customers.reduce((sum, c) => sum + c.totalSpent, 0))}
                     </p>
                 </Card>
             </div>
@@ -228,7 +228,7 @@ export function CustomersTab() {
                                     </div>
                                     <div className="text-right">
                                         <p className="text-sm text-muted-foreground">{t.total} {t.checkout}</p>
-                                        <p className="font-semibold text-green-600">{formatLAK(customer.totalSpent)}</p>
+                                        <p className="font-semibold text-green-600">{formatTHB(customer.totalSpent)}</p>
                                     </div>
                                     <div className="text-right">
                                         <p className="text-sm text-muted-foreground">{t.last_visit}</p>

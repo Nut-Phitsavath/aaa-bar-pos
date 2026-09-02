@@ -6,7 +6,7 @@ import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Printer, ArrowLeft } from "lucide-react"
 import Link from "next/link"
-import { formatLAK, calculateInclusiveTax } from "@/lib/currency"
+import { formatTHB, calculateInclusiveTax } from "@/lib/currency"
 import { useTranslation } from "@/hooks/use-translation"
 
 
@@ -169,7 +169,7 @@ function ReceiptContent() {
                     </div>
                     <div className="flex items-start gap-1 whitespace-nowrap flex-shrink-0">
                       <span>x{item.quantity} •</span>
-                      <span>{formatLAK(item.price * item.quantity)}</span>
+                      <span>{formatTHB(item.price * item.quantity)}</span>
                     </div>
                   </div>
 
@@ -192,18 +192,18 @@ function ReceiptContent() {
               <>
                 <div className="flex justify-between text-xs font-black">
                   <span>{t.gross_total}</span>
-                  <span className="line-through">{formatLAK(order.subtotal || (order.total + order.discount))}</span>
+                  <span className="line-through">{formatTHB(order.subtotal || (order.total + order.discount))}</span>
                 </div>
                 <div className="flex justify-between text-xs text-rose-700 font-black">
                   <span>{t.discount}</span>
-                  <span>-{formatLAK(order.discount)}</span>
+                  <span>-{formatTHB(order.discount)}</span>
                 </div>
               </>
             )}
             {/* Removed VAT and Net Subtotal as per user request */}
             <div className="flex justify-between font-bold text-sm mt-1 pt-1 border-t border-dashed border-slate-300 text-black">
               <span>{t.grand_total}</span>
-              <span>{formatLAK(order.total)}</span>
+              <span>{formatTHB(order.total)}</span>
             </div>
 
 
@@ -213,11 +213,11 @@ function ReceiptContent() {
             <div className="mt-1 pt-1 border-t border-dashed border-slate-300 text-sm font-black text-black">
               <div className="flex justify-between">
                 <span>ຮັບເງິນ / Received:</span>
-                <span>{formatLAK(order.cashReceived || 0)}</span>
+                <span>{formatTHB(order.cashReceived || 0)}</span>
               </div>
               <div className="flex justify-between">
                 <span>ເງິນທອນ / Change:</span>
-                <span>{formatLAK(order.changeAmount || 0)}</span>
+                <span>{formatTHB(order.changeAmount || 0)}</span>
               </div>
             </div>
           )}

@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation"
 import { useTranslation } from "@/hooks/use-translation"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { ArrowLeft, Clock, Receipt } from "lucide-react"
-import { formatLAK } from "@/lib/currency"
+import { formatTHB } from "@/lib/currency"
 import { formatDuration } from "@/lib/sessions"
 
 export type BannerSession = {
@@ -69,7 +69,7 @@ export function SessionBanner({
       <div className="ms-auto flex items-center gap-2 md:gap-3">
         <div className="text-right leading-none">
           <p className="text-[10px] uppercase tracking-wide text-slate-400">{t.running_total}</p>
-          <p className="text-lg font-bold tabular-nums mt-0.5">{formatLAK(session.total)}</p>
+          <p className="text-lg font-bold tabular-nums mt-0.5">{formatTHB(session.total)}</p>
         </div>
 
         <Select value={waiterId} onValueChange={onWaiterChange}>

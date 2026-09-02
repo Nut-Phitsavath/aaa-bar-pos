@@ -19,7 +19,7 @@ import {
 import Link from "next/link"
 
 import { Badge } from "@/components/ui/badge"
-import { formatLAK, calculateChange, LAK_DENOMINATIONS, calculateTax, calculateInclusiveTax } from "@/lib/currency"
+import { formatTHB, calculateChange, THB_DENOMINATIONS, calculateTax, calculateInclusiveTax } from "@/lib/currency"
 import { promoBlocker, promoDiscountFor, type PromoBlocker } from "@/lib/promotions"
 import { PaymentQR } from "@/components/payment-qr"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
@@ -1356,7 +1356,7 @@ function POSPageInner() {
                       <Button variant="outline" size="icon" className="h-6 w-6" onClick={() => updateQuantity(item.id, 1)}>
                         <Plus className="w-3 h-3" />
                       </Button>
-                      <span className="text-sm font-bold text-amber-700 w-20 text-right">{formatLAK(item.price * item.quantity)}</span>
+                      <span className="text-sm font-bold text-amber-700 w-20 text-right">{formatTHB(item.price * item.quantity)}</span>
                       <Button variant="ghost" size="icon" className="h-11 w-11 text-red-400 hover:text-red-600 hover:bg-red-50 ml-1" onClick={() => removeItem(item.id)}>
                         <X className="w-6 h-6" />
                       </Button>
@@ -1378,7 +1378,7 @@ function POSPageInner() {
           )}
           <div className="flex justify-between text-sm">
             <span className="text-muted-foreground">{t.subtotal}</span>
-            <span className="font-semibold">{formatLAK(subtotal)}</span>
+            <span className="font-semibold">{formatTHB(subtotal)}</span>
           </div>
           {appliedPromo && (() => {
             // Inert promo: show why, not "-0" beside a name that looks applied.
@@ -1388,7 +1388,7 @@ function POSPageInner() {
                 <span className="flex items-center gap-1 min-w-0">
                   <Tag className="w-3 h-3 shrink-0" /> <span className="truncate">{appliedPromo.name}</span>
                 </span>
-                <span className="shrink-0">{blocker ? promoBlockerLabel(blocker, appliedPromo) : `-${formatLAK(promoDiscount)}`}</span>
+                <span className="shrink-0">{blocker ? promoBlockerLabel(blocker, appliedPromo) : `-${formatTHB(promoDiscount)}`}</span>
               </div>
             )
           })()}
@@ -1397,13 +1397,13 @@ function POSPageInner() {
               <span className="flex items-center gap-1">
                 <Star className="w-3 h-3" /> {t.loyalty_points_redeemed || "Points Redeemed"}
               </span>
-              <span>-{formatLAK(loyaltyDiscount)}</span>
+              <span>-{formatTHB(loyaltyDiscount)}</span>
             </div>
           )}
 
           <div className="flex justify-between text-sm font-bold pt-2 border-t">
             <span>{t.total}</span>
-            <span className="text-amber-600">{formatLAK(total)}</span>
+            <span className="text-amber-600">{formatTHB(total)}</span>
           </div>
         </div>
 
@@ -1514,7 +1514,7 @@ function POSPageInner() {
                         <div key={i} className="flex flex-col leading-tight">
                           <div className="flex justify-between font-black items-start">
                             <span className="flex-1 mr-2">{laoName} x{item.quantity}</span>
-                            <span className="whitespace-nowrap">{formatLAK(item.price * item.quantity)}</span>
+                            <span className="whitespace-nowrap">{formatTHB(item.price * item.quantity)}</span>
                           </div>
 
                           {engName && (
@@ -1551,32 +1551,32 @@ function POSPageInner() {
                   <div className="border-t border-dashed border-slate-300 pt-3 space-y-1">
                     <div className="flex justify-between opacity-70 text-[11px]">
                       <span>{t.subtotal_net}</span>
-                      <span>{formatLAK(lastOrderInfo.total - lastOrderInfo.tax)}</span>
+                      <span>{formatTHB(lastOrderInfo.total - lastOrderInfo.tax)}</span>
                     </div>
                     {lastOrderInfo.discount > 0 && (
                       <div className="flex justify-between text-rose-600 font-bold text-[11px]">
                         <span>{t.promotions}</span>
-                        <span>-{formatLAK(lastOrderInfo.discount)}</span>
+                        <span>-{formatTHB(lastOrderInfo.discount)}</span>
                       </div>
                     )}
                     <div className="flex justify-between opacity-70 text-[11px]">
                       <span>VAT ({sysSettings.taxRate}%)</span>
-                      <span>{formatLAK(lastOrderInfo.tax)}</span>
+                      <span>{formatTHB(lastOrderInfo.tax)}</span>
                     </div>
                     <div className="flex justify-between font-black text-xl mt-2 pt-2 border-t border-dashed border-slate-300">
                       <span>{t.total_caps}</span>
-                      <span>{formatLAK(lastOrderInfo.total)}</span>
+                      <span>{formatTHB(lastOrderInfo.total)}</span>
                     </div>
 
                     {lastOrderInfo.paymentMethod === 'CASH' && (
                       <div className="mt-4 pt-2 border-t border-dashed border-slate-300 space-y-1">
                         <div className="flex justify-between opacity-70 text-[11px]">
                           <span>{t.cash_received}</span>
-                          <span>{formatLAK(lastOrderInfo.cashReceived)}</span>
+                          <span>{formatTHB(lastOrderInfo.cashReceived)}</span>
                         </div>
                         <div className="flex justify-between font-black text-lg text-emerald-700">
                           <span>{t.change}</span>
-                          <span>{formatLAK(Math.max(0, lastOrderInfo.cashReceived - lastOrderInfo.total))}</span>
+                          <span>{formatTHB(Math.max(0, lastOrderInfo.cashReceived - lastOrderInfo.total))}</span>
                         </div>
                       </div>
                     )}
@@ -1869,7 +1869,7 @@ function POSPageInner() {
                   <div className="space-y-4">
                     <div className="p-4 bg-amber-50 rounded-xl border border-amber-100">
                       <p className="text-sm text-amber-700 font-medium mb-1">{t.total_to_pay}</p>
-                      <p className="text-3xl font-black text-amber-900">{formatLAK(total)}</p>
+                      <p className="text-3xl font-black text-amber-900">{formatTHB(total)}</p>
                     </div>
 
                     <div className="space-y-2">
@@ -1908,14 +1908,14 @@ function POSPageInner() {
                   <div className="space-y-3 pt-6 border-t font-medium">
                     <div className="flex justify-between text-slate-500">
                       <span>{t.cash_received}</span>
-                      <span>{formatLAK(Number(cashReceived) || 0)}</span>
+                      <span>{formatTHB(Number(cashReceived) || 0)}</span>
                     </div>
                     <div className="flex justify-between items-center pt-2">
                       <span className="text-lg font-bold text-slate-800">
                         {calculateChange(total, Number(cashReceived)).totalChange >= 0 ? t.change : t.missing_amount}
                       </span>
                       <span className={`text-2xl font-black ${calculateChange(total, Number(cashReceived)).totalChange >= 0 ? 'text-green-600' : 'text-rose-500'}`}>
-                        {formatLAK(Math.abs(calculateChange(total, Number(cashReceived)).totalChange))}
+                        {formatTHB(Math.abs(calculateChange(total, Number(cashReceived)).totalChange))}
                       </span>
                     </div>
                   </div>
@@ -2104,7 +2104,7 @@ function POSPageInner() {
                   const blocker = promoBlocker(promo, cartItemCount)
                   const amount = promo.discountType === 'percentage'
                     ? `${promo.discountValue}%`
-                    : formatLAK(promo.discountValue)
+                    : formatTHB(promo.discountValue)
                   return (
                     <button
                       key={promo.id}

@@ -3,6 +3,20 @@ const { subDays, startOfDay, addMinutes, addHours } = require("date-fns")
 const bcrypt = require("bcryptjs")
 const crypto = require("node:crypto")
 
+/**
+ * PLACEHOLDER PRICING.
+ *
+ * Every price and cost literal below is the inherited cafe menu, written in
+ * kip. The till now stores baht, so they are converted here at the point of
+ * write rather than rewritten in place - it keeps the numbers readable against
+ * the original cafe price list, and this whole block goes away as soon as the
+ * bar's real drink and package menu (priced in baht) replaces it.
+ *
+ * Rounded to the nearest 5 baht because nobody prices a drink at 44.
+ */
+const SEED_RATE_LAK = 680
+const thb = (lak) => Math.max(5, Math.round((lak / SEED_RATE_LAK) / 5) * 5)
+
 const prisma = new PrismaClient()
 
 function getRandomInt(min, max) {
@@ -185,7 +199,7 @@ async function main() {
                 maxStock: 200,
                 minStockSub: 5,
                 maxStockSub: 50,
-                cost: 15000
+                cost: thb(15000)
             }
         })
         item.ingredientId = ingredient.id
@@ -260,7 +274,7 @@ async function main() {
                 data: {
                     variationId: variation.id,
                     size: "Standard",
-                    price: basePrice,
+                    price: thb(basePrice),
                     displayOrder: 1
                 }
             })
@@ -463,7 +477,13 @@ async function main() {
             { key: "shopAddress", value: "Savannakhet, Kaysone Phomvihane" },
             { key: "shopPhone", value: "" },
             { key: "taxRate", value: "10" },
-            { key: "loyaltyRate", value: "1000" },
+            // Baht per loyalty point. Was 1000 when the till ran on kip.
+            { key: "loyaltyRate", value: "2" },
+            // 1 THB = this many LAK / 1 USD = this many THB. Market was ~680
+            // and ~32 when seeded; the owner sets the counter rate in settings.
+            { key: "rate_lak", value: "680" },
+            { key: "rate_usd", value: "32" },
+            { key: "show_usd", value: "false" },
             { key: "language", value: "lo" },
             { key: "shopLogo", value: "/CAFE LOGO.jpg" },
             { key: "boldReceipt", value: "true" },

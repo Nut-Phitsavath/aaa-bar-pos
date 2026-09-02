@@ -32,7 +32,7 @@ import { ShiftDialog } from "@/components/shift-dialog"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { formatLAK } from "@/lib/currency"
+import { formatTHB } from "@/lib/currency"
 import { cn } from "@/lib/utils"
 import { useSidebar } from "@/components/sidebar-provider"
 
@@ -206,7 +206,7 @@ export function Sidebar() {
                             <div className="flex items-center gap-1.5">
                                 <Wallet className="w-3.5 h-3.5 text-amber-600" />
                                 <span className="text-[18px] font-black text-amber-950 leading-none">
-                                    {formatLAK(currentCash)}
+                                    {formatTHB(currentCash)}
                                 </span>
                             </div>
                             {status === 'CLOSED' && (
@@ -347,25 +347,25 @@ export function Sidebar() {
                         <div className="p-4 bg-slate-50 rounded-lg space-y-2 border border-slate-100 font-mono text-sm leading-relaxed">
                             <div className="flex justify-between text-sm">
                                 <span>{t.starting_cash_with_colon || "Starting Cash:"}</span>
-                                <span>{formatLAK(startCash || 0)}</span>
+                                <span>{formatTHB(startCash || 0)}</span>
                             </div>
                             <div className="flex justify-between text-sm">
                                 <span>{t.cash_sales_with_colon || "Cash Sales:"}</span>
-                                <span>{formatLAK(cashPayments || 0)}</span>
+                                <span>{formatTHB(cashPayments || 0)}</span>
                             </div>
                             <div className="flex justify-between font-bold border-t border-slate-200 pt-2 pb-1">
                                 <span>{t.expected_cash_with_colon || "Expected Cash:"}</span>
                                 <span className="text-amber-600">
-                                    {formatLAK((startCash || 0) + (cashPayments || 0))}
+                                    {formatTHB((startCash || 0) + (cashPayments || 0))}
                                 </span>
                             </div>
                             <div className="flex justify-between text-sm border-t border-slate-100 pt-2 opacity-70">
                                 <span>{t.onepay_total || "OnePay Total"}: ({onePayCount || 0})</span>
-                                <span>{formatLAK(onePayPayments || 0)}</span>
+                                <span>{formatTHB(onePayPayments || 0)}</span>
                             </div>
                             <div className="flex justify-between text-sm opacity-70">
                                 <span>{t.transfer_total || "Transfer Total"}: ({transferCount || 0})</span>
-                                <span>{formatLAK(transferPayments || 0)}</span>
+                                <span>{formatTHB(transferPayments || 0)}</span>
                             </div>
                         </div>
 
@@ -391,7 +391,7 @@ export function Sidebar() {
                                     ? 'bg-green-50 text-green-700'
                                     : 'bg-red-50 text-red-700'
                             )}>
-                                {t.difference_label || "Difference"}: {formatLAK(Number(actualCash) - ((startCash || 0) + (cashPayments || 0)))}
+                                {t.difference_label || "Difference"}: {formatTHB(Number(actualCash) - ((startCash || 0) + (cashPayments || 0)))}
                             </div>
                         )}
                     </div>

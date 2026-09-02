@@ -11,7 +11,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Plus, Edit, Trash2, Tag, Percent } from "lucide-react"
 import Link from "next/link"
 import { Header } from "@/components/header"
-import { formatLAK } from "@/lib/currency"
+import { formatTHB } from "@/lib/currency"
 
 type Promotion = {
   id: string
@@ -225,7 +225,7 @@ export default function PromotionsPage() {
                   </div>
                   <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground ml-14">
                     <span>{t.promo_code}: <span className="font-semibold text-foreground">{promo.code}</span></span>
-                    <span>{t.discount_value}: <span className="font-semibold text-foreground">{promo.discountType === "percentage" ? `${promo.discountValue}%` : formatLAK(promo.discountValue)}</span></span>
+                    <span>{t.discount_value}: <span className="font-semibold text-foreground">{promo.discountType === "percentage" ? `${promo.discountValue}%` : formatTHB(promo.discountValue)}</span></span>
                     {promo.minItems ? <span>{t.min_items}: <span className="font-semibold text-foreground">{promo.minItems}</span></span> : null}
                     {promo.staffPickable === false ? <span>{t.staff_pickable_no}</span> : null}
                     {/* The window is the thing that silently switches a promo off,

@@ -8,7 +8,7 @@ import {
     Calendar as CalendarIcon, Clock, Package, History, ArrowRightLeft,
     Store, Wallet, ShoppingCart, AlertTriangle, Target, Users, CreditCard, ChevronDown, Award
 } from "lucide-react"
-import { formatLAK } from "@/lib/currency"
+import { formatTHB } from "@/lib/currency"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Calendar } from "@/components/ui/calendar"
 import { format, subDays, startOfDay, endOfDay, isSameDay } from "date-fns"
@@ -147,7 +147,7 @@ export default function MonitorPage() {
                             <CardHeader className="p-5 pb-0 flex flex-row items-center justify-between">
                                 <div>
                                     <CardTitle className="text-xs font-black uppercase tracking-widest text-slate-400">{t.growth_trend}</CardTitle>
-                                    <CardDescription className="text-lg font-black text-slate-800 mt-1">{formatLAK(summary.totalRevenue || 0)}</CardDescription>
+                                    <CardDescription className="text-lg font-black text-slate-800 mt-1">{formatTHB(summary.totalRevenue || 0)}</CardDescription>
                                 </div>
                                 <TrendingUp className="w-5 h-5 text-emerald-500" />
                             </CardHeader>
@@ -258,7 +258,7 @@ export default function MonitorPage() {
                                 <Badge className="bg-rose-500/10 text-rose-600 border border-rose-500/20 text-[10px] font-black">{summary.complimentaryOrders || 0} {t.orders_lower}</Badge>
                             </CardHeader>
                             <CardContent className="p-4 pt-2">
-                                <p className="text-lg font-black text-rose-950 mb-3">{formatLAK(summary.complimentaryValue || 0)} <span className="text-[10px] font-bold text-rose-400/80 uppercase ml-1 tracking-tighter">{t.market_value}</span></p>
+                                <p className="text-lg font-black text-rose-950 mb-3">{formatTHB(summary.complimentaryValue || 0)} <span className="text-[10px] font-bold text-rose-400/80 uppercase ml-1 tracking-tighter">{t.market_value}</span></p>
                                 <div className="flex gap-2 overflow-x-auto no-scrollbar">
                                     {data?.complimentaryDetails?.map((c: any, i: number) => (
                                         <Badge key={i} variant="outline" className="bg-white/50 border-rose-200 text-rose-700 text-[10px] whitespace-nowrap px-3 py-1 font-bold">
@@ -347,7 +347,7 @@ export default function MonitorPage() {
                                         </div>
                                         <div className="text-right">
                                             <p className="text-xs font-black text-emerald-700 leading-none">{c.loyaltyPoints} {t.pts}</p>
-                                            <p className="text-[9px] font-bold text-slate-400 mt-1">{formatLAK(c.totalSpent)}</p>
+                                            <p className="text-[9px] font-bold text-slate-400 mt-1">{formatTHB(c.totalSpent)}</p>
                                         </div>
                                     </div>
                                 ))}

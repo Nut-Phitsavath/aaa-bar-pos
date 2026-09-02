@@ -266,6 +266,12 @@ model TableSession {
   // Printed on the bill: when the walk-in opened, when the table checked out.
   openedAt   DateTime  @default(now())
   closedAt   DateTime?
+  // The rate this bill was settled at, stamped once at close. Requirement #18:
+  // changing the rate in settings tomorrow must not rewrite what a customer
+  // was charged last night, so a closed bill never reads the live rate again.
+  // Null while the bill is open - an open bill quotes the current rate.
+  fxRateLAK  Float?
+  fxRateUSD  Float?
   openedById String?
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @updatedAt

@@ -13,7 +13,7 @@ import {
   CreditCard, TrendingDown, Clock, Tag, Package, AlertTriangle, Search, Filter, Target, ArrowRightLeft, ShoppingCart, History, Droplets, Coffee
 } from "lucide-react"
 import Link from "next/link"
-import { formatLAK } from "@/lib/currency"
+import { formatTHB } from "@/lib/currency"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Calendar } from "@/components/ui/calendar"
 import { format, subDays, startOfDay, endOfDay, isSameDay, startOfToday, endOfToday } from "date-fns"
@@ -232,21 +232,21 @@ export default function ReportsPage() {
             <Card className="border-l-4 border-l-amber-500 shadow-none bg-slate-50/50">
               <CardHeader className="p-4">
                 <CardDescription>{t.revenue || "Revenue"}</CardDescription>
-                <CardTitle className="text-2xl font-bold">{formatLAK(data?.summary.totalRevenue || 0)}</CardTitle>
+                <CardTitle className="text-2xl font-bold">{formatTHB(data?.summary.totalRevenue || 0)}</CardTitle>
                 <p className="text-[14px] text-muted-foreground mt-1 uppercase tracking-wider font-semibold">{t.gross_sales_tax_incl}</p>
               </CardHeader>
             </Card>
             <Card className="border-l-4 border-l-emerald-500 shadow-none bg-slate-50/50">
               <CardHeader className="p-4">
                 <CardDescription>{t.net_sales}</CardDescription>
-                <CardTitle className="text-2xl font-bold">{formatLAK(data?.summary.netSales || 0)}</CardTitle>
+                <CardTitle className="text-2xl font-bold">{formatTHB(data?.summary.netSales || 0)}</CardTitle>
                 <p className="text-[14px] text-muted-foreground mt-1 uppercase tracking-wider font-semibold">{t.revenue_before_tax}</p>
               </CardHeader>
             </Card>
             <Card className="border-l-4 border-l-blue-500 shadow-none bg-slate-50/50">
               <CardHeader className="p-4">
                 <CardDescription>{t.tax_collected}</CardDescription>
-                <CardTitle className="text-2xl font-bold">{formatLAK(data?.summary.taxCollected || 0)}</CardTitle>
+                <CardTitle className="text-2xl font-bold">{formatTHB(data?.summary.taxCollected || 0)}</CardTitle>
                 <p className="text-[14px] text-muted-foreground mt-1 uppercase tracking-wider font-semibold">{t.estimated_vat_sales_tax}</p>
               </CardHeader>
             </Card>
@@ -260,21 +260,21 @@ export default function ReportsPage() {
             <Card className="border-l-4 border-l-amber-500 shadow-none bg-slate-50/50">
               <CardHeader className="p-4">
                 <CardDescription>{t.aov}</CardDescription>
-                <CardTitle className="text-2xl font-bold">{formatLAK(data?.summary.aov || 0)}</CardTitle>
+                <CardTitle className="text-2xl font-bold">{formatTHB(data?.summary.aov || 0)}</CardTitle>
                 <p className="text-[14px] text-muted-foreground mt-1 uppercase tracking-wider font-semibold">{t.average_order_value}</p>
               </CardHeader>
             </Card>
             <Card className="border-l-4 border-l-rose-500 shadow-none bg-slate-50/50">
               <CardHeader className="p-4">
                 <CardDescription>{t.cogs}</CardDescription>
-                <CardTitle className="text-2xl font-bold">{formatLAK(data?.summary.totalCOGS || 0)}</CardTitle>
+                <CardTitle className="text-2xl font-bold">{formatTHB(data?.summary.totalCOGS || 0)}</CardTitle>
                 <p className="text-[14px] text-muted-foreground mt-1 uppercase tracking-wider font-semibold">{t.cost_of_goods_sold}</p>
               </CardHeader>
             </Card>
             <Card className="border-l-4 border-l-indigo-500 shadow-none bg-slate-50/50">
               <CardHeader className="p-4">
                 <CardDescription>{t.gross_profit}</CardDescription>
-                <CardTitle className="text-2xl font-bold text-indigo-600">{formatLAK(data?.summary.grossProfit || 0)}</CardTitle>
+                <CardTitle className="text-2xl font-bold text-indigo-600">{formatTHB(data?.summary.grossProfit || 0)}</CardTitle>
                 <p className="text-[14px] text-muted-foreground mt-1 uppercase tracking-wider font-semibold">{t.revenue_minus_cogs}</p>
               </CardHeader>
             </Card>
@@ -305,7 +305,7 @@ export default function ReportsPage() {
                       <XAxis dataKey="date" fontSize={11} tickFormatter={(val) => val.split('-').slice(1).join('/')} />
                       <YAxis yAxisId="left" orientation="left" stroke="#d97706" fontSize={11} tickFormatter={(v) => `${(v / 1000)}k`} />
                       <YAxis yAxisId="right" orientation="right" stroke="#2563eb" fontSize={11} />
-                      <Tooltip formatter={(v, name) => [name === 'revenue' ? formatLAK(v as number) : v, name]} />
+                      <Tooltip formatter={(v, name) => [name === 'revenue' ? formatTHB(v as number) : v, name]} />
                       <Legend />
                       <Line yAxisId="left" type="monotone" dataKey="revenue" stroke="#d97706" strokeWidth={2} dot={false} />
                       <Line yAxisId="right" type="monotone" dataKey="orders" stroke="#2563eb" strokeWidth={2} dot={false} />
@@ -333,7 +333,7 @@ export default function ReportsPage() {
                           <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                         ))}
                       </Pie>
-                      <Tooltip formatter={(v) => formatLAK(v as number)} />
+                      <Tooltip formatter={(v) => formatTHB(v as number)} />
                     </PieChart>
                   </ResponsiveContainer>
                 </CardContent>
@@ -357,13 +357,13 @@ export default function ReportsPage() {
                         innerRadius={60}
                         outerRadius={100}
                         paddingAngle={5}
-                        label={(e) => `${e.name}: ${formatLAK(e.revenue)}`}
+                        label={(e) => `${e.name}: ${formatTHB(e.revenue)}`}
                       >
                         {(data?.takeawayStats || []).map((entry: any, index: number) => (
                           <Cell key={`cell-${index}`} fill={index === 0 ? '#d97706' : '#2563eb'} />
                         ))}
                       </Pie>
-                      <Tooltip formatter={(v) => formatLAK(v as number)} />
+                      <Tooltip formatter={(v) => formatTHB(v as number)} />
                       <Legend />
                     </PieChart>
                   </ResponsiveContainer>
@@ -384,7 +384,7 @@ export default function ReportsPage() {
                       </div>
                       <div className="text-right">
                         <p className="text-sm text-muted-foreground">{t.total_value}</p>
-                        <p className="text-2xl font-bold text-orange-600">{formatLAK(data?.summary.complimentaryValue || 0)}</p>
+                        <p className="text-2xl font-bold text-orange-600">{formatTHB(data?.summary.complimentaryValue || 0)}</p>
                       </div>
                     </div>
                     {data?.complimentaryDetails?.length > 0 ? (
@@ -396,7 +396,7 @@ export default function ReportsPage() {
                               <p className="font-semibold text-slate-900">{c.customerName}</p>
                               <p className="text-xs text-muted-foreground">{c.orderCount} {t.orders_lower}</p>
                             </div>
-                            <p className="font-bold text-rose-600">{formatLAK(c.totalValue)}</p>
+                            <p className="font-bold text-rose-600">{formatTHB(c.totalValue)}</p>
                           </div>
                         ))}
                       </div>
@@ -436,7 +436,7 @@ export default function ReportsPage() {
                         </div>
                         <div className="text-right">
                           <p className="font-bold text-lg text-emerald-600 leading-none">{p.sold} <span className="text-[10px] text-muted-foreground uppercase font-normal">{t.sold}</span></p>
-                          <p className="text-sm font-semibold text-slate-500 mt-1">{formatLAK(p.revenue)}</p>
+                          <p className="text-sm font-semibold text-slate-500 mt-1">{formatTHB(p.revenue)}</p>
                         </div>
                       </div>
                     ))}
@@ -480,7 +480,7 @@ export default function ReportsPage() {
                         </div>
                         <div className="text-right">
                           <p className="font-black text-amber-600">{p.sold}</p>
-                          <p className="text-[10px] font-bold text-slate-400">{formatLAK(p.revenue)}</p>
+                          <p className="text-[10px] font-bold text-slate-400">{formatTHB(p.revenue)}</p>
                         </div>
                       </div>
                     ))}
@@ -529,7 +529,7 @@ export default function ReportsPage() {
                       {data?.zeroSales.map((p: any, i: number) => (
                         <div key={i} className="p-2 text-xs bg-muted rounded flex justify-between">
                           <span className="truncate mr-2">{p.name}</span>
-                          <span className="text-muted-foreground">{formatLAK(p.price)}</span>
+                          <span className="text-muted-foreground">{formatTHB(p.price)}</span>
                         </div>
                       ))}
                       {data?.zeroSales.length === 0 && <p className="text-sm text-green-600">{t.great_all_items_sold}</p>}
@@ -556,7 +556,7 @@ export default function ReportsPage() {
                         </div>
                         <div className="text-right">
                           <p className="font-bold text-slate-900">{v.sold} items</p>
-                          <p className="text-xs text-muted-foreground">{formatLAK(v.revenue)}</p>
+                          <p className="text-xs text-muted-foreground">{formatTHB(v.revenue)}</p>
                         </div>
                       </div>
                     ))}
@@ -580,7 +580,7 @@ export default function ReportsPage() {
                         </div>
                         <div className="text-right">
                           <p className="font-bold text-slate-900">{s.sold} items</p>
-                          <p className="text-xs text-muted-foreground">{formatLAK(s.revenue)}</p>
+                          <p className="text-xs text-muted-foreground">{formatTHB(s.revenue)}</p>
                         </div>
                       </div>
                     ))}
@@ -671,7 +671,7 @@ export default function ReportsPage() {
                     <BarChart data={data?.customerStats?.memberVsGuest || []}>
                       <XAxis dataKey="type" />
                       <YAxis fontSize={11} tickFormatter={(v) => `${(v / 1000)}k`} />
-                      <Tooltip formatter={(v) => formatLAK(v as number)} />
+                      <Tooltip formatter={(v) => formatTHB(v as number)} />
                       <Bar dataKey="revenue" fill="#16a34a" radius={[4, 4, 0, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
@@ -703,7 +703,7 @@ export default function ReportsPage() {
                         </div>
                         <div className="text-right">
                           <p className="font-bold text-amber-600">{c.loyaltyPoints} {t.pts}</p>
-                          <p className="text-xs text-muted-foreground">{formatLAK(c.totalSpent)}</p>
+                          <p className="text-xs text-muted-foreground">{formatTHB(c.totalSpent)}</p>
                         </div>
                       </div>
                     ))}
@@ -751,7 +751,7 @@ export default function ReportsPage() {
                     <BarChart data={data?.hourlySales}>
                       <XAxis dataKey="hour" tickFormatter={(h) => `${h}:00`} />
                       <YAxis fontSize={11} tickFormatter={(v) => `${(v / 1000)}k`} />
-                      <Tooltip formatter={(v) => formatLAK(v as number)} />
+                      <Tooltip formatter={(v) => formatTHB(v as number)} />
                       <Bar dataKey="revenue" fill="#d97706" radius={[4, 4, 0, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
@@ -779,7 +779,7 @@ export default function ReportsPage() {
                           <Cell key={`cell-${index}`} fill={index === 0 ? '#16a34a' : '#2563eb'} />
                         ))}
                       </Pie>
-                      <Tooltip formatter={(v) => formatLAK(v as number)} />
+                      <Tooltip formatter={(v) => formatTHB(v as number)} />
                       <Legend />
                     </PieChart>
                   </ResponsiveContainer>
@@ -802,7 +802,7 @@ export default function ReportsPage() {
                     <BarChart data={data?.staffSales || []}>
                       <XAxis dataKey="name" />
                       <YAxis fontSize={11} tickFormatter={(v) => `${(v / 1000)}k`} />
-                      <Tooltip formatter={(v) => formatLAK(v as number)} />
+                      <Tooltip formatter={(v) => formatTHB(v as number)} />
                       <Bar dataKey="revenue" fill="#4f46e5" radius={[4, 4, 0, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
@@ -1024,7 +1024,7 @@ export default function ReportsPage() {
                             <tr key={r.id} className="border-b hover:bg-muted/10">
                               <td className="py-2 px-3 font-medium text-slate-700">{r.orderNumber}</td>
                               <td className="py-2 px-3 text-slate-500">{r.customerName}</td>
-                              <td className="py-2 px-3 text-right font-bold text-rose-600">{formatLAK(r.total)}</td>
+                              <td className="py-2 px-3 text-right font-bold text-rose-600">{formatTHB(r.total)}</td>
                               <td className="py-2 px-3 text-xs italic text-slate-400">{r.reason}</td>
                             </tr>
                           ))
@@ -1060,15 +1060,15 @@ export default function ReportsPage() {
                         <div className="grid grid-cols-3 gap-2 text-center border-t pt-2">
                           <div>
                             <p className="text-[10px] text-muted-foreground uppercase">{t.price}</p>
-                            <p className="font-bold text-blue-600">{formatLAK(item.price)}</p>
+                            <p className="font-bold text-blue-600">{formatTHB(item.price)}</p>
                           </div>
                           <div>
                             <p className="text-[10px] text-muted-foreground uppercase">{t.cost}</p>
-                            <p className="font-bold text-rose-500">{formatLAK(item.cost)}</p>
+                            <p className="font-bold text-rose-500">{formatTHB(item.cost)}</p>
                           </div>
                           <div>
                             <p className="text-[10px] text-muted-foreground uppercase">{t.profit}</p>
-                            <p className="font-bold text-emerald-600">{formatLAK(item.margin)}</p>
+                            <p className="font-bold text-emerald-600">{formatTHB(item.margin)}</p>
                           </div>
                         </div>
                       </div>
@@ -1092,21 +1092,21 @@ export default function ReportsPage() {
                   <div className="p-4 bg-slate-50 rounded-2xl space-y-3">
                     <div className="flex justify-between items-center text-sm">
                       <span className="text-muted-foreground">{t.sales_usage_cost}</span>
-                      <span className="font-bold">{formatLAK(data?.summary.salesCost || 0)}</span>
+                      <span className="font-bold">{formatTHB(data?.summary.salesCost || 0)}</span>
                     </div>
                     <div className="flex justify-between items-center text-sm">
                       <span className="text-muted-foreground">{t.recorded_wastage}</span>
-                      <span className="font-bold text-rose-600">{formatLAK(data?.summary.wastageCost || 0)}</span>
+                      <span className="font-bold text-rose-600">{formatTHB(data?.summary.wastageCost || 0)}</span>
                     </div>
                     <div className="border-t pt-2 flex justify-between items-center text-lg">
                       <span className="font-bold text-slate-800">{t.total_cogs}</span>
-                      <span className="font-black text-rose-600">{formatLAK(data?.summary.totalCOGS || 0)}</span>
+                      <span className="font-black text-rose-600">{formatTHB(data?.summary.totalCOGS || 0)}</span>
                     </div>
                   </div>
                   <div className="p-4 bg-amber-50 rounded-2xl border border-amber-100">
                     <div className="flex justify-between items-center">
                       <span className="text-sm font-bold text-amber-900">{t.est_inventory_shrinkage}</span>
-                      <span className="text-xl font-black text-rose-600">{formatLAK(data?.summary.shrinkageCost || 0)}</span>
+                      <span className="text-xl font-black text-rose-600">{formatTHB(data?.summary.shrinkageCost || 0)}</span>
                     </div>
                     <p className="text-[10px] text-amber-700 mt-1">{t.stock_loss_shift_discrepancies}</p>
                   </div>
@@ -1141,7 +1141,7 @@ export default function ReportsPage() {
                               <td className="py-2 px-3 text-right font-bold text-rose-600">{s.difference}</td>
                               <td className="py-2 px-3 text-left whitespace-nowrap overflow-hidden text-ellipsis max-w-[150px]">{s.reason}</td>
                               <td className="py-2 px-3 text-left text-xs italic text-slate-500 max-w-[200px] truncate">{s.notes}</td>
-                              <td className="py-2 px-3 text-right font-bold text-rose-700">{formatLAK(s.lossValue)}</td>
+                              <td className="py-2 px-3 text-right font-bold text-rose-700">{formatTHB(s.lossValue)}</td>
                             </tr>
                           ))
                         )}
@@ -1174,11 +1174,11 @@ export default function ReportsPage() {
                         </div>
                         <div className="flex justify-between text-sm">
                           <span>{t.revenue_gained}:</span>
-                          <span className="font-bold text-green-600">{formatLAK(p.totalRevenue)}</span>
+                          <span className="font-bold text-green-600">{formatTHB(p.totalRevenue)}</span>
                         </div>
                         <div className="flex justify-between text-sm">
                           <span>{t.total_discount_cost}:</span>
-                          <span className="font-bold text-rose-600">-{formatLAK(p.totalDiscount)}</span>
+                          <span className="font-bold text-rose-600">-{formatTHB(p.totalDiscount)}</span>
                         </div>
                       </div>
                     </Card>

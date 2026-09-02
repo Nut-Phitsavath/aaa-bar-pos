@@ -600,6 +600,12 @@ export const translations = {
         verify_slip_before_completion: "Verify slip before completion.",
         pay_label: "Pay:",
         print_not_implemented: "Printing functionality will be implemented here.",
+        // --- Currency & exchange rates ---
+        exchange_rates: "Exchange Rates",
+        exchange_rates_desc: "Prices are in Thai Baht. These rates only convert the figures shown on a bill, and a settled bill keeps the rate it was closed at.",
+        rate_lak_label: "1 THB = ? LAK",
+        rate_usd_label: "1 USD = ? THB",
+        show_usd_label: "Also show the USD equivalent on bills",
         // --- Table sessions (bar floor plan) ---
         tables: "Tables",
         bill_requested: "Bill Requested",
@@ -1350,6 +1356,12 @@ export const translations = {
         verify_slip_before_completion: "ກວດສະລິບກ່ອນຢືນຢັນ.",
         pay_label: "ຊຳລະ:",
         print_not_implemented: "ຟັງຊັນການພິມຈະຖືກເພີ່ມໃນພາຍຫຼັງ.",
+        // --- Currency & exchange rates ---
+        exchange_rates: "ອັດຕາແລກປ່ຽນ",
+        exchange_rates_desc: "ລາຄາເປັນເງິນບາດ. ອັດຕານີ້ໃຊ້ແປງຕົວເລກທີ່ສະແດງໃນບິນເທົ່ານັ້ນ, ບິນທີ່ຈ່າຍແລ້ວຈະຮັກສາອັດຕາເດີມໄວ້.",
+        rate_lak_label: "1 ບາດ = ? ກີບ",
+        rate_usd_label: "1 ໂດລາ = ? ບາດ",
+        show_usd_label: "ສະແດງມູນຄ່າເປັນໂດລາໃນບິນ",
         // --- Table sessions (bar floor plan) ---
         tables: "ໂຕະ",
         bill_requested: "ຂໍບິນ",

@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge"
 import { LayoutDashboard, ShoppingCart, List, Package, Tag, Settings, Wallet, Store, Users, Receipt, DollarSign } from "lucide-react"
 import Link from "next/link"
 import { useTranslation } from "@/hooks/use-translation"
-import { formatLAK } from "@/lib/currency"
+import { formatTHB } from "@/lib/currency"
 
 import { ShiftDialog } from "@/components/shift-dialog"
 import { useShift } from "@/components/shift-provider"

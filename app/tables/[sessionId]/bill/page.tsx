@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation"
 import { useTranslation } from "@/hooks/use-translation"
 import { Button } from "@/components/ui/button"
 import { ArrowLeft, Receipt, Plus } from "lucide-react"
-import { formatLAK } from "@/lib/currency"
+import { formatTHB, formatLAK, formatUSD, thbToLak, thbToUsd } from "@/lib/currency"
 import { toast } from "sonner"
 
 type BillOrder = {
@@ -26,6 +26,10 @@ type Bill = {
   total: number
   table: { name: string; area: string }
   orders: BillOrder[]
+  // Live rate while open, the settled rate once closed. Resolved server-side.
+  fxRateLAK: number
+  fxRateUSD: number
+  showUsd: boolean
 }
 
 // en-GB gives 24h HH:mm on both server and client. Never pass 'lo-LA' to a
@@ -162,7 +166,7 @@ export default function BillPage({ params }: { params: Promise<{ sessionId: stri
                       className={`font-bold text-slate-900 tabular-nums shrink-0 ${voided ? "line-through" : ""
                         }`}
                     >
-                      {formatLAK(order.total)}
+                      {formatTHB(order.total)}
                     </span>
                   </div>
                   <ul className="space-y-1">
@@ -172,7 +176,7 @@ export default function BillPage({ params }: { params: Promise<{ sessionId: stri
                           <span className="tabular-nums text-slate-400 me-1.5">{item.quantity}×</span>
                           {item.name}
                         </span>
-                        <span className="tabular-nums shrink-0">{formatLAK(item.total)}</span>
+                        <span className="tabular-nums shrink-0">{formatTHB(item.total)}</span>
                       </li>
                     ))}
                   </ul>
@@ -185,17 +189,33 @@ export default function BillPage({ params }: { params: Promise<{ sessionId: stri
 
       <div className="fixed bottom-0 inset-x-0 bg-white border-t border-slate-200 p-3 md:p-4">
         <div className="max-w-2xl mx-auto">
-          <div className="flex items-baseline justify-between mb-3">
+          <div className="flex items-baseline justify-between">
             <span className="text-sm text-slate-600">{t.bill_total}</span>
             <span className="text-2xl font-bold text-slate-900 tabular-nums">
-              {formatLAK(bill.total)}
+              {formatTHB(bill.total)}
             </span>
           </div>
+
+          {/* Requirement #17: the kip equivalent and the rate it was struck at.
+              On a closed bill this is the rate stored on the row, so it reads
+              the same tonight and next month. */}
+          <div className="flex items-baseline justify-between text-sm text-slate-500 mt-1">
+            <span className="tabular-nums">
+              1 ฿ = {bill.fxRateLAK.toLocaleString("en-US")} ₭
+            </span>
+            <span className="tabular-nums">{formatLAK(thbToLak(bill.total, bill.fxRateLAK))}</span>
+          </div>
+
+          {bill.showUsd && (
+            <div className="flex items-baseline justify-end text-sm text-slate-500 tabular-nums">
+              {formatUSD(thbToUsd(bill.total, bill.fxRateUSD))}
+            </div>
+          )}
 
           {closed ? (
             <p className="text-center text-sm text-slate-500 py-3">{t.session_closed}</p>
           ) : (
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-2 gap-2 mt-3">
               <Button
                 variant="outline"
                 className="h-12 border-slate-300"

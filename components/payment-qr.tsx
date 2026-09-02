@@ -4,7 +4,7 @@ import { useEffect, useState } from "react"
 import { QRCodeSVG } from "qrcode.react"
 import { Card } from "@/components/ui/card"
 import { CheckCircle, Loader2 } from "lucide-react"
-import { formatLAK } from "@/lib/currency"
+import { formatTHB } from "@/lib/currency"
 import { useTranslation } from "@/hooks/use-translation"
 
 interface PaymentQRProps {
@@ -94,7 +94,7 @@ export function PaymentQR({ amount, orderNumber, orderId, onComplete }: PaymentQ
         <div className="space-y-4">
             <div className="text-center">
                 <p className="text-sm text-muted-foreground mb-2">{t.amount_to_pay}</p>
-                <p className="text-3xl font-bold text-blue-600">{formatLAK(amount)}</p>
+                <p className="text-3xl font-bold text-blue-600">{formatTHB(amount)}</p>
             </div>
 
             <Card className="p-6 bg-white min-h-[300px] flex items-center justify-center">
