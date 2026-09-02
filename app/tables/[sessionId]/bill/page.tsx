@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef, use } from "react"
 import { useRouter } from "next/navigation"
 import { useTranslation } from "@/hooks/use-translation"
 import { Button } from "@/components/ui/button"
-import { ArrowLeft, Receipt, Plus, Banknote, QrCode, Check } from "lucide-react"
+import { ArrowLeft, Receipt, Plus, Banknote, QrCode, Check, Printer } from "lucide-react"
 import { formatTHB, formatLAK, formatUSD, thbToLak, thbToUsd } from "@/lib/currency"
 import { QRCodeSVG } from "qrcode.react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -18,7 +18,11 @@ type BillOrder = {
   status: string
   total: number
   createdAt: string
+  // This round's number on this table: 1, 2, 3...
+  tableOrderNumber: number | null
+  // waiter served it, user keyed it at the till.
   waiter: { id: string; name: string } | null
+  user: { id: string; name: string } | null
   items: {
     id: string; name: string; quantity: number; total: number
     // Resolved server-side from the menu; null if the item was since deleted.
@@ -224,16 +228,26 @@ export default function BillPage({ params }: { params: Promise<{ sessionId: stri
     return () => { stop = true; clearInterval(poll) }
   }, [pendingQr, load, router, t])
 
-  const requestBill = async () => {
+  /**
+   * Print the bill with a QR for the balance.
+   *
+   * This replaces the old "request bill" signal. In this bar the server brings
+   * the order to the till, so there is nobody to signal - the moment that
+   * matters is handing the customer a printed bill they can pay from.
+   */
+  const printBill = async () => {
     setBusy(true)
     try {
-      const res = await fetch(`/api/table-sessions/${sessionId}/status`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: "BILL_REQUESTED" }),
-      })
-      if (res.ok) await load()
-      else toast.error((await res.json().catch(() => ({}))).error || "Failed")
+      const res = await fetch(`/api/table-sessions/${sessionId}/print`, { method: "POST" })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) { toast.error(data.error || "Failed"); return }
+
+      // The bill prints either way; a dead line only costs the QR, and the
+      // customer can still pay cash.
+      if (data.qrError) toast.error(data.qrError)
+
+      window.open(`/tables/${sessionId}/print`, "_blank", "width=420,height=700")
+      await load()
     } finally { setBusy(false) }
   }
 
@@ -404,8 +418,14 @@ export default function BillPage({ params }: { params: Promise<{ sessionId: stri
   // Cancelled rounds stay on screen struck through rather than vanishing, so
   // staff can see a void happened instead of wondering where a round went.
   // HOLD orders belong to the beeper flow and are not part of a table bill.
-  const rounds = bill.orders.filter((o) => o.status !== "HOLD")
+  const rounds = bill.orders
+    .filter((o) => o.status !== "HOLD")
+    .sort((a, b) => (a.tableOrderNumber ?? 0) - (b.tableOrderNumber ?? 0))
   const closed = bill.status === "CLOSED"
+  // POS staff first, then servers, comma separated when a bill went through
+  // more than one pair of hands.
+  const posStaff = Array.from(new Set(rounds.map((o) => o.user?.name).filter(Boolean)))
+  const servers = Array.from(new Set(rounds.map((o) => o.waiter?.name).filter(Boolean)))
   const paid = bill.total - bill.balance
   const methodLabel = (m: string) =>
     m === "CASH" ? t.pay_cash : m === "ONEPAY" ? t.pay_onepay : m
@@ -445,7 +465,9 @@ export default function BillPage({ params }: { params: Promise<{ sessionId: stri
         )}
       </header>
 
-      <main className="flex-1 p-3 md:p-4 pb-40">
+      {/* No bottom padding now: the sticky bar takes real layout space, so
+          reserving room for it would leave a permanent gap under the list. */}
+      <main className="flex-1 p-3 md:p-4">
         <div className="max-w-2xl mx-auto space-y-2.5">
           {rounds.length === 0 ? (
             <div className="text-center py-16">
@@ -474,11 +496,16 @@ export default function BillPage({ params }: { params: Promise<{ sessionId: stri
                     }`}
                 >
                   <div className="flex items-center justify-between gap-2 mb-2">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <span className="text-sm font-semibold text-slate-900 truncate">
-                        {order.waiter?.name || "—"}
+                    <div className="flex items-baseline gap-2 min-w-0">
+                      {/* The round's own number on this table, which is what
+                          the customer and the printed bill refer to. */}
+                      <span className="text-sm font-bold text-slate-900 shrink-0">
+                        {t.round_no} #{order.tableOrderNumber ?? "-"}
                       </span>
-                      <span className="text-xs text-slate-500 tabular-nums shrink-0">
+                      <span className="text-xs text-slate-500 truncate">
+                        {order.user?.name || "—"} · {order.waiter?.name || "—"}
+                      </span>
+                      <span className="text-xs text-slate-400 tabular-nums shrink-0">
                         {clock(order.createdAt)}
                       </span>
                     </div>
@@ -503,6 +530,19 @@ export default function BillPage({ params }: { params: Promise<{ sessionId: stri
                 </section>
               )
             })
+          )}
+
+          {rounds.length > 0 && (
+            <section className="rounded-lg border border-slate-200 bg-white p-3.5 text-sm">
+              <div className="flex justify-between gap-3">
+                <span className="text-slate-500 shrink-0">{t.pos_staff}</span>
+                <span className="text-slate-800 text-right">{posStaff.join(", ") || "—"}</span>
+              </div>
+              <div className="flex justify-between gap-3 mt-1">
+                <span className="text-slate-500 shrink-0">{t.server_staff}</span>
+                <span className="text-slate-800 text-right">{servers.join(", ") || "—"}</span>
+              </div>
+            </section>
           )}
 
           {bill.payments.length > 0 && (
@@ -695,7 +735,10 @@ export default function BillPage({ params }: { params: Promise<{ sessionId: stri
         </DialogContent>
       </Dialog>
 
-      <div className="fixed bottom-0 inset-x-0 bg-white border-t border-slate-200 p-3 md:p-4">
+      {/* sticky, not fixed: a fixed bar is measured from the viewport edge, so
+          it slides under the sidebar and ignores its collapse animation. Sticky
+          keeps it inside the padded main column, which already transitions. */}
+      <div className="sticky bottom-0 bg-white border-t border-slate-200 p-3 md:p-4">
         <div className="max-w-2xl mx-auto">
           {/* A discount is shown as its own line off the gross, never folded
               into the total, so the customer can see what came off. */}
@@ -819,11 +862,11 @@ export default function BillPage({ params }: { params: Promise<{ sessionId: stri
               <Button
                 variant="outline"
                 className="h-12 border-slate-300"
-                disabled={busy || bill.status === "BILL_REQUESTED"}
-                onClick={requestBill}
+                disabled={busy}
+                onClick={printBill}
               >
-                <Receipt className="w-4 h-4 mr-2" />
-                {t.request_bill}
+                <Printer className="w-4 h-4 mr-2" />
+                {t.print_bill}
               </Button>
               {bill.balance > 0 ? (
                 <Button
