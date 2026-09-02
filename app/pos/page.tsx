@@ -1,6 +1,9 @@
 "use client"
 
-import { useState, useEffect, useMemo, useCallback, useRef, memo } from "react"
+import { useState, useEffect, useMemo, useCallback, useRef, memo, Suspense } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
+import { toast } from "sonner"
+import { SessionBanner, type BannerSession, type Waiter } from "@/components/session-banner"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -111,7 +114,7 @@ const MenuCard = memo(function MenuCard({ item, index, onClick }: {
   )
 })
 
-export default function POSPage() {
+function POSPageInner() {
   const [activeCategory, setActiveCategory] = useState("All")
 
   const handleLogout = async () => {
@@ -166,6 +169,57 @@ export default function POSPage() {
   const [customizationOpen, setCustomizationOpen] = useState(false)
   const [productToCustomize, setProductToCustomize] = useState<MenuItem | null>(null)
   const [manualPoints, setManualPoints] = useState("")
+
+  // Declared up here rather than just above the JSX: handlers below reference
+  // `t` in their dependency arrays, which are evaluated during render.
+  const { t } = useTranslation()
+
+  // --- Table session binding -------------------------------------------------
+  // With no ?session= param this whole block stays inert and the screen is the
+  // walk-in counter POS exactly as before.
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const sessionIdParam = searchParams.get("session")
+  const [session, setSession] = useState<BannerSession | null>(null)
+  const [waiters, setWaiters] = useState<Waiter[]>([])
+  const [waiterId, setWaiterId] = useState("")
+
+  const loadSession = useCallback(async () => {
+    if (!sessionIdParam) { setSession(null); return }
+    try {
+      const res = await fetch(`/api/table-sessions/${sessionIdParam}`)
+      if (!res.ok) { router.push("/tables"); return }
+      const data = await res.json()
+      // Someone settled this bill on another device while we were standing here.
+      if (data.status === "CLOSED") { router.push("/tables"); return }
+      setSession({ id: data.id, openedAt: data.openedAt, total: data.total, table: data.table })
+    } catch {
+      // Keep the last known banner rather than bouncing off the table on a blip.
+    }
+  }, [sessionIdParam, router])
+
+  useEffect(() => { loadSession() }, [loadSession])
+
+  useEffect(() => {
+    if (!sessionIdParam) return
+    fetch("/api/waiters")
+      .then((r) => r.ok ? r.json() : [])
+      .then((list) => {
+        const active: Waiter[] = Array.isArray(list) ? list : []
+        setWaiters(active)
+        // A waiter works one section all night, so remembering the pick saves a
+        // tap per round. The order still records it per row, which is what the
+        // shift report reads.
+        const remembered = localStorage.getItem("pos_waiter")
+        if (remembered && active.some((w) => w.id === remembered)) setWaiterId(remembered)
+      })
+      .catch(() => setWaiters([]))
+  }, [sessionIdParam])
+
+  const changeWaiter = useCallback((id: string) => {
+    setWaiterId(id)
+    localStorage.setItem("pos_waiter", id)
+  }, [])
 
   // Units in the cart, not cart lines: two of the same drink counts as two.
   // Counts everything, bakery included - see the note on Promotion.minItems.
@@ -370,6 +424,59 @@ export default function POSPage() {
     channel.postMessage({ type: "ORDER_RESET" })
     channel.close()
   }
+
+  /**
+   * Send the cart to the open table as one round.
+   *
+   * Not a checkout: no payment, no shift, no loyalty. The order lands as SENT,
+   * its stock is deducted server-side because the drink has left the shelf, and
+   * the money is only booked when the bill is settled.
+   */
+  const sendToTable = useCallback(async () => {
+    if (!session || cart.length === 0) return
+    if (!waiterId) { toast.error(t.waiter_required); return }
+
+    setIsProcessing(true)
+    try {
+      const res = await fetch("/api/orders", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sessionId: session.id,
+          waiterId,
+          status: "SENT",
+          items: cart.map((i) => ({
+            variationSizeId: i.variationSizeId,
+            name: i.localName ? `${i.localName} (${i.name})` : i.name,
+            price: i.price,
+            quantity: i.quantity,
+            sugarLevel: i.sugar,
+            shotType: i.shot,
+            variation: i.variation,
+            size: i.size,
+            isTakeaway: i.isTakeaway
+          })),
+          total,
+          subtotal,
+          tax,
+          discount: 0
+        })
+      })
+
+      if (res.ok) {
+        setCart([])
+        await loadSession()
+        toast.success(t.order_sent)
+      } else {
+        const err = await res.json().catch(() => ({}))
+        toast.error(err.error || "Failed to send order")
+      }
+    } catch {
+      toast.error("Failed to send order")
+    } finally {
+      setIsProcessing(false)
+    }
+  }, [session, cart, waiterId, total, subtotal, tax, loadSession, t])
 
   const handleCheckout = useCallback(async () => {
     if (!beeperNumber) {
@@ -1109,10 +1216,17 @@ export default function POSPage() {
     )
   }, [menuItems, activeCategory, searchQuery])
 
-  const { t } = useTranslation()
-
   return (
-    <div className="h-screen flex bg-slate-50 text-slate-900 overflow-hidden">
+    <div className="h-screen flex flex-col bg-slate-50 text-slate-900 overflow-hidden">
+      {session && (
+        <SessionBanner
+          session={session}
+          waiters={waiters}
+          waiterId={waiterId}
+          onWaiterChange={changeWaiter}
+        />
+      )}
+      <div className="flex-1 flex min-h-0">
       {/* Left Side - Menu & Header */}
       <div className="flex-1 flex flex-col min-w-0 bg-background border-r">
         <Header title={t.pos}>
@@ -1643,6 +1757,18 @@ export default function POSPage() {
 
         </div>
 
+        {session ? (
+          // Table mode: one action. No payment, no complimentary toggle - the
+          // bill is settled from the bill screen once, at the end.
+          <Button
+            className="w-full h-14 text-lg bg-amber-600 hover:bg-amber-700 text-white"
+            size="lg"
+            disabled={cart.length === 0 || isProcessing}
+            onClick={sendToTable}
+          >
+            {isProcessing ? `${t.send_order}…` : `${t.send_order} → ${session.table.name}`}
+          </Button>
+        ) : (
         <div className="grid grid-cols-2 gap-2">
           <Button
             className="w-full h-12 bg-green-600 hover:bg-green-700 text-white"
@@ -1693,6 +1819,7 @@ export default function POSPage() {
 
 
         </div>
+        )}
 
 
 
@@ -2143,6 +2270,16 @@ export default function POSPage() {
           />
         )}
       </div>
+      </div>
     </div>
+  )
+}
+
+export default function POSPage() {
+  // useSearchParams needs a Suspense boundary or `next build` refuses the page.
+  return (
+    <Suspense fallback={null}>
+      <POSPageInner />
+    </Suspense>
   )
 }

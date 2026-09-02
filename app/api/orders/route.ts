@@ -16,7 +16,8 @@ export async function POST(request: Request) {
             promoId, customerId, paymentMethod, status,
             beeperNumber, cancellationReason,
             pointsRedeemed, taxAmount, isReportable,
-            cashReceived, changeAmount
+            cashReceived, changeAmount,
+            sessionId, waiterId
         } = body
 
         // --- VALIDATION PHASE (Fail Fast) ---
@@ -48,6 +49,26 @@ export async function POST(request: Request) {
         if (variationSizeIds.length === 0) {
             console.error("Order Validation Failed: No VariationSize IDs found", items)
             return NextResponse.json({ error: 'Items must have variationSizeId' }, { status: 400 })
+        }
+
+        // 1b. Table orders must name a waiter. An unattributed round makes the
+        //     per-waiter shift report a lie, which is the whole reason the
+        //     waiter is picked per order instead of taken from the login.
+        if (sessionId && !waiterId) {
+            return NextResponse.json(
+                { error: 'A table order must be assigned to a waiter' },
+                { status: 400 }
+            )
+        }
+
+        if (sessionId) {
+            const tableSession = await prisma.tableSession.findUnique({ where: { id: sessionId } })
+            if (!tableSession) {
+                return NextResponse.json({ error: 'Session not found' }, { status: 404 })
+            }
+            if (tableSession.status === 'CLOSED') {
+                return NextResponse.json({ error: 'SESSION_ALREADY_CLOSED' }, { status: 409 })
+            }
         }
 
         // Check if ALL referenced variationSizes exist in DB
@@ -235,6 +256,17 @@ export async function POST(request: Request) {
                 ? { shift: { connect: { id: openShiftId } } }
                 : {}
 
+            // Same nested-connect rule as shiftLink above: a bare sessionId /
+            // waiterId scalar alongside these relation connects makes Prisma
+            // reject the whole payload.
+            const sessionLink = sessionId
+                ? { session: { connect: { id: sessionId } } }
+                : {}
+
+            const waiterLink = waiterId
+                ? { waiter: { connect: { id: waiterId } } }
+                : {}
+
             // 3. Prepare Items (using variationSizeId)
             const preparedItems = items.map((item: any) => {
                 // 1. Find the DB record for this variationSize
@@ -278,6 +310,8 @@ export async function POST(request: Request) {
                         ...(effectivePromoId && { promotion: { connect: { id: effectivePromoId } } }),
                         ...(userId && { user: { connect: { id: userId } } }),
                         ...shiftLink,
+                        ...sessionLink,
+                        ...waiterLink,
                         items: {
                             create: preparedItems
                         }
@@ -295,6 +329,8 @@ export async function POST(request: Request) {
                         promotion: effectivePromoId ? { connect: { id: effectivePromoId } } : { disconnect: true },
                         ...(userId && { user: { connect: { id: userId } } }),
                         ...shiftLink,
+                        ...sessionLink,
+                        ...waiterLink,
                         items: {
                             create: preparedItems
                         }
@@ -309,8 +345,17 @@ export async function POST(request: Request) {
             const isNowCompleted = status === 'COMPLETED'
             const isCancelled = status === 'CANCELLED'
 
-            // A. If newly COMPLETED (new order OR updated from HOLD -> COMPLETED)
-            if (isNowCompleted && !wasCompleted) {
+            // Stock moves when the drink is served, not when the bill is paid.
+            // A SENT order is sitting on an open table: the bottle has already
+            // left the shelf, so it must be deducted now. No money has changed
+            // hands yet though, so loyalty, the cash drawer and the shift link
+            // all stay gated on COMPLETED.
+            const ACTIVE_STATUSES = ['COMPLETED', 'SENT']
+            const wasActive = previousOrder ? ACTIVE_STATUSES.includes(previousOrder.status) : false
+            const isNowActive = ACTIVE_STATUSES.includes(status || 'COMPLETED')
+
+            // A. If newly ACTIVE (new order, HOLD -> COMPLETED, or sent to a table)
+            if (isNowActive && !wasActive) {
 
                 // 1. Deduct Stock (based on menu recipes)
                 for (const item of preparedItems) {
@@ -340,6 +385,12 @@ export async function POST(request: Request) {
                     }
                 }
 
+                // Money only moves on a real checkout. A SENT order on an open
+                // table has deducted its stock above and stops here — it earns
+                // no points and puts nothing in the drawer until the bill is
+                // settled by /api/table-sessions/[id]/close.
+                if (isNowCompleted && !wasCompleted) {
+
                 // 2. Add Loyalty (if customer). Earn rate uses the same settings
                 //    rate as redemption so the loyalty economy stays symmetric.
                 if (customerId) {
@@ -364,10 +415,12 @@ export async function POST(request: Request) {
                         data: { cashPayments: { increment: savedOrder.total } }
                     })
                 }
+
+                } // end money-only block
             }
 
-            // B. If REVERSAL (COMPLETED -> CANCELLED)
-            if (wasCompleted && isCancelled) {
+            // B. If REVERSAL (COMPLETED or SENT -> CANCELLED)
+            if (previousOrder && wasActive && isCancelled) {
                 // 1. Revert Stock
                 const oldItems = previousOrder.items
                 for (const item of oldItems) {
@@ -397,6 +450,12 @@ export async function POST(request: Request) {
                     }
                 }
 
+                // Mirror of the money-only block above. A SENT order never
+                // earned points and never reached the drawer, so reversing
+                // either here would silently drain a customer's balance or the
+                // shift's cash total.
+                if (wasCompleted) {
+
                 // 2. Revert Loyalty
                 if (previousOrder.customerId) {
                     const earned = Math.floor(previousOrder.total / loyaltyRate)
@@ -421,6 +480,8 @@ export async function POST(request: Request) {
                         data: { cashPayments: { decrement: previousOrder.total } }
                     })
                 }
+
+                } // end money-only reversal block
             }
 
             return savedOrder

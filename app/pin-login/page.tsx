@@ -97,7 +97,9 @@ export default function PinLoginPage() {
                 if (data.user.role === 'ADMIN') {
                     window.location.href = '/dashboard'
                 } else {
-                    window.location.href = '/pos'
+                    // Floor plan is the working centre of a bar shift; the
+                    // table-less counter POS is one tap away from there.
+                    window.location.href = '/tables'
                 }
                 // Don't reset isNavigating or isLoading here
             } else {

@@ -1,6 +1,7 @@
 const { PrismaClient } = require("@prisma/client")
 const { subDays, startOfDay, addMinutes, addHours } = require("date-fns")
 const bcrypt = require("bcryptjs")
+const crypto = require("node:crypto")
 
 const prisma = new PrismaClient()
 
@@ -580,6 +581,43 @@ async function main() {
             })
         }
     }
+
+    // --- Tables ---
+    // Placeholder floor. Replace with the bar's real table names and areas.
+    const tableSeed = [
+        { name: 'T1', area: 'INDOOR', seats: 4, displayOrder: 1 },
+        { name: 'T2', area: 'INDOOR', seats: 4, displayOrder: 2 },
+        { name: 'T3', area: 'INDOOR', seats: 6, displayOrder: 3 },
+        { name: 'T4', area: 'INDOOR', seats: 6, displayOrder: 4 },
+        { name: 'O1', area: 'OUTDOOR', seats: 4, displayOrder: 1 },
+        { name: 'O2', area: 'OUTDOOR', seats: 4, displayOrder: 2 },
+        { name: 'VIP 1', area: 'VIP', seats: 10, displayOrder: 1 },
+        { name: 'VIP 2', area: 'VIP', seats: 10, displayOrder: 2 },
+    ]
+    for (const t of tableSeed) {
+        const existing = await prisma.table.findFirst({ where: { name: t.name } })
+        if (!existing) await prisma.table.create({ data: t })
+    }
+    console.log(`Seeded ${tableSeed.length} tables`)
+
+    // --- Waiters ---
+    // Role WAITER, no till access. They are picked from a list on the order
+    // panel, they never log in - requirement #6.
+    const waiterSeed = ['Nok', 'Mai', 'Ting']
+    for (const name of waiterSeed) {
+        const username = name.toLowerCase()
+        const existing = await prisma.user.findUnique({ where: { username } })
+        if (!existing) {
+            // Waiters are picked from a list, they never log in. Give them an
+            // unguessable hashed PIN rather than a shared one, so the row can
+            // never become a way into the till.
+            const unusablePin = await bcrypt.hash(crypto.randomUUID(), 10)
+            await prisma.user.create({
+                data: { name, username, role: 'WAITER', pin: unusablePin, isActive: true }
+            })
+        }
+    }
+    console.log(`Seeded ${waiterSeed.length} waiters`)
 
     console.log("Seeding completed successfully!")
 }

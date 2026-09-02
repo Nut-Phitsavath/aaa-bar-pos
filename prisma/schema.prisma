@@ -20,6 +20,11 @@ model User {
   shifts            Shift[]
   stockCounts       StockCount[]
   stockTransactions StockTransaction[]
+  // `orders` above is the cashier who rang the sale up. `waitedOrders` is the
+  // waiter who served it — a different person on a bar table, which is the
+  // whole point of assigning a waiter per order instead of per login.
+  waitedOrders      Order[]            @relation("OrderWaiter")
+  sessionsOpened    TableSession[]     @relation("SessionOpenedBy")
 }
 
 model Category {
@@ -216,6 +221,12 @@ model Order {
   paymentStatus      String?     @default("PENDING")
   qrCodeData         String?
   shiftId            String?
+  // Set when this order was rung into an open table bill. Null for walk-in
+  // counter sales, which keeps every existing flow working untouched.
+  sessionId          String?
+  waiterId           String?
+  session            TableSession? @relation(fields: [sessionId], references: [id])
+  waiter             User?         @relation("OrderWaiter", fields: [waiterId], references: [id])
   promotion          Promotion?  @relation(fields: [promoId], references: [id])
   user               User?       @relation(fields: [userId], references: [id])
   customer           Customer?   @relation(fields: [customerId], references: [id])
@@ -231,6 +242,40 @@ model Order {
   @@index([status])
   @@index([customerId])
   @@index([userId])
+  @@index([sessionId])
+}
+
+model Table {
+  id           String         @id @default(uuid())
+  name         String
+  area         String         @default("INDOOR")
+  seats        Int            @default(4)
+  displayOrder Int            @default(0)
+  isActive     Boolean        @default(true)
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  sessions     TableSession[]
+
+  @@index([area, displayOrder])
+}
+
+model TableSession {
+  id         String    @id @default(uuid())
+  tableId    String
+  status     String    @default("OPEN")
+  // Printed on the bill: when the walk-in opened, when the table checked out.
+  openedAt   DateTime  @default(now())
+  closedAt   DateTime?
+  openedById String?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  table      Table     @relation(fields: [tableId], references: [id])
+  openedBy   User?     @relation("SessionOpenedBy", fields: [openedById], references: [id])
+  orders     Order[]
+
+  // "Does this table already have a bill open?" runs on every table tap.
+  @@index([tableId, status])
+  @@index([status])
 }
 
 model Setting {

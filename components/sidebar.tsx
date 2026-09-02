@@ -5,6 +5,7 @@ import Link from "next/link"
 import { useEffect, useState } from "react"
 import {
     LayoutDashboard,
+    LayoutGrid,
     ShoppingCart,
     Receipt,
     List,
@@ -97,6 +98,7 @@ export function Sidebar() {
     // Navigation Items
     const mainNavItems = [
         { name: t.dashboard, href: "/dashboard", icon: LayoutDashboard },
+        { name: t.tables, href: "/tables", icon: LayoutGrid },
         { name: t.pos, href: "/pos", icon: ShoppingCart },
         { name: t.orders, href: "/orders", icon: Receipt },
         { name: t.menu, href: "/menu", icon: List },
