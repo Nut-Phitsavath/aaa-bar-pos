@@ -1,20 +1,34 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { sessionTotal, canCloseSession } from '@/lib/sessions'
-import { DEFAULT_RATE_LAK, DEFAULT_RATE_USD } from '@/lib/currency'
+import { balanceOf } from '@/lib/payments'
+import { closeSessionIfSettled } from '@/lib/settle'
 
 export const dynamic = 'force-dynamic'
 
+/**
+ * Finalise a bill that is already paid for.
+ *
+ * Money is never taken here - that is POST .../payments, and a bill normally
+ * closes itself the moment its balance reaches zero. This exists for the two
+ * cases that need an explicit close: a table opened by mistake with nothing on
+ * it, and a bill whose last leg was a QR that confirmed on a poll from another
+ * device.
+ *
+ * It refuses to close a bill with money still owed. Before payments existed
+ * this endpoint took a paymentMethod and closed regardless, which would now
+ * mean a table freed with an unpaid balance.
+ */
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
     try {
         const { id } = await params
-        const { paymentMethod } = await request.json()
-
-        const method = paymentMethod === 'BANK_NOTE' ? 'CASH' : (paymentMethod || 'CASH')
 
         const session = await prisma.tableSession.findUnique({
             where: { id },
-            include: { orders: { select: { id: true, status: true, total: true } } }
+            include: {
+                orders: { select: { id: true, status: true, total: true } },
+                payments: true
+            }
         })
 
         if (!session) {
@@ -27,51 +41,27 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         }
 
         const total = sessionTotal(session.orders)
-        const openShift = await prisma.shift.findFirst({ where: { status: 'OPEN' } })
-        const closedAt = new Date()
-
-        // Stamp the rate this bill settles at. Read once, here, and stored on
-        // the row - after this the bill never consults settings again, so a
-        // rate change tomorrow cannot restate tonight's takings (req #18).
-        const rateRows = await prisma.setting.findMany({
-            where: { key: { in: ['rate_lak', 'rate_usd'] } }
-        })
-        const rateOf = (key: string, fallback: number) => {
-            const parsed = Number(rateRows.find((r) => r.key === key)?.value)
-            return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback
+        const balance = balanceOf(total, session.payments)
+        if (balance > 0) {
+            return NextResponse.json(
+                { error: 'BALANCE_OUTSTANDING', balance, total },
+                { status: 409 }
+            )
         }
-        const fxRateLAK = rateOf('rate_lak', DEFAULT_RATE_LAK)
-        const fxRateUSD = rateOf('rate_usd', DEFAULT_RATE_USD)
 
-        await prisma.$transaction(async (tx) => {
-            // Book the revenue. Stock already moved when each round was sent,
-            // so nothing here touches inventory.
-            await tx.order.updateMany({
-                where: { sessionId: id, status: 'SENT' },
-                data: {
-                    status: 'COMPLETED',
-                    paymentMethod: method,
-                    shiftId: openShift?.id ?? null,
-                    updatedAt: closedAt
-                }
-            })
+        const settled = await closeSessionIfSettled(id)
+        if (!settled.closed) {
+            return NextResponse.json({ error: settled.reason || 'CLOSE_FAILED' }, { status: 409 })
+        }
 
-            await tx.tableSession.update({
-                where: { id },
-                data: { status: 'CLOSED', closedAt, fxRateLAK, fxRateUSD }
-            })
-
-            // One drawer movement for the whole bill, not one per round.
-            if (method === 'CASH' && openShift && total > 0) {
-                await tx.shift.update({
-                    where: { id: openShift.id },
-                    data: { cashPayments: { increment: total } }
-                })
-            }
-        })
+        const closed = await prisma.tableSession.findUnique({ where: { id } })
 
         return NextResponse.json({
-            success: true, total, closedAt: closedAt.toISOString(), fxRateLAK, fxRateUSD
+            success: true,
+            total,
+            closedAt: closed?.closedAt?.toISOString() ?? null,
+            fxRateLAK: closed?.fxRateLAK,
+            fxRateUSD: closed?.fxRateUSD
         })
     } catch (error) {
         console.error('[table-sessions] close failed', error)

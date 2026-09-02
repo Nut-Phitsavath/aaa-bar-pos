@@ -25,6 +25,8 @@ model User {
   // whole point of assigning a waiter per order instead of per login.
   waitedOrders      Order[]            @relation("OrderWaiter")
   sessionsOpened    TableSession[]     @relation("SessionOpenedBy")
+  paymentsTaken     Payment[]          @relation("PaymentTakenBy")
+  paymentsApproved  Payment[]          @relation("PaymentApprovedBy")
 }
 
 model Category {
@@ -278,10 +280,42 @@ model TableSession {
   table      Table     @relation(fields: [tableId], references: [id])
   openedBy   User?     @relation("SessionOpenedBy", fields: [openedById], references: [id])
   orders     Order[]
+  payments   Payment[]
 
   // "Does this table already have a bill open?" runs on every table tap.
   @@index([tableId, status])
   @@index([status])
+}
+
+/// One tender against a table bill. A bill is settled by however many of these
+/// it takes - 500 baht cash then the rest on a QR is two rows, not one order
+/// with a muddled paymentMethod. Whether the bill is paid is computed from
+/// these (see lib/payments.ts), never stored as a flag that could drift.
+model Payment {
+  id            String       @id @default(uuid())
+  sessionId     String
+  method        String // CASH | ONEPAY | OWNER_VIP
+  amount        Float // THB
+  /// ONEPAY only: PENDING until BCEL confirms, then PAID. A pending leg does
+  /// not count towards the balance.
+  paymentStatus String?      @default("PENDING")
+  bankReference String?
+  qrCodeData    String?
+  /// The BCEL transaction id this attempt was generated under, so the status
+  /// poll can ask about the right one.
+  bcelUuid      String?      @unique
+  userId        String?
+  /// Manager who authorised a comp. Null for ordinary tenders.
+  approvedById  String?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+  session       TableSession @relation(fields: [sessionId], references: [id])
+  user          User?        @relation("PaymentTakenBy", fields: [userId], references: [id])
+  approvedBy    User?        @relation("PaymentApprovedBy", fields: [approvedById], references: [id])
+
+  @@index([sessionId])
+  @@index([method])
+  @@index([createdAt])
 }
 
 model Setting {

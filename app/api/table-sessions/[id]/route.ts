@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { sessionTotal } from '@/lib/sessions'
+import { balanceOf, changeDue } from '@/lib/payments'
 import { DEFAULT_RATE_LAK, DEFAULT_RATE_USD } from '@/lib/currency'
 
 export const dynamic = 'force-dynamic'
@@ -19,6 +20,10 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
                         items: true,
                         waiter: { select: { id: true, name: true } }
                     }
+                },
+                payments: {
+                    orderBy: { createdAt: 'asc' },
+                    include: { user: { select: { id: true, name: true } } }
                 }
             }
         })
@@ -49,9 +54,15 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
             fxRateUSD = live('rate_usd', DEFAULT_RATE_USD)
         }
 
+        const total = sessionTotal(session.orders)
+
         return NextResponse.json({
             ...session,
-            total: sessionTotal(session.orders),
+            total,
+            // Derived here so the screen and the settle endpoint can never
+            // disagree about whether this bill is paid.
+            balance: balanceOf(total, session.payments),
+            changeDue: changeDue(total, session.payments),
             fxRateLAK,
             fxRateUSD,
             showUsd
