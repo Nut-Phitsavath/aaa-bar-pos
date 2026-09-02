@@ -9,6 +9,7 @@ import { formatTHB, formatLAK, formatUSD, thbToLak, thbToUsd } from "@/lib/curre
 import { QRCodeSVG } from "qrcode.react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
+import { ManagerApproval } from "@/components/manager-approval"
 import { toast } from "sonner"
 
 type BillOrder = {
@@ -34,6 +35,12 @@ type Bill = {
   table: { name: string; area: string }
   orders: BillOrder[]
   payments: BillPayment[]
+  // gross is what the rounds add up to; total is after any discount.
+  gross: number
+  discount: number
+  discountType: string | null
+  discountValue: number | null
+  isOwnerVip: boolean
   // Derived server-side so the screen and the settle endpoint cannot disagree.
   balance: number
   changeDue: number
@@ -70,6 +77,16 @@ export default function BillPage({ params }: { params: Promise<{ sessionId: stri
   // The poll closure captures `bill` at the time it was armed; this keeps the
   // settled-total it announces current.
   const billRef = useRef<Bill | null>(null)
+
+  // Which write-off is waiting on a manager, null when none is.
+  type Approvable = "DISCOUNT" | "REMOVE_DISCOUNT" | "COMP" | "PAY_LATER"
+  const [approving, setApproving] = useState<Approvable | null>(null)
+  const [approvalError, setApprovalError] = useState<string | null>(null)
+  const [discountOpen, setDiscountOpen] = useState(false)
+  const [discountKind, setDiscountKind] = useState<"PERCENT" | "FIXED">("PERCENT")
+  const [discountInput, setDiscountInput] = useState("")
+  const [tabCustomerId, setTabCustomerId] = useState("")
+  const [customers, setCustomers] = useState<{ id: string; name: string }[]>([])
 
   const load = useCallback(async () => {
     try {
@@ -218,6 +235,75 @@ export default function BillPage({ params }: { params: Promise<{ sessionId: stri
       if (res.ok) await load()
       else toast.error((await res.json().catch(() => ({}))).error || "Failed")
     } finally { setBusy(false) }
+  }
+
+  /**
+   * The three write-offs share one gate, so they share one handler: the caller
+   * says which action it wants, the dialog collects a manager's credentials,
+   * and the server re-checks them as part of performing the action. An approval
+   * is never held onto and reused for something else.
+   */
+  const runApproved = async (creds: { managerUsername: string; managerPin: string }) => {
+    if (!approving || !bill) return
+    setBusy(true)
+    setApprovalError(null)
+    try {
+      const endpoints: Record<typeof approving, { url: string; method: string; body: any }> = {
+        DISCOUNT: {
+          url: `/api/table-sessions/${sessionId}/discount`,
+          method: "PUT",
+          body: { discountType: discountKind, discountValue: Number(discountInput) },
+        },
+        REMOVE_DISCOUNT: {
+          url: `/api/table-sessions/${sessionId}/discount`,
+          method: "PUT",
+          body: { discountType: null, discountValue: 0 },
+        },
+        COMP: {
+          url: `/api/table-sessions/${sessionId}/comp`,
+          method: "POST",
+          body: {},
+        },
+        PAY_LATER: {
+          url: `/api/table-sessions/${sessionId}/pay-later`,
+          method: "POST",
+          body: { customerId: tabCustomerId },
+        },
+      }
+
+      const action = endpoints[approving]
+      const res = await fetch(action.url, {
+        method: action.method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...action.body, ...creds }),
+      })
+      const data = await res.json().catch(() => ({}))
+
+      if (!res.ok) {
+        // A wrong PIN keeps the dialog open so it can be retried; anything else
+        // is a real refusal and closes it with the reason.
+        if (res.status === 403 || res.status === 429) {
+          setApprovalError(data.error === "TOO_MANY_ATTEMPTS" ? t.too_many_attempts : t.invalid_approval)
+        } else {
+          setApproving(null)
+          toast.error(data.error || "Failed")
+        }
+        return
+      }
+
+      setApproving(null)
+      setDiscountOpen(false)
+      if (approving === "PAY_LATER" || data.closed) {
+        announceSettled(bill.total, bill.total - bill.balance)
+        toast.success(approving === "PAY_LATER" ? t.pay_later : t.session_closed)
+        router.push("/tables")
+        return
+      }
+      toast.success(t.payment_confirmed)
+      await load()
+    } finally {
+      setBusy(false)
+    }
   }
 
   /** Show the customer screen the same success panel a walk-in sale ends on. */
@@ -450,6 +536,93 @@ export default function BillPage({ params }: { params: Promise<{ sessionId: stri
         </div>
       </main>
 
+      {/* Discount amount is collected first, then the manager approves it, so
+          the approver sees what they are signing off. */}
+      <Dialog open={discountOpen} onOpenChange={setDiscountOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader><DialogTitle>{t.apply_discount}</DialogTitle></DialogHeader>
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-2">
+              {(["PERCENT", "FIXED"] as const).map((kind) => (
+                <button
+                  key={kind}
+                  onClick={() => setDiscountKind(kind)}
+                  className={`h-11 rounded-md text-sm font-medium transition-colors duration-150 ${discountKind === kind
+                    ? "bg-slate-900 text-white"
+                    : "border border-slate-300 text-slate-600 hover:bg-slate-50"
+                    }`}
+                >
+                  {kind === "PERCENT" ? t.discount_percent : t.discount_fixed}
+                </button>
+              ))}
+            </div>
+            <Input
+              type="number"
+              inputMode="decimal"
+              autoFocus
+              value={discountInput}
+              onChange={(e) => setDiscountInput(e.target.value)}
+              placeholder={discountKind === "PERCENT" ? "10" : "500"}
+              className="h-12 text-lg tabular-nums"
+            />
+            <p className="text-sm text-slate-500">
+              {formatTHB(bill.gross)} →{" "}
+              <span className="font-semibold text-slate-900">
+                {formatTHB(Math.max(0, Math.ceil(bill.gross - (discountKind === "PERCENT"
+                  ? bill.gross * (Number(discountInput) || 0) / 100
+                  : Number(discountInput) || 0))))}
+              </span>
+            </p>
+            <Button
+              className="w-full h-12 bg-amber-600 hover:bg-amber-700 text-white"
+              disabled={!(Number(discountInput) > 0)}
+              onClick={() => { setApprovalError(null); setApproving("DISCOUNT") }}
+            >
+              {t.approval_required}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Pay-later needs a name before a manager can approve it. */}
+      <Dialog
+        open={approving === "PAY_LATER" && !tabCustomerId}
+        onOpenChange={(o) => { if (!o) setApproving(null) }}
+      >
+        <DialogContent className="max-w-sm">
+          <DialogHeader><DialogTitle>{t.select_customer_tab}</DialogTitle></DialogHeader>
+          <div className="space-y-2 max-h-80 overflow-y-auto">
+            {customers.length === 0 ? (
+              <p className="text-sm text-slate-500 py-6 text-center">{t.no_customers_found}</p>
+            ) : customers.map((c) => (
+              <button
+                key={c.id}
+                onClick={() => setTabCustomerId(c.id)}
+                className="w-full h-12 px-3 rounded-md border border-slate-200 text-left text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors duration-150"
+              >
+                {c.name}
+              </button>
+            ))}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <ManagerApproval
+        open={approving !== null && (approving !== "PAY_LATER" || !!tabCustomerId)}
+        title={t.approval_required}
+        description={
+          approving === "COMP" ? t.comp_confirm
+            : approving === "PAY_LATER"
+              ? `${t.pay_later} · ${formatTHB(bill.balance)}`
+              : approving === "REMOVE_DISCOUNT" ? t.remove_discount
+                : `${t.apply_discount} · ${discountInput}${discountKind === "PERCENT" ? "%" : "฿"}`
+        }
+        busy={busy}
+        error={approvalError}
+        onCancel={() => { setApproving(null); setApprovalError(null); setTabCustomerId("") }}
+        onApprove={runApproved}
+      />
+
       {/* Take a tender. Defaults to the whole balance, which is the common
           case; the amount is editable for a split. */}
       <Dialog open={payOpen} onOpenChange={(o) => { if (!o && !pendingQr) setPayOpen(false) }}>
@@ -524,6 +697,24 @@ export default function BillPage({ params }: { params: Promise<{ sessionId: stri
 
       <div className="fixed bottom-0 inset-x-0 bg-white border-t border-slate-200 p-3 md:p-4">
         <div className="max-w-2xl mx-auto">
+          {/* A discount is shown as its own line off the gross, never folded
+              into the total, so the customer can see what came off. */}
+          {bill.discount > 0 && (
+            <>
+              <div className="flex items-baseline justify-between text-sm text-slate-500">
+                <span>{t.gross_sales}</span>
+                <span className="tabular-nums">{formatTHB(bill.gross)}</span>
+              </div>
+              <div className="flex items-baseline justify-between text-sm text-rose-600 mt-0.5">
+                <span>
+                  {t.apply_discount}
+                  {bill.discountType === "PERCENT" && ` ${bill.discountValue}%`}
+                </span>
+                <span className="tabular-nums">− {formatTHB(bill.discount)}</span>
+              </div>
+            </>
+          )}
+
           <div className="flex items-baseline justify-between">
             <span className="text-sm text-slate-600">{t.bill_total}</span>
             <span className="text-2xl font-bold text-slate-900 tabular-nums">
@@ -564,8 +755,65 @@ export default function BillPage({ params }: { params: Promise<{ sessionId: stri
             </div>
           )}
 
+          {/* The three manager-gated actions. Kept visually quieter than Take
+              Payment: they are exceptions, not the normal way a bill ends. */}
+          {!closed && bill.balance > 0 && (
+            <div className="grid grid-cols-3 gap-1.5 mt-3">
+              <button
+                onClick={() => {
+                  if (bill.discount > 0) { setApproving("REMOVE_DISCOUNT"); return }
+                  setDiscountInput(""); setDiscountOpen(true)
+                }}
+                className="h-10 rounded-md border border-slate-200 text-xs font-medium text-slate-600 hover:bg-slate-50 transition-colors duration-150"
+              >
+                {bill.discount > 0 ? t.remove_discount : t.apply_discount}
+              </button>
+              <button
+                onClick={() => { setApprovalError(null); setApproving("COMP") }}
+                className="h-10 rounded-md border border-slate-200 text-xs font-medium text-slate-600 hover:bg-slate-50 transition-colors duration-150"
+              >
+                {t.owner_vip}
+              </button>
+              <button
+                onClick={() => {
+                  setApprovalError(null)
+                  fetch("/api/customers")
+                    .then((r) => (r.ok ? r.json() : []))
+                    .then((list) => setCustomers(Array.isArray(list) ? list : (list?.customers ?? [])))
+                    .catch(() => setCustomers([]))
+                  setApproving("PAY_LATER")
+                }}
+                className="h-10 rounded-md border border-slate-200 text-xs font-medium text-slate-600 hover:bg-slate-50 transition-colors duration-150"
+              >
+                {t.pay_later}
+              </button>
+            </div>
+          )}
+
           {closed ? (
-            <p className="text-center text-sm text-slate-500 py-3">{t.session_closed}</p>
+            <div className="text-center py-3">
+              <p className="text-sm text-slate-500">{t.session_closed}</p>
+              {bill.isOwnerVip && (
+                <p className="text-sm font-semibold text-purple-600 mt-1">{t.owner_vip}</p>
+              )}
+              {/* A pay-later tab is closed by design and still owes. It has to
+                  stay collectable, or the money can never be taken through the
+                  till at all. */}
+              {bill.balance > 0 && (
+                <>
+                  <p className="text-sm font-semibold text-amber-700 mt-1">
+                    {t.outstanding}: {formatTHB(bill.balance)}
+                  </p>
+                  <Button
+                    className="h-12 mt-3 w-full bg-amber-600 hover:bg-amber-700 text-white"
+                    disabled={busy}
+                    onClick={() => { setPayAmount(String(bill.balance)); setPayOpen(true) }}
+                  >
+                    {t.settle_tab}
+                  </Button>
+                </>
+              )}
+            </div>
           ) : (
             <div className="grid grid-cols-2 gap-2 mt-3">
               <Button

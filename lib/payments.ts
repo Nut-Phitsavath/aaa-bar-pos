@@ -52,14 +52,66 @@ export function isFullySettled(billTotal: number, payments: PaymentLike[]): bool
     return balanceOf(billTotal, payments) <= 0
 }
 
+/**
+ * What a per-table discount takes off the gross (requirement #15).
+ *
+ * Clamped to the bill in both directions: a discount bigger than the bill makes
+ * it free rather than negative, and a negative one is ignored rather than
+ * quietly inflating what the customer owes.
+ */
+export function discountAmount(
+    gross: number,
+    type: string | null | undefined,
+    value: number | null | undefined
+): number {
+    const g = gross || 0
+    const v = value || 0
+    if (!type || v <= 0) return 0
+
+    const raw = type === 'PERCENT' ? g * (v / 100) : v
+    return Math.min(Math.max(0, raw), g)
+}
+
+/**
+ * What the customer actually owes, after any discount.
+ *
+ * Rounds UP to whole baht: the requirement's own example is 2,499.5 becoming
+ * 2,500. Up rather than down keeps satang out of the drawer and leaves the
+ * rounding in the house's favour.
+ */
+export function billTotalOf(
+    gross: number,
+    discountType: string | null | undefined,
+    discountValue: number | null | undefined
+): number {
+    const g = gross || 0
+    return Math.max(0, Math.ceil(g - discountAmount(g, discountType, discountValue)))
+}
+
+/**
+ * What a set of closed pay-later bills still owes in total.
+ *
+ * Each entry is one bill: its total after discount, and whatever has been paid
+ * against it since. Settling a tab adds ordinary payments to the original bill,
+ * so a part-payment simply reduces this.
+ */
+export function outstandingOf(
+    sessions: { total: number; payments: PaymentLike[] }[]
+): number {
+    return sessions.reduce((sum, s) => sum + balanceOf(s.total, s.payments), 0)
+}
+
 export function canAcceptPayment(
-    session: { status: string },
+    session: { status: string; payLaterCustomerId?: string | null },
     billTotal: number,
     payments: PaymentLike[],
     amount: number,
     method: string = 'CASH'
 ): PaymentCheck {
-    if (session.status === 'CLOSED') {
+    // A closed bill takes no more money, with one exception: a pay-later tab is
+    // closed by design and still owes. Collecting on it later is the whole
+    // point, so money against a tab has to be allowed through.
+    if (session.status === 'CLOSED' && !session.payLaterCustomerId) {
         return { ok: false, reason: 'SESSION_ALREADY_CLOSED' }
     }
     if (!Number.isFinite(amount) || amount <= 0) {

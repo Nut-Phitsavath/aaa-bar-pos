@@ -8,6 +8,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
     isConfirmed, paidTotal, balanceOf, changeDue, canAcceptPayment, isFullySettled,
+    discountAmount, billTotalOf, outstandingOf,
 } from './payments.ts'
 
 const cash = (amount: number) => ({ method: 'CASH', amount, paymentStatus: 'PAID' })
@@ -103,4 +104,90 @@ test('canAcceptPayment refuses OnePay above the balance', () => {
 test('canAcceptPayment allows OnePay for exactly the remaining balance', () => {
     const check = canAcceptPayment({ status: 'OPEN' }, 1500, [cash(500)], 1000, 'ONEPAY')
     assert.deepEqual(check, { ok: true })
+})
+
+// --- Discounts (requirement #15) ---------------------------------------------
+
+test('a percentage discount takes that share off the gross', () => {
+    assert.equal(discountAmount(1000, 'PERCENT', 10), 100)
+})
+
+test('a fixed discount is taken at face value', () => {
+    assert.equal(discountAmount(1000, 'FIXED', 250), 250)
+})
+
+test('no discount configured means no reduction', () => {
+    assert.equal(discountAmount(1000, null, null), 0)
+    assert.equal(discountAmount(1000, 'PERCENT', 0), 0)
+})
+
+test('a discount larger than the bill clamps to the bill', () => {
+    // A 5,000 baht discount on a 1,000 baht bill makes it free, never negative.
+    assert.equal(discountAmount(1000, 'FIXED', 5000), 1000)
+    assert.equal(discountAmount(1000, 'PERCENT', 150), 1000)
+})
+
+test('a negative discount is ignored rather than inflating the bill', () => {
+    assert.equal(discountAmount(1000, 'FIXED', -500), 0)
+})
+
+test('the discounted total rounds UP to whole baht', () => {
+    // The requirement's own example: 2,499.5 -> 2,500. Rounding up is in the
+    // house's favour and keeps the drawer free of satang.
+    assert.equal(billTotalOf(4999, 'PERCENT', 50), 2500)
+})
+
+test('an undiscounted total is unchanged', () => {
+    assert.equal(billTotalOf(645, null, null), 645)
+})
+
+test('a fully discounted bill is zero, not negative', () => {
+    assert.equal(billTotalOf(645, 'PERCENT', 100), 0)
+})
+
+test('discount applies before payments, so the balance reflects it', () => {
+    const total = billTotalOf(1000, 'PERCENT', 10)      // 900
+    assert.equal(total, 900)
+    assert.equal(balanceOf(total, [cash(400)]), 500)
+})
+
+// --- Pay-later tabs (requirement #19) ----------------------------------------
+
+test('outstanding is what a closed bill still owes', () => {
+    const sessions = [
+        { total: 1000, payments: [cash(400)] },
+        { total: 500, payments: [] },
+    ]
+    assert.equal(outstandingOf(sessions), 1100)
+})
+
+test('a tab settled in full leaves nothing outstanding', () => {
+    assert.equal(outstandingOf([{ total: 1000, payments: [cash(1000)] }]), 0)
+})
+
+test('outstanding ignores a pending QR on a tab', () => {
+    // Same rule as everywhere else: unconfirmed money is not money.
+    const sessions = [{ total: 1000, payments: [onepay(1000, 'PENDING')] }]
+    assert.equal(outstandingOf(sessions), 1000)
+})
+
+test('outstanding of no tabs is zero', () => {
+    assert.equal(outstandingOf([]), 0)
+})
+
+test('canAcceptPayment allows collecting on a closed pay-later tab', () => {
+    // A tab is closed by design and still owes; refusing money against it would
+    // make it uncollectable through the till.
+    const tab = { status: 'CLOSED', payLaterCustomerId: 'cust-1' }
+    assert.deepEqual(canAcceptPayment(tab, 1000, [cash(400)], 600), { ok: true })
+})
+
+test('canAcceptPayment still refuses a closed bill that is not a tab', () => {
+    const paid = { status: 'CLOSED', payLaterCustomerId: null }
+    assert.equal(canAcceptPayment(paid, 1000, [cash(1000)], 100).ok, false)
+})
+
+test('canAcceptPayment refuses money on a tab already paid off', () => {
+    const tab = { status: 'CLOSED', payLaterCustomerId: 'cust-1' }
+    assert.equal(canAcceptPayment(tab, 1000, [cash(1000)], 100).ok, false)
 })

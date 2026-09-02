@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { sessionTotal, BILLABLE_ORDER_STATUSES } from '@/lib/sessions'
+import { billTotalOf } from '@/lib/payments'
 
 // The floor plan polls this every 5s; it must never be served stale.
 export const dynamic = 'force-dynamic'
@@ -44,7 +45,9 @@ export async function GET() {
                         openedAt: session.openedAt.toISOString(),
                         orderCount: billable.length,
                         waiterCount: new Set(billable.map((o) => o.waiterId).filter(Boolean)).size,
-                        total: sessionTotal(session.orders)
+                        // What they will actually pay, discount included.
+                        total: billTotalOf(sessionTotal(session.orders), session.discountType, session.discountValue),
+                        isOwnerVip: session.isOwnerVip
                     }
                     : null
             }

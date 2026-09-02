@@ -27,6 +27,8 @@ model User {
   sessionsOpened    TableSession[]     @relation("SessionOpenedBy")
   paymentsTaken     Payment[]          @relation("PaymentTakenBy")
   paymentsApproved  Payment[]          @relation("PaymentApprovedBy")
+  discountsApproved TableSession[]     @relation("SessionDiscountApprover")
+  tabsApproved      TableSession[]     @relation("SessionTabApprover")
 }
 
 model Category {
@@ -173,6 +175,7 @@ model Customer {
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
   orders        Order[]
+  payLaterSessions TableSession[]
 }
 
 model Promotion {
@@ -274,13 +277,30 @@ model TableSession {
   // Null while the bill is open - an open bill quotes the current rate.
   fxRateLAK  Float?
   fxRateUSD  Float?
+  /// Per-table discount (req #15). PERCENT rounds the resulting total up.
+  /// A manager authorises it and their id stays on the row, so every
+  /// write-off has a name against it.
+  discountType         String?
+  discountValue        Float?
+  discountApprovedById String?
+  /// Owner VIP comp (req #16). Stock is still deducted by the normal order
+  /// path; the bill is settled by an OWNER_VIP payment for the full balance.
+  isOwnerVip Boolean   @default(false)
+  /// Pay-later (req #19). The bill closes with a balance still owed and this
+  /// customer carrying it. Settling later adds ordinary payments to this same
+  /// session, so a part-payment just reduces the outstanding figure.
+  payLaterCustomerId   String?
+  payLaterApprovedById String?
   openedById String?
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @updatedAt
-  table      Table     @relation(fields: [tableId], references: [id])
-  openedBy   User?     @relation("SessionOpenedBy", fields: [openedById], references: [id])
-  orders     Order[]
-  payments   Payment[]
+  table              Table     @relation(fields: [tableId], references: [id])
+  openedBy           User?     @relation("SessionOpenedBy", fields: [openedById], references: [id])
+  discountApprovedBy User?     @relation("SessionDiscountApprover", fields: [discountApprovedById], references: [id])
+  payLaterApprovedBy User?     @relation("SessionTabApprover", fields: [payLaterApprovedById], references: [id])
+  payLaterCustomer   Customer? @relation(fields: [payLaterCustomerId], references: [id])
+  orders             Order[]
+  payments           Payment[]
 
   // "Does this table already have a bill open?" runs on every table tap.
   @@index([tableId, status])

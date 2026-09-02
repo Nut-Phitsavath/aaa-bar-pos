@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { sessionTotal, canCloseSession } from '@/lib/sessions'
-import { balanceOf } from '@/lib/payments'
+import { balanceOf, billTotalOf } from '@/lib/payments'
 import { closeSessionIfSettled } from '@/lib/settle'
 
 export const dynamic = 'force-dynamic'
@@ -40,7 +40,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
             return NextResponse.json({ error: check.reason }, { status: 409 })
         }
 
-        const total = sessionTotal(session.orders)
+        const total = billTotalOf(sessionTotal(session.orders), session.discountType, session.discountValue)
         const balance = balanceOf(total, session.payments)
         if (balance > 0) {
             return NextResponse.json(

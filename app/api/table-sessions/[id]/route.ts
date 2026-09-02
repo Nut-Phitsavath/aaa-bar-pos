@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { sessionTotal } from '@/lib/sessions'
-import { balanceOf, changeDue } from '@/lib/payments'
+import { balanceOf, changeDue, billTotalOf, discountAmount } from '@/lib/payments'
 import { DEFAULT_RATE_LAK, DEFAULT_RATE_USD } from '@/lib/currency'
 
 export const dynamic = 'force-dynamic'
@@ -77,7 +77,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
             fxRateUSD = live('rate_usd', DEFAULT_RATE_USD)
         }
 
-        const total = sessionTotal(session.orders)
+        const gross = sessionTotal(session.orders)
+        const total = billTotalOf(gross, session.discountType, session.discountValue)
 
         // Flatten the menu lookup onto each line so no screen has to walk the
         // relation itself. A deleted menu item leaves variationSize null, and
@@ -99,6 +100,11 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
         return NextResponse.json({
             ...session,
             orders,
+            // gross is what the rounds add up to; total is what the customer
+            // owes after any discount. The bill screen shows both so a
+            // reduction is visible rather than silently baked into one figure.
+            gross,
+            discount: discountAmount(gross, session.discountType, session.discountValue),
             total,
             // Derived here so the screen and the settle endpoint can never
             // disagree about whether this bill is paid.

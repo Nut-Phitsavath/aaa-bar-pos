@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getSessionUser } from '@/lib/auth'
 import { sessionTotal } from '@/lib/sessions'
-import { balanceOf, canAcceptPayment } from '@/lib/payments'
+import { balanceOf, canAcceptPayment, billTotalOf } from '@/lib/payments'
 import { closeSessionIfSettled } from '@/lib/settle'
 
 export const dynamic = 'force-dynamic'
@@ -54,7 +54,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         })
         if (!session) return NextResponse.json({ error: 'Session not found' }, { status: 404 })
 
-        const total = sessionTotal(session.orders)
+        const total = billTotalOf(sessionTotal(session.orders), session.discountType, session.discountValue)
         const requested = Number(amount)
 
         const check = canAcceptPayment(session, total, session.payments, requested, method)
