@@ -309,10 +309,14 @@ export default function TablesPage() {
                           )}
                         </p>
 
+                        {/* Two destinations from one card: tapping it opens the
+                            ticket to order, this goes straight to taking money.
+                            There is no third "view the bill" screen - the ticket
+                            already shows every round. */}
                         <button
                           onClick={(e) => {
                             e.stopPropagation()
-                            router.push(`/tables/${session.id}/bill`)
+                            router.push(`/pos/settle?session=${session.id}`)
                           }}
                           className={`mt-3 w-full h-11 rounded-md text-sm font-semibold inline-flex items-center justify-center gap-1.5 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 ${needsBill
                             ? "bg-amber-600 hover:bg-amber-700 text-white focus-visible:ring-amber-500"
@@ -320,7 +324,7 @@ export default function TablesPage() {
                             }`}
                         >
                           <Receipt className="w-3.5 h-3.5" aria-hidden />
-                          {needsBill ? t.settle_bill : t.view_bill}
+                          {t.settle_bill}
                         </button>
                       </>
                     ) : (

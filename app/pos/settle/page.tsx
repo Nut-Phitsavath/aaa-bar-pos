@@ -214,7 +214,7 @@ function SettleScreen() {
             const res = await fetch(`/api/table-sessions/${bill.id}/print`, { method: "POST" })
             const data = await res.json().catch(() => ({}))
             if (data.qrError) toast.error(data.qrError)
-            window.open(`/tables/${bill.id}/print`, "_blank", "width=420,height=700")
+            window.open(`/receipt?session=${bill.id}`, "_blank", "width=520,height=760")
             await load()
         } finally { setBusy(false) }
     }

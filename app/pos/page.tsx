@@ -229,7 +229,7 @@ function POSPageInner() {
       if (!res.ok) { toast.error(data.error || "Failed"); return }
       // A dead line only costs the QR; the bill still prints and cash still works.
       if (data.qrError) toast.error(data.qrError)
-      window.open(`/tables/${sessionIdParam}/print`, "_blank", "width=420,height=700")
+      window.open(`/receipt?session=${sessionIdParam}`, "_blank", "width=520,height=760")
       await loadSession()
     } finally {
       setIsProcessing(false)
