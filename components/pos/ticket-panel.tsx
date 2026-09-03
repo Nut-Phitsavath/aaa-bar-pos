@@ -28,6 +28,9 @@ export type TicketBill = {
     discount: number
     total: number
     balance: number
+    customer?: { id: string; name: string; phone: string | null } | null
+    /** What this guest owes on other nights, so the banner can warn now. */
+    customerOwes?: number
 }
 
 export type PendingLine = {

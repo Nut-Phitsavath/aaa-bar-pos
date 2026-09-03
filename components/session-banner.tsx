@@ -4,8 +4,11 @@ import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { useTranslation } from "@/hooks/use-translation"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { ArrowLeft, Clock, User, ChevronDown } from "lucide-react"
+import { ArrowLeft, Clock, User, ChevronDown, UserRound, Search, X } from "lucide-react"
+import { Input } from "@/components/ui/input"
+import { toast } from "sonner"
 import { formatDuration } from "@/lib/sessions"
+import { formatTHB } from "@/lib/currency"
 
 export type BannerSession = {
   id: string
@@ -15,6 +18,8 @@ export type BannerSession = {
 }
 
 export type Waiter = { id: string; name: string }
+
+export type BannerCustomer = { id: string; name: string; phone: string | null }
 
 /**
  * Which table, and whose order. Full width across the top of the till.
@@ -29,17 +34,65 @@ export function SessionBanner({
   waiters,
   waiterId,
   onWaiterChange,
+  sessionId,
+  customer,
+  customerOwes,
+  onCustomerChange,
 }: {
   /** Null until the bill loads. The bar still occupies its space - see below. */
   session: BannerSession | null
   waiters: Waiter[]
   waiterId: string
   onWaiterChange: (id: string) => void
+  sessionId: string
+  customer: BannerCustomer | null
+  customerOwes: number
+  onCustomerChange: () => void
 }) {
   const { t } = useTranslation()
   const router = useRouter()
   const [now, setNow] = useState(() => new Date())
   const [picking, setPicking] = useState(false)
+  const [naming, setNaming] = useState(false)
+  const [people, setPeople] = useState<BannerCustomer[]>([])
+  const [q, setQ] = useState("")
+  const [newName, setNewName] = useState("")
+  const [newPhone, setNewPhone] = useState("")
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    if (!naming) return
+    fetch("/api/customers")
+      .then((r) => (r.ok ? r.json() : []))
+      .then((list) => setPeople(Array.isArray(list) ? list : (list?.customers ?? [])))
+      .catch(() => setPeople([]))
+  }, [naming])
+
+  /** One endpoint for both: an existing id, or a name and phone to create. */
+  const setCustomer = async (body: Record<string, unknown>) => {
+    setSaving(true)
+    try {
+      const res = await fetch(`/api/table-sessions/${sessionId}/customer`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      })
+      if (!res.ok) { toast.error(t.error); return }
+      const data = await res.json()
+      if (data.outstanding > 0) {
+        toast.warning(`${data.customer.name} · ${t.outstanding} ${formatTHB(data.outstanding)}`)
+      }
+      setNaming(false)
+      setQ(""); setNewName(""); setNewPhone("")
+      onCustomerChange()
+    } finally { setSaving(false) }
+  }
+
+  const matches = people.filter((c) => {
+    const needle = q.trim().toLowerCase()
+    if (!needle) return true
+    return c.name.toLowerCase().includes(needle) || (c.phone || "").includes(needle)
+  })
 
   useEffect(() => {
     const tick = setInterval(() => setNow(new Date()), 30000)
@@ -90,11 +143,41 @@ export function SessionBanner({
           </div>
         </div>
 
+        {/* Whose table this is. Optional - most tables are anonymous - so an
+            unnamed one stays quiet rather than amber. Amber is reserved for the
+            case that actually needs a decision: a named guest who is already
+            down money on other nights, which the till must say now and not at
+            settle time when they are halfway to the door. */}
+        <button
+          onClick={() => setNaming(true)}
+          className={`ms-auto flex items-center gap-3 px-5 shrink-0 border-s border-white/10 transition-colors duration-150 ${customerOwes > 0
+            ? "bg-amber-500 text-slate-900 hover:bg-amber-400"
+            : "hover:bg-white/10"
+            }`}
+        >
+          <UserRound className={`w-6 h-6 ${customerOwes > 0 ? "text-slate-900" : "text-slate-400"}`} />
+          <span className="text-start leading-none min-w-0">
+            <span
+              className={`block text-[11px] font-bold uppercase tracking-widest ${customerOwes > 0 ? "text-slate-900" : "text-slate-400"
+                }`}
+            >
+              {customerOwes > 0 ? t.outstanding : t.customer}
+            </span>
+            <span className={`block text-2xl font-black mt-1.5 truncate max-w-[220px] ${customer ? "" : "text-slate-500"
+              }`}>
+              {customerOwes > 0
+                ? formatTHB(customerOwes)
+                : customer?.name || t.guest}
+            </span>
+          </span>
+          <ChevronDown className="w-5 h-5 opacity-60" />
+        </button>
+
         {/* A named button, not a dropdown: the current server reads without
             opening anything, and changing it is one tap on a name. */}
         <button
           onClick={() => setPicking(true)}
-          className={`ms-auto flex items-center gap-3 px-5 shrink-0 transition-colors duration-150 ${waiterId
+          className={`flex items-center gap-3 px-5 shrink-0 transition-colors duration-150 ${waiterId
             ? "hover:bg-white/10"
             : "bg-amber-500 text-slate-900 hover:bg-amber-400"
             }`}
@@ -131,6 +214,89 @@ export function SessionBanner({
                 {w.name}
               </button>
             ))}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={naming} onOpenChange={setNaming}>
+        <DialogContent className="max-w-md">
+          <DialogHeader><DialogTitle>{t.select_customer_tab}</DialogTitle></DialogHeader>
+
+          {customer && (
+            <button
+              onClick={() => setCustomer({ customerId: null })}
+              disabled={saving}
+              className="flex items-center justify-between gap-2 w-full rounded-xl border-2 border-slate-200 px-4 h-12 text-slate-600 hover:border-slate-400 hover:bg-slate-50 transition-colors duration-150"
+            >
+              <span className="font-semibold truncate">{customer.name}</span>
+              <span className="flex items-center gap-1.5 text-sm shrink-0">
+                <X className="w-4 h-4" />
+                {t.remove}
+              </span>
+            </button>
+          )}
+
+          <div className="relative">
+            <Search className="w-4 h-4 absolute start-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+            <Input
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder={t.search}
+              className="h-12 ps-9 rounded-xl border-2"
+            />
+          </div>
+
+          <div className="max-h-56 overflow-y-auto -mx-1 px-1 space-y-1.5">
+            {matches.length === 0 ? (
+              <p className="text-sm text-slate-500 py-6 text-center">{t.no_customers_found}</p>
+            ) : (
+              matches.map((c) => (
+                <button
+                  key={c.id}
+                  onClick={() => setCustomer({ customerId: c.id })}
+                  disabled={saving}
+                  className={`w-full h-14 px-4 rounded-xl border-2 flex items-center justify-between gap-3 transition-colors duration-150 ${c.id === customer?.id
+                    ? "bg-slate-900 border-slate-900 text-white"
+                    : "border-slate-200 hover:border-amber-400 hover:bg-amber-50"
+                    }`}
+                >
+                  <span className="font-bold truncate">{c.name}</span>
+                  {c.phone && (
+                    <span className={`text-sm tabular-nums shrink-0 ${c.id === customer?.id ? "text-slate-300" : "text-slate-500"}`}>
+                      {c.phone}
+                    </span>
+                  )}
+                </button>
+              ))
+            )}
+          </div>
+
+          {/* Creating here rather than sending someone to a Users screen at 1am.
+              Without it the tab lands on whichever name is already in the list,
+              and the ledger stops meaning anything. */}
+          <div className="pt-3 border-t space-y-2">
+            <div className="flex gap-2">
+              <Input
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                placeholder={t.name}
+                className="h-12 rounded-xl border-2"
+              />
+              <Input
+                value={newPhone}
+                onChange={(e) => setNewPhone(e.target.value)}
+                placeholder={t.phone}
+                inputMode="tel"
+                className="h-12 rounded-xl border-2"
+              />
+            </div>
+            <button
+              onClick={() => setCustomer({ name: newName, phone: newPhone })}
+              disabled={saving || !newName.trim()}
+              className="w-full h-12 rounded-xl bg-amber-600 text-white font-bold hover:bg-amber-700 disabled:opacity-40 disabled:hover:bg-amber-600 transition-colors duration-150"
+            >
+              {t.add_customer}
+            </button>
           </div>
         </DialogContent>
       </Dialog>

@@ -178,16 +178,16 @@ test('outstanding of no tabs is zero', () => {
 test('canAcceptPayment allows collecting on a closed pay-later tab', () => {
     // A tab is closed by design and still owes; refusing money against it would
     // make it uncollectable through the till.
-    const tab = { status: 'CLOSED', payLaterCustomerId: 'cust-1' }
+    const tab = { status: 'CLOSED', customerId: 'cust-1' }
     assert.deepEqual(canAcceptPayment(tab, 1000, [cash(400)], 600), { ok: true })
 })
 
 test('canAcceptPayment still refuses a closed bill that is not a tab', () => {
-    const paid = { status: 'CLOSED', payLaterCustomerId: null }
+    const paid = { status: 'CLOSED', customerId: null }
     assert.equal(canAcceptPayment(paid, 1000, [cash(1000)], 100).ok, false)
 })
 
 test('canAcceptPayment refuses money on a tab already paid off', () => {
-    const tab = { status: 'CLOSED', payLaterCustomerId: 'cust-1' }
+    const tab = { status: 'CLOSED', customerId: 'cust-1' }
     assert.equal(canAcceptPayment(tab, 1000, [cash(1000)], 100).ok, false)
 })

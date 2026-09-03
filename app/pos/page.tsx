@@ -1282,6 +1282,10 @@ function POSPageInner() {
           waiters={waiters}
           waiterId={waiterId}
           onWaiterChange={changeWaiter}
+          sessionId={sessionIdParam}
+          customer={session?.customer ?? null}
+          customerOwes={session?.customerOwes ?? 0}
+          onCustomerChange={loadSession}
         />
       )}
       <div className="flex-1 flex min-h-0">

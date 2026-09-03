@@ -102,7 +102,7 @@ export function outstandingOf(
 }
 
 export function canAcceptPayment(
-    session: { status: string; payLaterCustomerId?: string | null },
+    session: { status: string; customerId?: string | null },
     billTotal: number,
     payments: PaymentLike[],
     amount: number,
@@ -111,7 +111,7 @@ export function canAcceptPayment(
     // A closed bill takes no more money, with one exception: a pay-later tab is
     // closed by design and still owes. Collecting on it later is the whole
     // point, so money against a tab has to be allowed through.
-    if (session.status === 'CLOSED' && !session.payLaterCustomerId) {
+    if (session.status === 'CLOSED' && !session.customerId) {
         return { ok: false, reason: 'SESSION_ALREADY_CLOSED' }
     }
     if (!Number.isFinite(amount) || amount <= 0) {

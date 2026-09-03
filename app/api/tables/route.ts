@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { sessionTotal, BILLABLE_ORDER_STATUSES } from '@/lib/sessions'
 import { billTotalOf } from '@/lib/payments'
+import { outstandingByCustomer } from '@/lib/customer-tabs'
 
 // The floor plan polls this every 5s; it must never be served stale.
 export const dynamic = 'force-dynamic'
@@ -17,6 +18,7 @@ export async function GET() {
                     take: 1,
                     orderBy: { openedAt: 'desc' },
                     include: {
+                        customer: { select: { id: true, name: true } },
                         orders: {
                             select: { status: true, total: true, waiterId: true }
                         }
@@ -24,6 +26,11 @@ export async function GET() {
                 }
             }
         })
+
+        // What each regular already owes, in one query rather than one per
+        // table. This is the whole point of naming a table: the floor plan can
+        // say "this person owes you money" while they are still in the room.
+        const owedByCustomer = await outstandingByCustomer()
 
         const payload = tables.map((table) => {
             const session = table.sessions[0]
@@ -47,7 +54,14 @@ export async function GET() {
                         waiterCount: new Set(billable.map((o) => o.waiterId).filter(Boolean)).size,
                         // What they will actually pay, discount included.
                         total: billTotalOf(sessionTotal(session.orders), session.discountType, session.discountValue),
-                        isOwnerVip: session.isOwnerVip
+                        isOwnerVip: session.isOwnerVip,
+                        customer: session.customer
+                            ? {
+                                id: session.customer.id,
+                                name: session.customer.name,
+                                owes: owedByCustomer.get(session.customer.id) ?? 0
+                            }
+                            : null
                     }
                     : null
             }

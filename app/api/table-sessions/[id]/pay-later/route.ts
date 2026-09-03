@@ -95,7 +95,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
                     closedAt,
                     fxRateLAK: rateOf('rate_lak', DEFAULT_RATE_LAK),
                     fxRateUSD: rateOf('rate_usd', DEFAULT_RATE_USD),
-                    payLaterCustomerId: customerId,
+                    customerId: customerId,
                     payLaterApprovedById: approval.manager.id
                 }
             })

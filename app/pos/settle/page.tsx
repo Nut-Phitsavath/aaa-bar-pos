@@ -138,6 +138,13 @@ function SettleScreen() {
             ? Math.min(selectedTotal, bill.balance)
             : bill.balance
 
+    // Nothing typed and nothing selected: the row reads zero, because zero is
+    // what has been handed over. Pressing a tender button still settles the
+    // whole balance - SambaPOS does the same, and it keeps a full cash payment
+    // at one tap rather than making staff fill the field in first.
+    const untouched = entry === "" && selected.size === 0
+    const shown = untouched ? 0 : tendering
+
     const paid = bill.total - bill.balance
 
     const toggle = (id: string) => {
@@ -328,9 +335,11 @@ function SettleScreen() {
                         {n.toLocaleString()}
                     </button>
                 ))}
+                {/* Fills the field with the balance rather than clearing to it:
+                    the amount has to be readable before it is taken. */}
                 <button
-                    onClick={() => { setEntry(""); setSelected(new Set()) }}
-                    className={`flex-1 ${side} ${entry === "" && selected.size === 0
+                    onClick={() => { setSelected(new Set()); setEntry(String(bill.balance)) }}
+                    className={`flex-1 ${side} ${!untouched && tendering === bill.balance
                         ? "bg-amber-100 text-amber-900 hover:bg-amber-200"
                         : ""}`}
                 >
@@ -356,8 +365,11 @@ function SettleScreen() {
                         <span className="text-3xl font-light text-slate-300 shrink-0 w-32">
                             {t.charged}
                         </span>
-                        <span className="flex-1 text-right text-5xl font-black text-slate-900 tabular-nums border-b-2 border-amber-400 pb-1 leading-none">
-                            {formatTHB(tendering)}
+                        <span className={`flex-1 text-right text-5xl font-black tabular-nums border-b-2 pb-1 leading-none ${untouched
+                            ? "text-slate-300 border-slate-200"
+                            : "text-slate-900 border-amber-400"
+                            }`}>
+                            {formatTHB(shown)}
                         </span>
                     </div>
                     <div className="flex items-baseline justify-end gap-3 mt-1.5 text-xs">
@@ -369,7 +381,7 @@ function SettleScreen() {
                             </span>
                         )}
                         <span className="text-slate-400 tabular-nums">
-                            {formatLAK(thbToLak(tendering, bill.fxRateLAK))}
+                            {formatLAK(thbToLak(shown, bill.fxRateLAK))}
                         </span>
                     </div>
                 </div>

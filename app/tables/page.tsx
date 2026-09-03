@@ -23,6 +23,7 @@ type TableWithSession = {
     orderCount: number
     waiterCount: number
     total: number
+    customer: { id: string; name: string; owes: number } | null
   } | null
 }
 
@@ -293,6 +294,21 @@ export default function TablesPage() {
                   <div className="mt-auto pt-3">
                     {session ? (
                       <>
+                        {/* Naming the table exists for this line. A regular who
+                            already owes money is only collectable while they are
+                            sitting in the room, and nobody opens the Tabs screen
+                            on the off-chance. */}
+                        {session.customer && (
+                          <p className={`text-xs font-bold truncate mb-1 ${session.customer.owes > 0 ? "text-amber-700" : "text-slate-500"
+                            }`}>
+                            {session.customer.name}
+                            {session.customer.owes > 0 && (
+                              <span className="ms-1.5 tabular-nums">
+                                · {t.owes} {formatTHB(session.customer.owes)}
+                              </span>
+                            )}
+                          </p>
+                        )}
                         <p className="text-xl font-bold text-slate-900 leading-none tabular-nums">
                           {formatTHB(session.total)}
                         </p>

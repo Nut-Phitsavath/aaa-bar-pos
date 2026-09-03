@@ -51,7 +51,7 @@ export async function GET(request: Request) {
             },
             include: {
                 table: { select: { name: true } },
-                payLaterCustomer: { select: { name: true } },
+                customer: { select: { name: true } },
                 orders: { select: { status: true, total: true } },
                 payments: true
             }
@@ -88,11 +88,11 @@ export async function GET(request: Request) {
                 gross += rawGross
                 discounts += rawGross - total
                 const balance = balanceOf(total, s.payments)
-                if (balance > 0 && s.payLaterCustomerId) {
+                if (balance > 0 && s.customerId) {
                     owed += balance
                     tabs.push({
                         table: s.table.name,
-                        customer: s.payLaterCustomer?.name ?? '—',
+                        customer: s.customer?.name ?? '—',
                         amount: balance
                     })
                 }

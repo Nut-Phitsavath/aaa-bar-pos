@@ -6,7 +6,10 @@ import { useTranslation } from "@/hooks/use-translation"
 import { Header } from "@/components/header"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Clock3, Phone, CreditCard } from "lucide-react"
+import { Clock3, Phone, CreditCard, Banknote } from "lucide-react"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
+import { toast } from "sonner"
 import { formatTHB } from "@/lib/currency"
 
 type Tab = {
@@ -16,6 +19,11 @@ type Tab = {
 }
 
 const day = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString("en-GB") : "—")
+
+/** Collection is entirely about age: a three-week-old debt must not render
+ *  identically to last night's. */
+const ageDays = (iso: string | null) =>
+    iso ? Math.floor((Date.now() - new Date(iso).getTime()) / 86400000) : 0
 
 /**
  * Who owes what (requirement #19).
@@ -31,6 +39,9 @@ export default function TabsPage() {
     const [tabs, setTabs] = useState<Tab[]>([])
     const [total, setTotal] = useState(0)
     const [loading, setLoading] = useState(true)
+    const [paying, setPaying] = useState<Tab | null>(null)
+    const [amount, setAmount] = useState("")
+    const [busy, setBusy] = useState(false)
 
     const load = useCallback(async () => {
         try {
@@ -98,13 +109,30 @@ export default function TabsPage() {
                                 </div>
                             </div>
 
-                            {/* Each bill settles on its own: a customer paying off
-                                one night but not another is normal. */}
+                            {/* One payment against the customer, spread oldest
+                                first. Cash arrives as a lump - "here's ten
+                                thousand toward it" - not as a decision about
+                                which night to clear. */}
+                            <Button
+                                className="w-full h-12 mt-3 bg-amber-600 hover:bg-amber-700 text-white"
+                                onClick={() => { setPaying(tab); setAmount(String(tab.outstanding)) }}
+                            >
+                                <Banknote className="w-4 h-4 mr-2" />
+                                {t.take_payment}
+                            </Button>
+
+                            {/* Or clear one night on its own, which is what a
+                                customer settling a single disputed bill wants. */}
                             <div className="mt-3 pt-3 border-t space-y-2">
                                 {tab.bills.map((b) => (
                                     <div key={b.id} className="flex items-center gap-3 text-sm">
                                         <span className="font-semibold text-slate-700 shrink-0">{b.table}</span>
                                         <span className="text-slate-400 tabular-nums">{day(b.closedAt)}</span>
+                                        {ageDays(b.closedAt) >= 7 && (
+                                            <span className={`text-xs font-bold tabular-nums shrink-0 ${ageDays(b.closedAt) >= 21 ? "text-rose-600" : "text-amber-600"}`}>
+                                                {ageDays(b.closedAt)}d
+                                            </span>
+                                        )}
                                         <span className="ms-auto tabular-nums text-slate-900">
                                             {formatTHB(b.balance)}
                                         </span>
@@ -123,6 +151,55 @@ export default function TabsPage() {
                     ))
                 )}
             </div>
+
+            <Dialog open={!!paying} onOpenChange={(o) => { if (!o) setPaying(null) }}>
+                <DialogContent className="max-w-sm">
+                    <DialogHeader>
+                        <DialogTitle>{paying?.customer.name}</DialogTitle>
+                    </DialogHeader>
+                    {paying && (
+                        <div className="space-y-3">
+                            <div className="flex justify-between text-sm">
+                                <span className="text-slate-500">{t.outstanding}</span>
+                                <span className="font-bold tabular-nums">{formatTHB(paying.outstanding)}</span>
+                            </div>
+                            <Input
+                                type="number"
+                                autoFocus
+                                value={amount}
+                                onChange={(e) => setAmount(e.target.value)}
+                                className="h-14 text-2xl font-black tabular-nums text-center border-2 rounded-xl"
+                            />
+                            <p className="text-xs text-slate-500">{t.applied_oldest_first}</p>
+                            <Button
+                                className="w-full h-12 bg-amber-600 hover:bg-amber-700 text-white"
+                                disabled={busy || !(Number(amount) > 0)}
+                                onClick={async () => {
+                                    setBusy(true)
+                                    try {
+                                        const res = await fetch(`/api/customers/${paying.customer.id}/settle-tab`, {
+                                            method: "POST",
+                                            headers: { "Content-Type": "application/json" },
+                                            body: JSON.stringify({ amount: Number(amount) }),
+                                        })
+                                        const data = await res.json().catch(() => ({}))
+                                        if (!res.ok) { toast.error(data.error || "Failed"); return }
+                                        toast.success(
+                                            data.change > 0
+                                                ? `${t.payment_confirmed} · ${t.change} ${formatTHB(data.change)}`
+                                                : t.payment_confirmed
+                                        )
+                                        setPaying(null)
+                                        await load()
+                                    } finally { setBusy(false) }
+                                }}
+                            >
+                                {busy ? "…" : t.take_payment}
+                            </Button>
+                        </div>
+                    )}
+                </DialogContent>
+            </Dialog>
         </div>
     )
 }

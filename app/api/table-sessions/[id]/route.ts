@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { sessionTotal } from '@/lib/sessions'
 import { balanceOf, changeDue, billTotalOf, discountAmount } from '@/lib/payments'
 import { DEFAULT_RATE_LAK, DEFAULT_RATE_USD } from '@/lib/currency'
+import { outstandingForCustomer } from '@/lib/customer-tabs'
 
 export const dynamic = 'force-dynamic'
 
@@ -50,7 +51,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
                 payments: {
                     orderBy: { createdAt: 'asc' },
                     include: { user: { select: { id: true, name: true } } }
-                }
+                },
+                customer: { select: { id: true, name: true, phone: true } }
             }
         })
 
@@ -79,6 +81,13 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
             fxRateLAK = live('rate_lak', DEFAULT_RATE_LAK)
             fxRateUSD = live('rate_usd', DEFAULT_RATE_USD)
         }
+
+        // What this guest already owes on other nights. The till needs it
+        // before the round is served, not after: a regular who is 20,000 down
+        // is a conversation with the manager, and by settle time it is too late.
+        const customerOwes = session.customerId
+            ? (await outstandingForCustomer(session.customerId)).total
+            : 0
 
         const gross = sessionTotal(session.orders)
         const total = billTotalOf(gross, session.discountType, session.discountValue)
@@ -115,7 +124,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
             changeDue: changeDue(total, session.payments),
             fxRateLAK,
             fxRateUSD,
-            showUsd
+            showUsd,
+            customerOwes
         })
     } catch (error) {
         console.error('[table-sessions] GET failed', error)

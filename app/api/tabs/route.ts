@@ -20,11 +20,13 @@ export async function GET() {
 
     try {
         const sessions = await prisma.tableSession.findMany({
-            where: { payLaterCustomerId: { not: null } },
-            orderBy: { closedAt: 'desc' },
+            where: { customerId: { not: null } },
+            // Oldest first: money is applied oldest-first, and the list a
+            // collector reads top-down should match the order it clears in.
+            orderBy: { closedAt: 'asc' },
             include: {
                 table: { select: { name: true } },
-                payLaterCustomer: { select: { id: true, name: true, phone: true } },
+                customer: { select: { id: true, name: true, phone: true } },
                 orders: { select: { status: true, total: true } },
                 payments: true
             }
@@ -37,14 +39,14 @@ export async function GET() {
         }>()
 
         for (const s of sessions) {
-            if (!s.payLaterCustomer) continue
+            if (!s.customer) continue
             const total = billTotalOf(sessionTotal(s.orders), s.discountType, s.discountValue)
             const balance = balanceOf(total, s.payments)
             if (balance <= 0) continue // settled tabs drop off the list
 
-            const key = s.payLaterCustomer.id
+            const key = s.customer.id
             const entry = byCustomer.get(key) ?? {
-                customer: s.payLaterCustomer,
+                customer: s.customer,
                 outstanding: 0,
                 bills: []
             }
