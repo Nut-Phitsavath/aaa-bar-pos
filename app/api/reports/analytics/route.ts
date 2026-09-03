@@ -136,22 +136,47 @@ export async function GET(request: Request) {
         const hourlySales = Array.from(hourMap.values()).sort((a, b) => a.hour.localeCompare(b.hour))
 
         // 4. Payment Methods
+        // How bills were actually settled.
+        //
+        // Read from Payment rows for table sales, not order.paymentMethod: a
+        // split-tendered bill has no single method, and the column on the order
+        // only records whichever one closed it. Walk-in counter sales have no
+        // Payment rows, so those still come from the order.
+        //
+        // Comps are left out. This chart answers "what did we take, and how",
+        // and an Owner VIP bill is a bill nobody paid - the Z-report is where
+        // it belongs, on its own line beside the takings.
         const payMap = new Map()
-        const methodOrders = await prisma.order.findMany({
+        const add = (method: string, amount: number) => {
+            const m = method === 'BANK_NOTE' ? 'CASH' : method
+            if (m === 'OWNER_VIP' || m === 'PAY_LATER') return
+            if (!payMap.has(m)) payMap.set(m, { paymentMethod: m, revenue: 0, orders: 0 })
+            const entry = payMap.get(m)
+            entry.revenue += amount
+            entry.orders += 1
+        }
+
+        const sessionPayments = await prisma.payment.findMany({
+            where: { createdAt: { gte: startDate, lte: endDate } },
+            select: { method: true, amount: true, paymentStatus: true }
+        })
+        sessionPayments.forEach(p => {
+            // A scanned-but-unconfirmed QR is not money; same rule as everywhere.
+            if (p.method === 'ONEPAY' && p.paymentStatus !== 'PAID') return
+            add(p.method, p.amount)
+        })
+
+        const walkInOrdersPaid = await prisma.order.findMany({
             where: {
                 createdAt: { gte: startDate, lte: endDate },
                 status: 'COMPLETED',
-                isReportable: true
+                isReportable: true,
+                sessionId: null
             },
-            select: { paymentMethod: true, total: true, discount: true }
+            select: { paymentMethod: true, total: true }
         })
-        methodOrders.forEach(o => {
-            const m = o.paymentMethod || "CASH"
-            if (!payMap.has(m)) payMap.set(m, { paymentMethod: m, revenue: 0, orders: 0 })
-            const entry = payMap.get(m)
-            entry.revenue += o.total
-            entry.orders += 1
-        })
+        walkInOrdersPaid.forEach(o => add(o.paymentMethod || 'CASH', o.total))
+
         const paymentMethods = Array.from(payMap.values())
 
         // 5. Product Performance (Refined Grouping)
@@ -367,7 +392,11 @@ export async function GET(request: Request) {
         const totalRevenue = orders.reduce((sum, o) => sum + o.total, 0)
         const totalOrders = orders.length
         const aov = totalOrders > 0 ? totalRevenue / totalOrders : 0
-        const totalDiscounts = methodOrders.reduce((sum, o) => sum + (o as any).discount || 0, 0) // We need discount in fetch
+        // Uses the same order set as every other figure above rather than its
+        // own query. The old form was `sum + o.discount || 0`, which parses as
+        // `(sum + o.discount) || 0` - it happened to work only because the
+        // running total was never zero after the first discounted order.
+        const totalDiscounts = orders.reduce((sum, o) => sum + (o.discount || 0), 0)
 
         // Summary Stats (robustified)
         const summaryStats = await prisma.order.aggregate({
