@@ -29,7 +29,7 @@ import { useTranslation } from "@/hooks/use-translation"
 import { notify } from "@/components/ui/sonner"
 import { Header } from "@/components/header"
 import { CustomizationDialog } from "@/app/pos/components/CustomizationDialog"
-import { Receipt } from "@/components/receipt"
+import { BillReceipt } from "@/components/bill-receipt"
 import { useShift } from "@/components/shift-provider"
 import { Switch } from "@/components/ui/switch"
 
@@ -1248,6 +1248,31 @@ function POSPageInner() {
     )
   }, [menuItems, activeCategory, searchQuery])
 
+  // Built once and used by both the success dialog and the hidden print frame,
+  // so what staff see on screen and what comes off the roll cannot drift apart.
+  const receiptData = lastOrderInfo ? {
+    heading: lastOrderInfo.orderNumber,
+    headingLabel: t.order_no,
+    date: lastOrderInfo.date,
+    staffName: lastOrderInfo.staffName ?? null,
+    beeperNumber: lastOrderInfo.beeperNumber ?? null,
+    lines: (lastOrderInfo.items ?? []).map((i: any) => ({
+      name: i.name,
+      quantity: i.quantity,
+      total: i.price * i.quantity,
+      variation: i.variation ?? null,
+      size: i.size ?? null,
+      sugar: i.sugar ?? null,
+      shot: i.shot ?? null,
+      isTakeaway: i.isTakeaway,
+    })),
+    discount: lastOrderInfo.discount ?? 0,
+    tax: lastOrderInfo.tax ?? 0,
+    total: lastOrderInfo.total,
+    paymentMethod: lastOrderInfo.paymentMethod,
+    cashReceived: lastOrderInfo.cashReceived ?? null,
+  } : null
+
   return (
     <div className="h-screen flex flex-col bg-slate-50 text-slate-900 overflow-hidden">
       {sessionIdParam && (
@@ -1540,122 +1565,9 @@ function POSPageInner() {
 
             {/* Scrollable Receipt Area */}
             <div className="flex-1 overflow-y-auto px-6 py-2">
-              {lastOrderInfo && (
-                <div className="bg-white border-2 border-slate-100 rounded-xl p-4 shadow-sm font-mono text-[13px] leading-tight text-slate-900">
-                  {/* Shop Info / Logo */}
-                  <div className="text-center space-y-1 mb-4 border-b border-dashed border-slate-200 pb-4">
-                    <div className="flex justify-center mb-2">
-                      <img src={sysSettings?.shopLogo || "/placeholder-logo.png"} alt="Logo" className="h-16 w-auto object-contain" />
-                    </div>
-                    <h2 className="text-lg font-black tracking-tight uppercase">{sysSettings?.shopName || 'Memories Lane'}</h2>
-                    {sysSettings?.shopAddress && <p className="text-[10px] opacity-70 leading-tight whitespace-pre-wrap">{sysSettings.shopAddress}</p>}
-                    {sysSettings?.shopPhone && <p className="text-xs">Tel: {sysSettings.shopPhone}</p>}
-                    {lastOrderInfo?.staffName && <p className="text-[10px] font-bold mt-1">{t.staff}: {lastOrderInfo.staffName}</p>}
-                  </div>
-
-                  {/* Order Context */}
-                  <div className="text-center border-b border-dashed border-slate-200 pb-3 mb-3">
-                    <p className="text-[10px] uppercase tracking-wider opacity-50">{t.order_no}</p>
-                    <p className="text-3xl font-black">{lastOrderInfo.orderNumber}</p>
-                    <p className="text-[10px] opacity-50 mt-1">{lastOrderInfo.date}</p>
-                  </div>
-
-                  {/* Beeper */}
-                  {lastOrderInfo.beeperNumber && (
-                    <div className="mb-4 p-2 border-2 border-dashed border-slate-800 text-center font-black text-lg">
-                      {t.beeper.toUpperCase()}: {lastOrderInfo.beeperNumber}
-                    </div>
-                  )}
-
-                  {/* Items */}
-                  <div className="space-y-3 mb-4">
-                    {lastOrderInfo?.items.map((item: any, i: number) => {
-                      const parseNames = (name: string) => {
-                        const baseName = name.replace(/-.*$/, '').trim();
-                        const match = baseName.match(/^(.*?)\s*\((.*?)\)$/);
-                        if (match) return { lao: match[1].trim(), english: match[2].trim() };
-                        return { lao: baseName, english: null };
-                      };
-                      const { lao: laoName, english: engName } = parseNames(item.name);
-
-                      return (
-                        <div key={i} className="flex flex-col leading-tight">
-                          <div className="flex justify-between font-black items-start">
-                            <span className="flex-1 mr-2">{laoName} x{item.quantity}</span>
-                            <span className="whitespace-nowrap">{formatTHB(item.price * item.quantity)}</span>
-                          </div>
-
-                          {engName && (
-                            <div className="text-[10px] text-slate-500 font-bold -mt-0.5 mb-1">
-                              {engName}
-                            </div>
-                          )}
-
-                          {(item.variation || item.size) && (
-                            <div className="text-[10px] flex justify-between opacity-70 italic">
-                              <span>{[
-                                item.variation === 'HOT' ? t.hot : item.variation === 'ICE' ? t.ice : item.variation === 'BLEND' ? t.blend : item.variation,
-                                item.size === 'S' ? t.s_size : item.size === 'M' ? t.m_size : item.size === 'L' ? t.l_size : item.size
-                              ].filter(v => v && !v.toLowerCase().includes('normal') && !v.toLowerCase().includes('standard')).join(' - ')}</span>
-                            </div>
-                          )}
-                          {item.sugar && item.sugar !== '100%' && !item.sugar.toLowerCase().includes('normal') && (
-                            <span className="text-[10px] text-slate-400 italic font-bold">
-                              + {t.sugar}: {item.sugar === "No Sweet" ? t.no_sweet : item.sugar === "Less Sweet" ? t.less_sweet : item.sugar === "Extra Sweet" ? t.extra_sweet : item.sugar}
-                            </span>
-                          )}
-                          {item.shot && !item.shot.toLowerCase().includes('normal') && (
-                            <span className="text-[10px] text-slate-400 italic font-bold">
-                              + {t.shot}: {item.shot === "Reduced Shot" ? t.reduced_shot : item.shot === "Double Shot" ? t.double_shot : item.shot}
-                            </span>
-                          )}
-                          {item.isTakeaway && <span className="text-[10px] font-bold text-slate-400 italic uppercase tracking-wider">{t.takeaway}</span>}
-                        </div>
-                      )
-                    })}
-                  </div>
-
-                  {/* Totals & Footer */}
-                  <div className="border-t border-dashed border-slate-300 pt-3 space-y-1">
-                    <div className="flex justify-between opacity-70 text-[11px]">
-                      <span>{t.subtotal_net}</span>
-                      <span>{formatTHB(lastOrderInfo.total - lastOrderInfo.tax)}</span>
-                    </div>
-                    {lastOrderInfo.discount > 0 && (
-                      <div className="flex justify-between text-rose-600 font-bold text-[11px]">
-                        <span>{t.promotions}</span>
-                        <span>-{formatTHB(lastOrderInfo.discount)}</span>
-                      </div>
-                    )}
-                    <div className="flex justify-between opacity-70 text-[11px]">
-                      <span>VAT ({sysSettings.taxRate}%)</span>
-                      <span>{formatTHB(lastOrderInfo.tax)}</span>
-                    </div>
-                    <div className="flex justify-between font-black text-xl mt-2 pt-2 border-t border-dashed border-slate-300">
-                      <span>{t.total_caps}</span>
-                      <span>{formatTHB(lastOrderInfo.total)}</span>
-                    </div>
-
-                    {lastOrderInfo.paymentMethod === 'CASH' && (
-                      <div className="mt-4 pt-2 border-t border-dashed border-slate-300 space-y-1">
-                        <div className="flex justify-between opacity-70 text-[11px]">
-                          <span>{t.cash_received}</span>
-                          <span>{formatTHB(lastOrderInfo.cashReceived)}</span>
-                        </div>
-                        <div className="flex justify-between font-black text-lg text-emerald-700">
-                          <span>{t.change}</span>
-                          <span>{formatTHB(Math.max(0, lastOrderInfo.cashReceived - lastOrderInfo.total))}</span>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Footer */}
-                    <div className="text-center mt-4 pt-2 border-t border-dashed border-slate-200 text-[10px] opacity-70">
-                      <p className="font-black">WiFi: Pacano / PWD: PCN12022026</p>
-                      <p className="uppercase tracking-widest font-black mb-0.5">{t.thank_you}</p>
-                      <p>{t.payment_method}: {lastOrderInfo?.paymentMethod}</p>
-                    </div>
-                  </div>
+              {receiptData && (
+                <div className="bg-white border-2 border-slate-100 rounded-xl shadow-sm">
+                  <BillReceipt settings={sysSettings} data={receiptData} />
                 </div>
               )}
             </div>
@@ -1692,7 +1604,7 @@ function POSPageInner() {
         <div className="hidden">
           {lastOrderInfo && (
             <div id="receipt-to-print">
-              <Receipt order={lastOrderInfo} />
+              <BillReceipt settings={sysSettings} data={receiptData!} />
             </div>
           )}
           <Button id="print-receipt-btn" onClick={() => {
