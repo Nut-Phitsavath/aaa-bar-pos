@@ -45,7 +45,7 @@ export async function getDb() {
             const settings = [
                 ['tax_rate', '10'],
                 ['language', 'lo'],
-                ['shop_name', 'Cafe POS'],
+                ['shop_name', 'AAA'],
                 ['loyalty_rate', '100'] // 1 point = 100 LAK
             ]
             for (const [key, val] of settings) {

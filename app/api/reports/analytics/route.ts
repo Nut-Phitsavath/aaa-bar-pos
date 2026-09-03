@@ -51,6 +51,7 @@ export async function GET(request: Request) {
                 total: true,
                 createdAt: true,
                 discount: true,
+                sessionId: true,
                 user: { select: { name: true } }
             }
         })
@@ -77,6 +78,16 @@ export async function GET(request: Request) {
             entry.orders += 1
         })
         const staffSales = Array.from(staffMap.values()).sort((a, b) => b.revenue - a.revenue)
+
+        // Table service vs the walk-in counter. For a bar this is the split
+        // that matters; takeaway vs dine-in is a cafe question - a bar is dine
+        // in by definition, so that chart always read 100/0.
+        const tableOrders = orders.filter((o) => o.sessionId)
+        const walkInOrders = orders.filter((o) => !o.sessionId)
+        const serviceStats = [
+            { name: 'Tables', revenue: tableOrders.reduce((s, o) => s + o.total, 0), count: tableOrders.length },
+            { name: 'Walk-in', revenue: walkInOrders.reduce((s, o) => s + o.total, 0), count: walkInOrders.length },
+        ]
 
         // 2. Category Share
         const orderItems = await prisma.orderItem.findMany({
@@ -562,6 +573,7 @@ export async function GET(request: Request) {
             sizeStats,
             variationStats,
             takeawayStats,
+            serviceStats,
             sugarStats,
             shotStats,
             promoImpact,

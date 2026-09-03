@@ -26,6 +26,7 @@ import { PaymentQR } from "@/components/payment-qr"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
 import Image from "next/image"
 import { useTranslation } from "@/hooks/use-translation"
+import { APP_NAME } from "@/lib/shop"
 import { notify } from "@/components/ui/sonner"
 import { Header } from "@/components/header"
 import { CustomizationDialog } from "@/app/pos/components/CustomizationDialog"
@@ -269,7 +270,7 @@ function POSPageInner() {
 
   // Broadcast cart update to customer view
   useEffect(() => {
-    document.title = "POS | Memories Lane"
+    document.title = `POS | ${APP_NAME}`
 
     // A round being keyed into a table is not a payment moment, and its total
     // is not what the customer owes - broadcasting it would show someone a

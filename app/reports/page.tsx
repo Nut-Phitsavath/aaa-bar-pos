@@ -4,6 +4,8 @@ import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { ZReport } from "@/components/reports/z-report"
+import { ServerPerformance } from "@/components/reports/server-performance"
 import {
   Bar, BarChart, ResponsiveContainer, XAxis, YAxis, Tooltip, Legend,
   Line, LineChart, Pie, PieChart, Cell
@@ -19,6 +21,7 @@ import { Calendar } from "@/components/ui/calendar"
 import { format, subDays, startOfDay, endOfDay, isSameDay, startOfToday, endOfToday } from "date-fns"
 import { DateRange } from "react-day-picker"
 import { useTranslation } from "@/hooks/use-translation"
+import { APP_NAME } from "@/lib/shop"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 
@@ -35,7 +38,7 @@ export default function ReportsPage() {
   })
 
   useEffect(() => {
-    document.title = "Reports | Memories Lane"
+    document.title = `Reports | ${APP_NAME}`
     const checkRole = async () => {
       try {
         const res = await fetch('/api/auth/me')
@@ -283,7 +286,10 @@ export default function ReportsPage() {
         </div>
 
         <Tabs defaultValue="overview" className="space-y-6">
-          <TabsList className="bg-muted p-1 rounded-lg">
+          {/* Wraps rather than overflowing: the default TabsList is a fixed
+              height inline-flex, so past about seven triggers the last ones are
+              clipped off the edge with nothing to indicate they exist. */}
+          <TabsList className="bg-muted p-1 rounded-lg flex flex-wrap h-auto justify-start gap-1">
             <TabsTrigger value="overview">{t.overview}</TabsTrigger>
             <TabsTrigger value="products">{t.product_performance}</TabsTrigger>
             <TabsTrigger value="customers">{t.customers}</TabsTrigger>
@@ -291,7 +297,22 @@ export default function ReportsPage() {
             <TabsTrigger value="advanced" onClick={fetchRefunds}>{t.advanced_and_refunds}</TabsTrigger>
             <TabsTrigger value="operations">{t.operations_payments}</TabsTrigger>
             <TabsTrigger value="promotions">{t.promotions_roi}</TabsTrigger>
+            <TabsTrigger value="servers">{t.server_staff}</TabsTrigger>
+            <TabsTrigger value="zreport">{t.z_report}</TabsTrigger>
           </TabsList>
+
+          <TabsContent value="servers">
+            {dateRange?.from && dateRange?.to && (
+              <ServerPerformance
+                startDate={startOfDay(dateRange.from).toISOString()}
+                endDate={endOfDay(dateRange.to).toISOString()}
+              />
+            )}
+          </TabsContent>
+
+          <TabsContent value="zreport">
+            <ZReport />
+          </TabsContent>
 
           <TabsContent value="overview" className="space-y-6">
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -340,18 +361,19 @@ export default function ReportsPage() {
               </Card>
             </div>
 
-            {/* Takeaway vs Dine-in */}
+            {/* Table service vs the walk-in counter: the split that means something
+                in a bar, where takeaway vs dine-in always read 100/0. */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <Card>
                 <CardHeader>
-                  <CardTitle>{t.takeaway_vs_dinein}</CardTitle>
+                  <CardTitle>{t.tables_vs_walkin}</CardTitle>
                   <CardDescription>{t.revenue_dist_by_order_type}</CardDescription>
                 </CardHeader>
                 <CardContent className="h-[350px]">
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
                       <Pie
-                        data={data?.takeawayStats || []}
+                        data={data?.serviceStats || []}
                         dataKey="revenue"
                         nameKey="name"
                         innerRadius={60}
@@ -359,7 +381,7 @@ export default function ReportsPage() {
                         paddingAngle={5}
                         label={(e) => `${e.name}: ${formatTHB(e.revenue)}`}
                       >
-                        {(data?.takeawayStats || []).map((entry: any, index: number) => (
+                        {(data?.serviceStats || []).map((entry: any, index: number) => (
                           <Cell key={`cell-${index}`} fill={index === 0 ? '#d97706' : '#2563eb'} />
                         ))}
                       </Pie>

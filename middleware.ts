@@ -23,7 +23,7 @@ export function middleware(request: NextRequest) {
     }
 
     // Define protected routes
-    const protectedRoutes = ['/dashboard', '/pos', '/tables', '/orders', '/inventory', '/customers', '/promotions', '/reports', '/menu', '/settings']
+    const protectedRoutes = ['/dashboard', '/pos', '/tables', '/tabs', '/orders', '/inventory', '/customers', '/promotions', '/reports', '/menu', '/settings']
 
     // ... rest of the existing protected route logic ...
     const isProtectedRoute = protectedRoutes.some(route => path.startsWith(route))

@@ -13,6 +13,7 @@ import {
     Users,
     Tag,
     ChartLine,
+    Clock3,
     Settings,
     LogOut,
     Store,
@@ -105,6 +106,7 @@ export function Sidebar() {
         { name: t.inventory, href: "/inventory", icon: Package },
         { name: t.user_management, href: "/users", icon: Users },
         { name: t.promotions, href: "/promotions", icon: Tag },
+        { name: t.tabs, href: "/tabs", icon: Clock3 },
         { name: t.reports, href: "/reports", icon: ChartLine, managerAllowed: true },
     ]
 

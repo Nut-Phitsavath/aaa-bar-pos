@@ -5,6 +5,7 @@ import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { DollarSign, ShoppingCart, TrendingUp, AlertTriangle, Play, Calendar, Wallet } from "lucide-react"
 import { useTranslation } from "@/hooks/use-translation"
+import { APP_NAME } from "@/lib/shop"
 import { useRouter } from "next/navigation"
 import { formatTHB } from "@/lib/currency"
 import { useShift } from "@/components/shift-provider"
@@ -42,7 +43,7 @@ export default function DashboardPage() {
   const [isProcessing, setIsProcessing] = useState(false)
 
   useEffect(() => {
-    document.title = "Dashboard | Memories Lane"
+    document.title = `Dashboard | ${APP_NAME}`
     const initDashboard = async () => {
       try {
         // 1. Fetch user

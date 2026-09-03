@@ -13,6 +13,7 @@ import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { Header } from "@/components/header"
 import { useTranslation } from "@/hooks/use-translation"
+import { APP_NAME } from "@/lib/shop"
 import { formatLongDate } from "@/lib/date"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Calendar } from "@/components/ui/calendar"
@@ -63,7 +64,7 @@ export default function ActiveOrdersPage() {
     const [expandedOrderId, setExpandedOrderId] = useState<string | null>(null)
 
     useEffect(() => {
-        document.title = "Orders | Memories Lane"
+        document.title = `Orders | ${APP_NAME}`
         fetchOrders()
         const interval = setInterval(fetchOrders, 5000)
         return () => clearInterval(interval)

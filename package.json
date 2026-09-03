@@ -10,7 +10,8 @@
     "test": "node --experimental-strip-types --test lib/*.test.ts",
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
-    "db:seed": "node prisma/seedRealData.js"
+    "db:seed": "node prisma/seedBarData.js",
+    "db:demo": "node prisma/seedDemoHistory.js"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
@@ -85,6 +86,6 @@
     "typescript": "^5"
   },
   "prisma": {
-    "seed": "node prisma/seedRealData.js"
+    "seed": "node prisma/seedBarData.js"
   }
 }

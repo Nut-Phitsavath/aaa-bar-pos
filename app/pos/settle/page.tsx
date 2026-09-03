@@ -73,6 +73,18 @@ function SettleScreen() {
     const [tabCustomerId, setTabCustomerId] = useState("")
     const [customers, setCustomers] = useState<{ id: string; name: string }[]>([])
 
+    /**
+     * A settled bill always prints a receipt.
+     *
+     * The bill printed before payment cannot carry a close timestamp, because
+     * it has not happened yet - so without this, requirement #3 never reaches
+     * paper. Fires for a comp and a tab too: a comped table still wants a slip
+     * showing zero, and a tab wants one showing what is owed.
+     */
+    const printSettled = useCallback(() => {
+        window.open(`/receipt?session=`, "_blank", "width=520,height=760")
+    }, [sessionId])
+
     const load = useCallback(async () => {
         if (!sessionId) { router.push("/tables"); return }
         const res = await fetch(`/api/table-sessions/${sessionId}`)
@@ -97,7 +109,7 @@ function SettleScreen() {
                     clearInterval(poll)
                     setPendingQr(null)
                     setSelected(new Set())
-                    if (data.closed) { toast.success(t.session_closed); router.push("/tables"); return }
+                    if (data.closed) { printSettled(); toast.success(t.session_closed); router.push("/tables"); return }
                     toast.success(t.payment_confirmed)
                     await load()
                 }
@@ -152,7 +164,7 @@ function SettleScreen() {
             setSelected(new Set())
 
             if (method === "CASH") {
-                if (data.closed) { toast.success(t.session_closed); router.push("/tables"); return }
+                if (data.closed) { printSettled(); toast.success(t.session_closed); router.push("/tables"); return }
                 toast.success(t.payment_confirmed)
                 await load()
                 return
@@ -200,6 +212,7 @@ function SettleScreen() {
             }
             setApproving(null); setDiscountOpen(false); setTabCustomerId("")
             if (approving === "PAY_LATER" || data.closed) {
+                printSettled()
                 toast.success(approving === "PAY_LATER" ? t.pay_later : t.session_closed)
                 router.push("/tables")
                 return

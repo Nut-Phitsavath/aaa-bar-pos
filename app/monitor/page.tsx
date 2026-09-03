@@ -13,6 +13,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar"
 import { format, subDays, startOfDay, endOfDay, isSameDay } from "date-fns"
 import { useTranslation } from "@/hooks/use-translation"
+import { APP_NAME } from "@/lib/shop"
 import { Badge } from "@/components/ui/badge"
 import {
     Bar, BarChart, ResponsiveContainer, XAxis, YAxis, Tooltip, Legend,
@@ -33,7 +34,7 @@ export default function MonitorPage() {
     })
 
     useEffect(() => {
-        document.title = "Monitor | Memories Lane"
+        document.title = `Monitor | ${APP_NAME}`
         fetchData()
     }, [dateRange])
 

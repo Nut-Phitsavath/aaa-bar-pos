@@ -2,6 +2,7 @@
 
 import { useTranslation } from "@/hooks/use-translation"
 import { formatTHB, formatLAK, formatUSD, thbToLak, thbToUsd } from "@/lib/currency"
+import { APP_NAME } from "@/lib/shop"
 import { QRCodeSVG } from "qrcode.react"
 
 export type ReceiptLine = {
@@ -90,7 +91,7 @@ export function BillReceipt({ data, settings }: { data: ReceiptData; settings: a
                     </div>
                 )}
                 <h2 className="text-lg font-black tracking-tight uppercase">
-                    {settings?.shopName || "Memories Lane"}
+                    {settings?.shopName || APP_NAME}
                 </h2>
                 {settings?.shopAddress && (
                     <p className="text-[10px] opacity-70 leading-tight whitespace-pre-wrap">

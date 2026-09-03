@@ -8,6 +8,7 @@ import { formatTHB } from "@/lib/currency"
 import Image from "next/image"
 import { useShift } from "@/components/shift-provider"
 import { useTranslation } from "@/hooks/use-translation"
+import { APP_NAME } from "@/lib/shop"
 import { QRCodeSVG } from "qrcode.react"
 
 // Document title is set via useEffect because this is a client component
@@ -77,7 +78,7 @@ export default function CustomerViewPage() {
     const [successInfo, setSuccessInfo] = useState<{ total: number, cashReceived: number, change: number } | null>(null)
 
     useEffect(() => {
-        document.title = "Customer View | Memories Lane"
+        document.title = `Customer View | ${APP_NAME}`
 
         const channel = new BroadcastChannel("pos_channel")
 
@@ -189,8 +190,8 @@ export default function CustomerViewPage() {
                                     <span className="text-slate-400 text-xl font-bold mt-1">{isComplimentary ? "Complimentary!" : "Payment Confirmed!"}</span>
                                 </h1>
                                 <div className="text-base text-slate-400 font-medium italic flex flex-col items-center leading-tight">
-                                    <span>{isComplimentary ? "ອໍເດີ້ໂດຍ Memories Lane" : "ອໍເດີ້ຂອງທ່ານກຳລັງຖືກຈັດກຽມ"}</span>
-                                    <span className="text-slate-300 text-sm">{isComplimentary ? "Order by Memories Lane" : "Your order is now being prepared"}</span>
+                                    <span>{isComplimentary ? `ອໍເດີ້ໂດຍ ${settings?.shopName || APP_NAME}` : "ອໍເດີ້ຂອງທ່ານກຳລັງຖືກຈັດກຽມ"}</span>
+                                    <span className="text-slate-300 text-sm">{isComplimentary ? `Order by ${settings?.shopName || APP_NAME}` : "Your order is now being prepared"}</span>
                                 </div>
                             </div>
 
@@ -268,7 +269,7 @@ export default function CustomerViewPage() {
                             <span className="text-4xl font-semibold text-amber-600 uppercase tracking-[0.2em]">ຍິນດີຕ້ອນຮັບສູ່</span>
                             <span className="text-xl font-bold text-amber-400/60 uppercase tracking-widest -mt-1">Welcome to</span>
                         </div>
-                        <h1 className="text-7xl font-black text-amber-900 leading-tight">Memories Lane</h1>
+                        <h1 className="text-7xl font-black text-amber-900 leading-tight">{settings?.shopName || APP_NAME}</h1>
                         <div className="text-2xl text-amber-700/70 font-light mt-2 flex flex-col items-center leading-tight">
                             <span>ບອກບາຣິສຕ້າຂອງພວກເຮົາໄດ້ເລີຍວ່າທ່ານຕ້ອງການເມນູໃດ</span>
                             <span className="text-amber-600/50 text-xl">Tell our barista what you'd like today</span>

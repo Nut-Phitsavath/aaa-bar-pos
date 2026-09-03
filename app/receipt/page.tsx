@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Printer, ArrowLeft } from "lucide-react"
 import { BillReceipt, type ReceiptData } from "@/components/bill-receipt"
 import { useTranslation } from "@/hooks/use-translation"
+import { APP_NAME } from "@/lib/shop"
 
 const stamp = (iso: string) => {
     const d = new Date(iso)
@@ -40,7 +41,7 @@ function ReceiptContent() {
 
     useEffect(() => {
         if (!orderId) return
-        document.title = "Receipt | Memories Lane"
+        document.title = `Receipt | ${APP_NAME}`
         fetch(`/api/orders/${orderId}`)
             .then((res) => { if (res.ok) return res.json(); throw new Error("Order not found") })
             .then((order) => {
@@ -79,7 +80,7 @@ function ReceiptContent() {
 
     useEffect(() => {
         if (!sessionId) return
-        document.title = "Bill | Memories Lane"
+        document.title = `Bill | ${APP_NAME}`
         fetch(`/api/table-sessions/${sessionId}`)
             .then((res) => { if (res.ok) return res.json(); throw new Error("Bill not found") })
             .then((bill) => {

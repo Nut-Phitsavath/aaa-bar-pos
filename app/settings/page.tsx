@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label"
 import { Store, Receipt, DollarSign, Languages, AlertTriangle, Trash2, Bold } from "lucide-react"
 import { Switch } from "@/components/ui/switch"
 import { useTranslation } from "@/hooks/use-translation"
+import { APP_NAME } from "@/lib/shop"
 import { notify } from "@/components/ui/sonner"
 import { useConfirm } from "@/components/confirm-provider"
 import { useLanguage } from "@/components/language-provider"
@@ -23,7 +24,7 @@ export default function SettingsPage() {
   const { setLang } = useLanguage()
 
   useEffect(() => {
-    document.title = `${t.shop_settings || "Settings"} | Memories Lane`
+    document.title = `${t.shop_settings || "Settings"} | ${APP_NAME}`
     fetchData()
   }, [t.shop_settings])
 

@@ -19,8 +19,8 @@ const notoLaos = Noto_Sans_Lao({
 });
 
 export const metadata: Metadata = {
-  title: 'Memories Lane Cafe',
-  description: 'Memories Lane Cafe POS System',
+  title: 'AAA',
+  description: 'AAA bar POS',
   generator: 'v0.app',
   icons: {
     icon: [

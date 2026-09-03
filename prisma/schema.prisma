@@ -379,6 +379,10 @@ model OrderItem {
   price           Float
   quantity        Int
   total           Float
+  /// Free-text preparation note (req #4): "no ice", "extra spicy". The
+  /// sugar/shot/cup fields below are the inherited cafe modifiers - harmless
+  /// and inert for a bar, since no bar category enables them.
+  note            String?
   sugarLevel      String?
   shotType        String?
   cupSize         String?
