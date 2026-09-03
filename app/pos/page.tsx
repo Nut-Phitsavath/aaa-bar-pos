@@ -3,7 +3,8 @@
 import { useState, useEffect, useMemo, useCallback, useRef, memo, Suspense } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { toast } from "sonner"
-import { SessionBanner, type BannerSession, type Waiter } from "@/components/session-banner"
+import { TicketPanel, type TicketBill } from "@/components/pos/ticket-panel"
+import { SessionBanner, type Waiter } from "@/components/session-banner"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -180,7 +181,7 @@ function POSPageInner() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const sessionIdParam = searchParams.get("session")
-  const [session, setSession] = useState<BannerSession | null>(null)
+  const [session, setSession] = useState<TicketBill | null>(null)
   const [waiters, setWaiters] = useState<Waiter[]>([])
   const [waiterId, setWaiterId] = useState("")
 
@@ -192,7 +193,9 @@ function POSPageInner() {
       const data = await res.json()
       // Someone settled this bill on another device while we were standing here.
       if (data.status === "CLOSED") { router.push("/tables"); return }
-      setSession({ id: data.id, openedAt: data.openedAt, total: data.total, table: data.table })
+      // The whole bill, not a summary: the ticket panel shows every submitted
+      // round on this screen so ordering and checking are one place.
+      setSession(data)
     } catch {
       // Keep the last known banner rather than bouncing off the table on a blip.
     }
@@ -215,6 +218,23 @@ function POSPageInner() {
       })
       .catch(() => setWaiters([]))
   }, [sessionIdParam])
+
+  /** Print the bill with a QR for the balance, from the ticket screen. */
+  const printBill = useCallback(async () => {
+    if (!sessionIdParam) return
+    setIsProcessing(true)
+    try {
+      const res = await fetch(`/api/table-sessions/${sessionIdParam}/print`, { method: "POST" })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) { toast.error(data.error || "Failed"); return }
+      // A dead line only costs the QR; the bill still prints and cash still works.
+      if (data.qrError) toast.error(data.qrError)
+      window.open(`/tables/${sessionIdParam}/print`, "_blank", "width=420,height=700")
+      await loadSession()
+    } finally {
+      setIsProcessing(false)
+    }
+  }, [sessionIdParam, loadSession])
 
   const changeWaiter = useCallback((id: string) => {
     setWaiterId(id)
@@ -1230,7 +1250,7 @@ function POSPageInner() {
 
   return (
     <div className="h-screen flex flex-col bg-slate-50 text-slate-900 overflow-hidden">
-      {session && (
+      {sessionIdParam && (
         <SessionBanner
           session={session}
           waiters={waiters}
@@ -1241,10 +1261,18 @@ function POSPageInner() {
       <div className="flex-1 flex min-h-0">
       {/* Left Side - Menu & Header */}
       <div className="flex-1 flex flex-col min-w-0 bg-background border-r">
+        {/* On a table, the walk-in counter number means nothing - what the
+            staff member needs to see is which table they are keying into. */}
+        {/* The banner above already names the table, so on a table screen this
+            shows nothing rather than repeating it - and never the walk-in
+            counter number, which means nothing here. Branches on the URL param
+            because that is known synchronously, so there is no flash. */}
         <Header title={t.pos}>
-          <Badge variant="secondary" className="px-3 py-1 text-lg font-mono bg-amber-50 text-amber-900 border-amber-200">
-            {orderNumber ? `Order No. ${orderNumber.replace('No. ', '')}` : "Order No. --"}
-          </Badge>
+          {sessionIdParam ? null : (
+            <Badge variant="secondary" className="px-3 py-1 text-lg font-mono bg-amber-50 text-amber-900 border-amber-200">
+              {orderNumber ? `Order No. ${orderNumber.replace('No. ', '')}` : "Order No. --"}
+            </Badge>
+          )}
         </Header>
 
         {/* Search */}
@@ -1287,8 +1315,36 @@ function POSPageInner() {
 
       </div>
 
+      {/* On a table, the whole ticket replaces the cart: submitted rounds,
+          unsent lines, balance and the settle action all on this screen, so
+          ordering and checking a bill are not two places. The walk-in cart
+          below is untouched. */}
+      {session && (
+        <TicketPanel
+          bill={session}
+          cart={cart.map((i) => ({
+            id: i.id,
+            name: i.name,
+            localName: i.localName,
+            price: i.price,
+            quantity: i.quantity,
+          }))}
+          onQtyChange={(lineId, delta) =>
+            setCart((prev) =>
+              prev
+                .map((i) => (i.id === lineId ? { ...i, quantity: i.quantity + delta } : i))
+                .filter((i) => i.quantity > 0)
+            )
+          }
+          onRemove={(lineId) => setCart((prev) => prev.filter((i) => i.id !== lineId))}
+          onSend={sendToTable}
+          onPrint={printBill}
+          busy={isProcessing}
+        />
+      )}
+
       {/* Right Side - Cart */}
-      <div className="w-[450px] flex flex-col bg-white shadow-2xl z-10 border-l">
+      <div className={`w-[450px] flex-col bg-white shadow-2xl z-10 border-l ${session ? "hidden" : "flex"}`}>
         <div className="p-4 border-b bg-slate-50 flex items-center justify-between">
           <h3 className="font-bold text-slate-800 flex items-center gap-2" id="cart-icon-header">
             <ShoppingCart className="w-5 h-5 transition-all duration-200" /> {t.cart}

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation"
 import { useTranslation } from "@/hooks/use-translation"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Users, Clock, Receipt, ShoppingCart } from "lucide-react"
 import { formatTHB } from "@/lib/currency"
 import { formatDuration } from "@/lib/sessions"
@@ -35,6 +36,29 @@ export default function TablesPage() {
   const [now, setNow] = useState(() => new Date())
   const [loading, setLoading] = useState(true)
   const [opening, setOpening] = useState<string | null>(null)
+  const [waiters, setWaiters] = useState<{ id: string; name: string }[]>([])
+  const [waiterId, setWaiterId] = useState("")
+  const [serverPrompt, setServerPrompt] = useState(false)
+
+  // The server who carried the order to the till. Remembered per device: one
+  // server works a section all night, so re-picking every table is noise.
+  useEffect(() => {
+    fetch("/api/waiters")
+      .then((r) => (r.ok ? r.json() : []))
+      .then((list: { id: string; name: string }[]) => {
+        const active = Array.isArray(list) ? list : []
+        setWaiters(active)
+        const remembered = localStorage.getItem("pos_waiter")
+        if (remembered && active.some((w) => w.id === remembered)) setWaiterId(remembered)
+      })
+      .catch(() => setWaiters([]))
+  }, [])
+
+  const pickWaiter = (id: string) => {
+    setWaiterId(id)
+    localStorage.setItem("pos_waiter", id)
+    setServerPrompt(false)
+  }
 
   // Two independent clocks. The poll pulls fresh totals from the server so a
   // round rung up on another device shows here; the tick only re-renders the
@@ -84,6 +108,13 @@ export default function TablesPage() {
   }, [t])
 
   const openTable = async (table: TableWithSession) => {
+    // Server first, then table, then menu - the order the bar actually works
+    // in. Blocking here rather than at Send means a round can never get as far
+    // as being keyed with nobody to attribute it to.
+    if (!waiterId) {
+      setServerPrompt(true)
+      return
+    }
     if (table.session) {
       router.push(`/pos?session=${table.session.id}`)
       return
@@ -138,6 +169,38 @@ export default function TablesPage() {
             <ShoppingCart className="w-4 h-4 mr-2" />
             {t.walk_in_sale}
           </Button>
+        </div>
+
+        {/* Step 1 of the flow, and impossible to miss. Until a server is
+            picked no table opens, so this is not a setting tucked in a corner -
+            it is the gate. */}
+        <div className={`px-4 md:px-6 py-2.5 border-t transition-colors duration-200 ${waiterId ? "border-slate-100 bg-white" : "border-amber-200 bg-amber-50"
+          }`}>
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className={`text-xs font-bold uppercase tracking-widest shrink-0 ${waiterId ? "text-slate-400" : "text-amber-700"
+              }`}>
+              {waiterId ? t.server_staff : t.select_server_first}
+            </span>
+            {waiters.map((w) => {
+              const active = waiterId === w.id
+              return (
+                <button
+                  key={w.id}
+                  onClick={() => pickWaiter(w.id)}
+                  aria-pressed={active}
+                  className={`h-11 px-5 rounded-xl border-2 font-bold transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 ${active
+                    ? "bg-slate-900 border-slate-900 text-white"
+                    : "bg-white border-slate-300 text-slate-700 hover:border-amber-400 hover:bg-amber-50"
+                    }`}
+                >
+                  {w.name}
+                </button>
+              )
+            })}
+            {waiters.length === 0 && (
+              <span className="text-sm text-slate-400">{t.no_servers}</span>
+            )}
+          </div>
         </div>
 
         {areas.length > 2 && (
@@ -272,6 +335,25 @@ export default function TablesPage() {
           </div>
         )}
       </main>
+
+      {/* Tapping a table without a server says so plainly, and lets you fix it
+          right there rather than sending you back to hunt for the bar. */}
+      <Dialog open={serverPrompt} onOpenChange={setServerPrompt}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader><DialogTitle>{t.select_server_first}</DialogTitle></DialogHeader>
+          <div className="grid grid-cols-2 gap-2">
+            {waiters.map((w) => (
+              <button
+                key={w.id}
+                onClick={() => pickWaiter(w.id)}
+                className="h-14 rounded-xl border-2 border-slate-300 font-bold text-slate-700 hover:border-amber-400 hover:bg-amber-50 transition-all"
+              >
+                {w.name}
+              </button>
+            ))}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

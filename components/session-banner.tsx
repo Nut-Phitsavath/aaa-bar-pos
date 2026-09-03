@@ -3,26 +3,26 @@
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { useTranslation } from "@/hooks/use-translation"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { ArrowLeft, Clock, Receipt } from "lucide-react"
-import { formatTHB } from "@/lib/currency"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { ArrowLeft, Clock, User, ChevronDown } from "lucide-react"
 import { formatDuration } from "@/lib/sessions"
 
 export type BannerSession = {
   id: string
+  status: string
   openedAt: string
-  total: number
   table: { name: string; area: string }
 }
 
 export type Waiter = { id: string; name: string }
 
 /**
- * The strip that turns the counter POS into a table terminal.
+ * Which table, and whose order. Full width across the top of the till.
  *
- * Deliberately dark rather than amber: it sits above a screen already full of
- * amber actions, and its job is to say "you are on a table" without competing
- * with the Send button for attention.
+ * These are the two facts a busy person must never hunt for, so they get the
+ * width of the screen rather than a corner of a panel. Anything unset is amber,
+ * the same amber the floor plan uses for a missing server, so one colour means
+ * one thing everywhere.
  */
 export function SessionBanner({
   session,
@@ -30,7 +30,8 @@ export function SessionBanner({
   waiterId,
   onWaiterChange,
 }: {
-  session: BannerSession
+  /** Null until the bill loads. The bar still occupies its space - see below. */
+  session: BannerSession | null
   waiters: Waiter[]
   waiterId: string
   onWaiterChange: (id: string) => void
@@ -38,63 +39,101 @@ export function SessionBanner({
   const { t } = useTranslation()
   const router = useRouter()
   const [now, setNow] = useState(() => new Date())
+  const [picking, setPicking] = useState(false)
 
   useEffect(() => {
     const tick = setInterval(() => setNow(new Date()), 30000)
     return () => clearInterval(tick)
   }, [])
 
-  const needsWaiter = !waiterId
+  const serverName = waiters.find((w) => w.id === waiterId)?.name
 
   return (
-    <div className="bg-slate-900 text-white px-3 md:px-4 py-2 flex items-center gap-3 flex-wrap shrink-0">
-      <button
-        onClick={() => router.push("/tables")}
-        className="h-10 px-2.5 -ml-1 rounded-md inline-flex items-center gap-1.5 text-sm text-slate-300 hover:text-white hover:bg-white/10 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
-      >
-        <ArrowLeft className="w-4 h-4" aria-hidden />
-        <span className="hidden sm:inline">{t.back_to_floor}</span>
-      </button>
+    <>
+      <div className="bg-slate-900 text-white flex items-stretch shrink-0">
+        <button
+          onClick={() => router.push("/tables")}
+          aria-label={t.back_to_floor}
+          className="px-4 grid place-items-center text-slate-300 hover:text-white hover:bg-white/10 transition-colors duration-150 shrink-0"
+        >
+          <ArrowLeft className="w-6 h-6" />
+        </button>
 
-      <div className="flex items-baseline gap-2 min-w-0">
-        <span className="text-lg font-bold leading-none truncate">{session.table.name}</span>
-        <span className="text-xs text-slate-400 hidden sm:inline">{session.table.area}</span>
-      </div>
-
-      <span className="inline-flex items-center gap-1 text-sm text-slate-300 tabular-nums">
-        <Clock className="w-3.5 h-3.5" aria-hidden />
-        {formatDuration(session.openedAt, now)}
-      </span>
-
-      <div className="ms-auto flex items-center gap-2 md:gap-3">
-        <div className="text-right leading-none">
-          <p className="text-[10px] uppercase tracking-wide text-slate-400">{t.running_total}</p>
-          <p className="text-lg font-bold tabular-nums mt-0.5">{formatTHB(session.total)}</p>
+        {/* The bar keeps its height and shape before the bill arrives, so it
+            fills in rather than appearing and shoving the page down. The data
+            takes ~25ms; the jump was what read as slow. */}
+        <div className="flex items-center gap-4 py-2.5 pe-4 min-w-0">
+          <div className="bg-white text-slate-900 rounded-xl px-5 py-1.5 leading-none shrink-0 min-w-[76px] text-center">
+            {session
+              ? <span className="text-4xl font-black">{session.table.name}</span>
+              : <span className="text-4xl font-black text-slate-200">·</span>}
+          </div>
+          <div className="min-w-0">
+            {session ? (
+              <>
+                <p className="text-lg font-bold text-slate-100 leading-none truncate">
+                  {session.table.area}
+                </p>
+                <p className="text-sm text-slate-400 mt-1.5 flex items-center gap-1.5 tabular-nums">
+                  <Clock className="w-4 h-4" />
+                  {formatDuration(session.openedAt, now)}
+                  <span className="text-slate-600">·</span>
+                  {session.status === "BILL_REQUESTED" ? t.bill_requested : t.occupied}
+                </p>
+              </>
+            ) : (
+              <>
+                <div className="h-4 w-24 rounded bg-white/10 animate-pulse" />
+                <div className="h-3.5 w-32 rounded bg-white/10 animate-pulse mt-2" />
+              </>
+            )}
+          </div>
         </div>
 
-        <Select value={waiterId} onValueChange={onWaiterChange}>
-          <SelectTrigger
-            aria-label={t.select_waiter}
-            className={`w-[130px] md:w-[150px] h-10 bg-white text-slate-900 border-0 ${needsWaiter ? "ring-2 ring-amber-400" : ""
-              }`}
-          >
-            <SelectValue placeholder={t.select_waiter} />
-          </SelectTrigger>
-          <SelectContent>
-            {waiters.map((w) => (
-              <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
+        {/* A named button, not a dropdown: the current server reads without
+            opening anything, and changing it is one tap on a name. */}
         <button
-          onClick={() => router.push(`/tables/${session.id}/bill`)}
-          className="h-10 px-3 rounded-md inline-flex items-center gap-1.5 text-sm font-semibold bg-white/10 hover:bg-white/20 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
+          onClick={() => setPicking(true)}
+          className={`ms-auto flex items-center gap-3 px-5 shrink-0 transition-colors duration-150 ${waiterId
+            ? "hover:bg-white/10"
+            : "bg-amber-500 text-slate-900 hover:bg-amber-400"
+            }`}
         >
-          <Receipt className="w-4 h-4" aria-hidden />
-          <span className="hidden md:inline">{t.view_bill}</span>
+          <User className={`w-6 h-6 ${waiterId ? "text-slate-400" : "text-slate-900"}`} />
+          <span className="text-start leading-none">
+            <span
+              className={`block text-[11px] font-bold uppercase tracking-widest ${waiterId ? "text-slate-400" : "text-slate-900"
+                }`}
+            >
+              {t.server_staff}
+            </span>
+            <span className="block text-2xl font-black mt-1.5">
+              {serverName || t.select_waiter}
+            </span>
+          </span>
+          <ChevronDown className="w-5 h-5 opacity-60" />
         </button>
       </div>
-    </div>
+
+      <Dialog open={picking} onOpenChange={setPicking}>
+        <DialogContent className="max-w-md">
+          <DialogHeader><DialogTitle>{t.select_waiter}</DialogTitle></DialogHeader>
+          <div className="grid grid-cols-2 gap-2">
+            {waiters.map((w) => (
+              <button
+                key={w.id}
+                onClick={() => { onWaiterChange(w.id); setPicking(false) }}
+                className={`h-16 rounded-xl border-2 text-lg font-bold transition-all ${w.id === waiterId
+                  ? "bg-slate-900 border-slate-900 text-white"
+                  : "border-slate-300 text-slate-700 hover:border-amber-400 hover:bg-amber-50"
+                  }`}
+              >
+                {w.name}
+              </button>
+            ))}
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
   )
 }
