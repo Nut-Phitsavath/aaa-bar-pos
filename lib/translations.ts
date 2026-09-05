@@ -695,6 +695,9 @@ export const translations = {
         // --- Table sessions (bar floor plan) ---
         tables: "Tables",
         table: "Table",
+        open_shift: "Open shift",
+        tables_still_open: "These tables are still open. Settle each one, or put it on a customer tab, before closing the shift.",
+        enter_amount_received: "Enter the amount received",
         bill_requested: "Bill Requested",
         walk_in_sale: "Walk-in Sale",
         open_table: "Open Table",
@@ -1480,7 +1483,7 @@ export const translations = {
         void_duplicate: "ສັ່ງຊ້ຳ",
         void_wrong_item: "ກົດຜິດລາຍການ",
         void_customer_changed: "ລູກຄ້າປ່ຽນໃຈ",
-        void_spilled: "ເຮັດຫກ / ເຮັດໃໝ່",
+        void_spilled: "ເຮັດຫົກ / ເຮັດໃໝ່",
         void_wrong_table: "ຜິດໂຕະ",
         void_other: "ອື່ນໆ",
         voids: "ການຍົກເລີກ",
@@ -1538,6 +1541,9 @@ export const translations = {
         // --- Table sessions (bar floor plan) ---
         tables: "ໂຕະ",
         table: "ໂຕະ",
+        open_shift: "ເປີດກະ",
+        tables_still_open: "ໂຕະເຫຼົ່ານີ້ຍັງເປີດຢູ່. ຈ່າຍເງິນ ຫຼື ຕິດບັນຊີລູກຄ້າ ກ່ອນປິດກະ.",
+        enter_amount_received: "ໃສ່ຈຳນວນເງິນທີ່ຮັບມາ",
         bill_requested: "ຂໍບິນ",
         walk_in_sale: "ຂາຍໜ້າຮ້ານ",
         open_table: "ເປີດໂຕະ",

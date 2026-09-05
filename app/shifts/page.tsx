@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { useRouter } from "next/navigation"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { ArrowLeft, Calendar, ChevronRight, LogOut } from "lucide-react"
@@ -34,7 +35,10 @@ export default function ShiftsPage() {
     const [shifts, setShifts] = useState<Shift[]>([])
     const [loading, setLoading] = useState(true)
     const [isEndShiftOpen, setIsEndShiftOpen] = useState(false)
+    const router = useRouter()
     const [actualCash, setActualCash] = useState("")
+    // Which tables are holding the close open. Empty until the server says so.
+    const [blocking, setBlocking] = useState<{ id: string; table: string; balance: number }[]>([])
     const [isProcessing, setIsProcessing] = useState(false)
     const [isShiftDialogOpen, setIsShiftDialogOpen] = useState(false)
 
@@ -70,7 +74,16 @@ export default function ShiftsPage() {
                 }),
                 headers: { 'Content-Type': 'application/json' }
             })
+            if (res.status === 409) {
+                // Not "something went wrong": the shift is fine, there are just
+                // live tables. Name them so the manager can go and deal with
+                // each one instead of guessing what is holding the close.
+                const data = await res.json().catch(() => ({}))
+                setBlocking(Array.isArray(data.tables) ? data.tables : [])
+                return
+            }
             if (res.ok) {
+                setBlocking([])
                 setIsEndShiftOpen(false)
                 setActualCash("")
                 const channel = new BroadcastChannel("payment_channel")
@@ -237,6 +250,29 @@ export default function ShiftsPage() {
                                 : 'bg-red-50 text-red-700'
                                 }`}>
                                 {t.difference_label}: {formatCurrency(parseFloat(actualCash) - (activeShift.startCash + activeShift.cashPayments))}
+                            </div>
+                        )}
+
+                        {/* What is actually holding the close, each one a way in
+                            to go and deal with it. A refusal that does not say
+                            which table is the reason staff hunt the floor at 3am
+                            for something the till can already see. */}
+                        {blocking.length > 0 && (
+                            <div className="rounded-xl border-2 border-amber-300 bg-amber-50 p-3 space-y-2">
+                                <p className="text-sm font-bold text-amber-900">{t.tables_still_open}</p>
+                                {blocking.map((b) => (
+                                    <div key={b.id} className="flex items-center gap-3 text-sm">
+                                        <span className="font-bold text-slate-900">{b.table}</span>
+                                        <span className="tabular-nums text-slate-700">{formatCurrency(b.balance)}</span>
+                                        <Button
+                                            size="sm"
+                                            className="ms-auto h-9 bg-amber-600 hover:bg-amber-700 text-white"
+                                            onClick={() => router.push(`/pos/settle?session=${b.id}`)}
+                                        >
+                                            {t.settle_bill}
+                                        </Button>
+                                    </div>
+                                ))}
                             </div>
                         )}
                     </div>

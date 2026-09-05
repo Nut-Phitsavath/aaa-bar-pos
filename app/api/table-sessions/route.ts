@@ -1,11 +1,20 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { cookies } from 'next/headers'
+import { requireOpenShift } from '@/lib/shift-guard'
 
 export const dynamic = 'force-dynamic'
 
 export async function POST(request: Request) {
     try {
+        // No shift, no trading. Seating a table is the start of a sale, and a
+        // sale made outside a shift is one that nothing will ever count.
+        const openShift = await prisma.shift.findFirst({ where: { status: 'OPEN' } })
+        const shiftCheck = requireOpenShift(openShift)
+        if (!shiftCheck.ok) {
+            return NextResponse.json({ error: shiftCheck.reason }, { status: 409 })
+        }
+
         const { tableId } = await request.json()
 
         if (!tableId) {

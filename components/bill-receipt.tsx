@@ -4,6 +4,7 @@ import { useTranslation } from "@/hooks/use-translation"
 import { formatTHB, formatLAK, formatUSD, thbToLak, thbToUsd } from "@/lib/currency"
 import { APP_NAME } from "@/lib/shop"
 import { QRCodeSVG } from "qrcode.react"
+import { parseNames } from "@/lib/receipt-names"
 
 export type ReceiptLine = {
     name: string
@@ -50,13 +51,6 @@ export type ReceiptData = {
     qrCodeData?: string | null
 }
 
-/** "ກາເຟ (Coffee)" arrives as one snapshotted string; split it for display. */
-function parseNames(name: string) {
-    const base = name.replace(/-.*$/, "").trim()
-    const m = base.match(/^(.*?)\s*\((.*?)\)$/)
-    return m ? { lao: m[1].trim(), english: m[2].trim() } : { lao: base, english: null }
-}
-
 const isStandard = (v?: string | null) =>
     !v || v.toLowerCase().includes("normal") || v.toLowerCase().includes("standard") || v === "100%"
 
@@ -76,8 +70,11 @@ export function BillReceipt({ data, settings }: { data: ReceiptData; settings: a
     const { t } = useTranslation()
 
     return (
-        <div id="printable-receipt" className="w-[80mm] mx-auto bg-white text-slate-900 p-4 text-sm">
-            <div className="text-center mb-3">
+        // Lao sets vowel marks above AND below the baseline, so the tight
+        // leading that suits Latin crushes them into the line above and below.
+        // Relaxed leading is what stops the slip reading as a solid block.
+        <div id="printable-receipt" className="w-[80mm] mx-auto bg-white text-slate-900 px-4 py-5 text-sm leading-relaxed">
+            <div className="text-center mb-4">
                 {settings?.shopLogo && (
                     // Thermal heads are one-bit: a colour photo dithers into grey
                     // mush and eats paper. Forced to greyscale at high contrast so
@@ -101,7 +98,7 @@ export function BillReceipt({ data, settings }: { data: ReceiptData; settings: a
                 {settings?.shopPhone && <p className="text-xs">Tel: {settings.shopPhone}</p>}
             </div>
 
-            <div className="text-center border-b border-dashed border-slate-200 pb-3 mb-3">
+            <div className="text-center border-b border-dashed border-slate-200 pb-4 mb-4">
                 <p className="text-[10px] uppercase tracking-wider opacity-50">{data.headingLabel}</p>
                 <p className="text-3xl font-black">{data.heading}</p>
                 {data.subheading && <p className="text-[10px] opacity-70 mt-0.5">{data.subheading}</p>}
@@ -127,13 +124,13 @@ export function BillReceipt({ data, settings }: { data: ReceiptData; settings: a
                 order belongs with the order, not centred in the shop's header
                 where it reads as part of the address. */}
             {(data.staffName || data.serverNames) && (
-                <div className="text-[11px] font-bold mb-2 space-y-0.5">
+                <div className="text-[11px] font-bold mb-3 space-y-1">
                     {data.staffName && <p>{t.pos_staff}: {data.staffName}</p>}
                     {data.serverNames && <p>{t.server_staff}: {data.serverNames}</p>}
                 </div>
             )}
 
-            <div className="space-y-3 mb-4">
+            <div className="space-y-3.5 mb-5">
                 {data.lines.map((item, i) => {
                     const { lao, english } = parseNames(item.name)
                     const extras = [
@@ -148,13 +145,15 @@ export function BillReceipt({ data, settings }: { data: ReceiptData; settings: a
                     ].filter(Boolean)
 
                     return (
-                        <div key={i} className="flex flex-col leading-tight">
-                            <div className="flex justify-between font-black items-start">
-                                <span className="flex-1 mr-2">{lao} x{item.quantity}</span>
+                        <div key={i} className="flex flex-col">
+                            {/* gap-3, not a margin: justify-between alone lets a
+                                long Lao name run straight into its own price. */}
+                            <div className="flex justify-between items-start gap-3 font-black">
+                                <span className="flex-1">{lao} x{item.quantity}</span>
                                 <span className="whitespace-nowrap">{formatTHB(item.total)}</span>
                             </div>
                             {english && (
-                                <div className="text-[10px] text-slate-500 font-bold -mt-0.5 mb-1">{english}</div>
+                                <div className="text-[10px] text-slate-500 font-bold leading-snug">{english}</div>
                             )}
                             {extras.length > 0 && (
                                 <div className="text-[10px] opacity-70 italic">{extras.join(" - ")}</div>
@@ -179,33 +178,36 @@ export function BillReceipt({ data, settings }: { data: ReceiptData; settings: a
                 })}
             </div>
 
-            <div className="border-t border-dashed border-slate-300 pt-3 space-y-1">
-                <div className="flex justify-between opacity-70 text-[11px]">
+            <div className="border-t border-dashed border-slate-300 pt-4 space-y-2">
+                <div className="flex justify-between gap-4 opacity-70 text-[11px]">
                     <span>{t.subtotal_net}</span>
                     <span>{formatTHB(data.total - data.tax)}</span>
                 </div>
                 {(data.discount ?? 0) > 0 && (
-                    <div className="flex justify-between text-rose-600 font-bold text-[11px]">
+                    <div className="flex justify-between gap-4 text-rose-600 font-bold text-[11px]">
                         <span>{t.discount}</span>
                         <span>-{formatTHB(data.discount!)}</span>
                     </div>
                 )}
                 {data.tax > 0 && (
-                    <div className="flex justify-between opacity-70 text-[11px]">
+                    <div className="flex justify-between gap-4 opacity-70 text-[11px]">
                         <span>VAT ({settings?.taxRate ?? 0}%)</span>
                         <span>{formatTHB(data.tax)}</span>
                     </div>
                 )}
 
-                <div className="flex justify-between font-black text-xl mt-2 pt-2 border-t border-dashed border-slate-300">
+                {/* This is the row the printed slip showed as "ລວມທັງໝົດ฿50",
+                    label welded to amount, because justify-between guarantees
+                    no minimum space between two items that fill the width. */}
+                <div className="flex justify-between items-baseline gap-4 font-black text-xl mt-3 pt-3 border-t border-dashed border-slate-300">
                     <span>{t.total_caps}</span>
-                    <span>{formatTHB(data.total)}</span>
+                    <span className="whitespace-nowrap">{formatTHB(data.total)}</span>
                 </div>
 
                 {/* Requirement #17: the kip equivalent and the rate it was struck
                     at. On a settled bill this is the rate stored on the row. */}
                 {data.fxRateLAK ? (
-                    <div className="flex justify-between opacity-70 text-[11px]">
+                    <div className="flex justify-between gap-4 opacity-70 text-[11px]">
                         <span>1 ฿ = {data.fxRateLAK.toLocaleString("en-US")} ₭</span>
                         <span>{formatLAK(thbToLak(data.total, data.fxRateLAK))}</span>
                     </div>
@@ -217,12 +219,12 @@ export function BillReceipt({ data, settings }: { data: ReceiptData; settings: a
                 ) : null}
 
                 {data.paymentMethod === "CASH" && data.cashReceived != null && (
-                    <div className="mt-4 pt-2 border-t border-dashed border-slate-300 space-y-1">
-                        <div className="flex justify-between opacity-70 text-[11px]">
+                    <div className="mt-5 pt-3 border-t border-dashed border-slate-300 space-y-2">
+                        <div className="flex justify-between gap-4 opacity-70 text-[11px]">
                             <span>{t.cash_received}</span>
                             <span>{formatTHB(data.cashReceived)}</span>
                         </div>
-                        <div className="flex justify-between font-black text-lg text-emerald-700">
+                        <div className="flex justify-between gap-4 font-black text-lg text-emerald-700">
                             <span>{t.change}</span>
                             <span>{formatTHB(Math.max(0, data.cashReceived - data.total))}</span>
                         </div>
@@ -230,12 +232,12 @@ export function BillReceipt({ data, settings }: { data: ReceiptData; settings: a
                 )}
 
                 {(data.paid ?? 0) > 0 && (
-                    <div className="mt-4 pt-2 border-t border-dashed border-slate-300 space-y-1">
-                        <div className="flex justify-between opacity-70 text-[11px]">
+                    <div className="mt-5 pt-3 border-t border-dashed border-slate-300 space-y-2">
+                        <div className="flex justify-between gap-4 opacity-70 text-[11px]">
                             <span>{t.amount_paid}</span>
                             <span>-{formatTHB(data.paid!)}</span>
                         </div>
-                        <div className="flex justify-between font-black text-lg">
+                        <div className="flex justify-between gap-4 font-black text-lg">
                             <span>{t.balance_due}</span>
                             <span>{formatTHB(data.balance ?? 0)}</span>
                         </div>
@@ -243,7 +245,7 @@ export function BillReceipt({ data, settings }: { data: ReceiptData; settings: a
                 )}
 
                 {data.qrCodeData && (data.balance ?? 0) > 0 && (
-                    <div className="text-center mt-4 pt-2 border-t border-dashed border-slate-300">
+                    <div className="text-center mt-5 pt-4 border-t border-dashed border-slate-300">
                         <p className="text-[10px] font-black">{t.scan_to_pay}</p>
                         <div className="inline-block mt-1">
                             <QRCodeSVG value={data.qrCodeData} size={150} level="H" />
@@ -252,7 +254,7 @@ export function BillReceipt({ data, settings }: { data: ReceiptData; settings: a
                     </div>
                 )}
 
-                <div className="text-center mt-4 pt-2 border-t border-dashed border-slate-200 text-[10px] opacity-70">
+                <div className="text-center mt-5 pt-4 border-t border-dashed border-slate-200 text-[10px] opacity-70">
                     <p className="uppercase tracking-widest font-black mb-0.5">{t.thank_you}</p>
                     {settings?.receiptFooter && (
                         <p className="whitespace-pre-wrap">{settings.receiptFooter}</p>

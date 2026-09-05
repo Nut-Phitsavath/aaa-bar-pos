@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { ManagerApproval } from "@/components/manager-approval"
+import { ReceiptDialog } from "@/components/receipt-dialog"
 import { QRCodeSVG } from "qrcode.react"
 import { Banknote, QrCode, Gift, Clock3, Printer, Percent, ArrowLeft, Check } from "lucide-react"
 import { formatTHB, formatLAK, thbToLak } from "@/lib/currency"
@@ -63,6 +64,11 @@ function SettleScreen() {
     const [selected, setSelected] = useState<Set<string>>(new Set())
     const [busy, setBusy] = useState(false)
     const [pendingQr, setPendingQr] = useState<{ paymentId: string; qr: string; amount: number } | null>(null)
+    const [receiptSrc, setReceiptSrc] = useState<string | null>(null)
+    // A settled bill returns to the floor plan - but only once the slip has
+    // been dealt with. Navigating straight away would unmount the dialog under
+    // the staff member; the old popup window survived it, a modal does not.
+    const [returnAfterReceipt, setReturnAfterReceipt] = useState(false)
 
     type Approvable = "DISCOUNT" | "COMP" | "PAY_LATER"
     const [approving, setApproving] = useState<Approvable | null>(null)
@@ -82,7 +88,7 @@ function SettleScreen() {
      * showing zero, and a tab wants one showing what is owed.
      */
     const printSettled = useCallback(() => {
-        window.open(`/receipt?session=`, "_blank", "width=520,height=760")
+        setReceiptSrc(`/receipt?session=${sessionId}`)
     }, [sessionId])
 
     const load = useCallback(async () => {
@@ -109,7 +115,7 @@ function SettleScreen() {
                     clearInterval(poll)
                     setPendingQr(null)
                     setSelected(new Set())
-                    if (data.closed) { printSettled(); toast.success(t.session_closed); router.push("/tables"); return }
+                    if (data.closed) { setReturnAfterReceipt(true); printSettled(); toast.success(t.session_closed); return }
                     toast.success(t.payment_confirmed)
                     await load()
                 }
@@ -139,9 +145,14 @@ function SettleScreen() {
             : bill.balance
 
     // Nothing typed and nothing selected: the row reads zero, because zero is
-    // what has been handed over. Pressing a tender button still settles the
-    // whole balance - SambaPOS does the same, and it keeps a full cash payment
-    // at one tap rather than making staff fill the field in first.
+    // what has been handed over.
+    //
+    // A tender is refused in this state rather than quietly charging the whole
+    // balance. Taking money the screen says is zero is how a bill gets marked
+    // paid for cash that never crossed the counter, and a QR generated this way
+    // asks the customer's bank for an amount nobody at the till ever read.
+    // "Pay all" fills the field in one tap, so settling in full is still two
+    // taps and the amount is on screen before it is taken.
     const untouched = entry === "" && selected.size === 0
     const shown = untouched ? 0 : tendering
 
@@ -171,7 +182,7 @@ function SettleScreen() {
             setSelected(new Set())
 
             if (method === "CASH") {
-                if (data.closed) { printSettled(); toast.success(t.session_closed); router.push("/tables"); return }
+                if (data.closed) { setReturnAfterReceipt(true); printSettled(); toast.success(t.session_closed); return }
                 toast.success(t.payment_confirmed)
                 await load()
                 return
@@ -219,9 +230,9 @@ function SettleScreen() {
             }
             setApproving(null); setDiscountOpen(false); setTabCustomerId("")
             if (approving === "PAY_LATER" || data.closed) {
+                setReturnAfterReceipt(true)
                 printSettled()
                 toast.success(approving === "PAY_LATER" ? t.pay_later : t.session_closed)
-                router.push("/tables")
                 return
             }
             await load()
@@ -234,7 +245,7 @@ function SettleScreen() {
             const res = await fetch(`/api/table-sessions/${bill.id}/print`, { method: "POST" })
             const data = await res.json().catch(() => ({}))
             if (data.qrError) toast.error(data.qrError)
-            window.open(`/receipt?session=${bill.id}`, "_blank", "width=520,height=760")
+            setReceiptSrc(`/receipt?session=${bill.id}`)
             await load()
         } finally { setBusy(false) }
     }
@@ -373,6 +384,12 @@ function SettleScreen() {
                         </span>
                     </div>
                     <div className="flex items-baseline justify-end gap-3 mt-1.5 text-xs">
+                        {/* The tenders are greyed out until this row says
+                            something. Without a line saying why, a disabled
+                            Cash button is just a till that appears broken. */}
+                        {untouched && (
+                            <span className="me-auto font-bold text-amber-700">{t.enter_amount_received}</span>
+                        )}
                         {/* Say "orders" outright: a bare count next to an amount
                             reads as a quantity of something. */}
                         {selected.size > 0 && entry === "" && (
@@ -429,7 +446,7 @@ function SettleScreen() {
             <aside className="w-[180px] flex flex-col gap-px shrink-0">
                 <button
                     onClick={() => takePayment("CASH")}
-                    disabled={busy || bill.balance <= 0}
+                    disabled={busy || bill.balance <= 0 || untouched}
                     className="flex-[2] bg-emerald-600 text-white hover:bg-emerald-700 font-black text-lg flex flex-col items-center justify-center gap-1.5 transition-colors disabled:opacity-40 disabled:pointer-events-none"
                 >
                     <Banknote className="w-7 h-7" />
@@ -437,7 +454,7 @@ function SettleScreen() {
                 </button>
                 <button
                     onClick={() => takePayment("ONEPAY")}
-                    disabled={busy || bill.balance <= 0}
+                    disabled={busy || bill.balance <= 0 || untouched}
                     className="flex-[2] bg-slate-900 text-white hover:bg-slate-800 font-black text-lg flex flex-col items-center justify-center gap-1.5 transition-colors disabled:opacity-40 disabled:pointer-events-none"
                 >
                     <QrCode className="w-7 h-7" />
@@ -566,6 +583,17 @@ function SettleScreen() {
                 error={approvalError}
                 onCancel={() => { setApproving(null); setApprovalError(null); setTabCustomerId("") }}
                 onApprove={runApproved}
+            />
+
+            {/* Over the till, not in a second window. Closing it is what returns
+                to the floor plan on a settled bill, so the slip is never pulled
+                out from under whoever is reading it. */}
+            <ReceiptDialog
+                src={receiptSrc}
+                onClose={() => {
+                    setReceiptSrc(null)
+                    if (returnAfterReceipt) router.push("/tables")
+                }}
             />
         </div>
     )

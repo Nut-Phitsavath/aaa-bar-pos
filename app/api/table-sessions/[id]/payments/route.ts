@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { requireOpenShift } from '@/lib/shift-guard'
 import { getSessionUser } from '@/lib/auth'
 import { sessionTotal } from '@/lib/sessions'
 import { balanceOf, canAcceptPayment, billTotalOf } from '@/lib/payments'
@@ -34,6 +35,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     try {
         const { id } = await params
         const { method, amount } = await request.json()
+
+        // Money taken outside a shift lands in no drawer count.
+        const currentShift = await prisma.shift.findFirst({ where: { status: 'OPEN' } })
+        const shiftCheck = requireOpenShift(currentShift)
+        if (!shiftCheck.ok) {
+            return NextResponse.json({ error: shiftCheck.reason }, { status: 409 })
+        }
 
         const user = await getSessionUser()
         if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })

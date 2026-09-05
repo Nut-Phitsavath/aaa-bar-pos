@@ -6,9 +6,11 @@ import { useTranslation } from "@/hooks/use-translation"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { Users, Clock, Receipt, ShoppingCart } from "lucide-react"
+import { useShift } from "@/components/shift-provider"
+import { Users, Clock, Receipt, ShoppingCart, AlertTriangle } from "lucide-react"
 import { formatTHB } from "@/lib/currency"
 import { formatDuration } from "@/lib/sessions"
+import { notify } from "@/components/ui/sonner"
 
 type TableWithSession = {
   id: string
@@ -31,6 +33,7 @@ const POLL_MS = 5000
 
 export default function TablesPage() {
   const { t } = useTranslation()
+  const { status: shiftStatus } = useShift()
   const router = useRouter()
   const [tables, setTables] = useState<TableWithSession[]>([])
   const [area, setArea] = useState("ALL")
@@ -109,6 +112,12 @@ export default function TablesPage() {
   }, [t])
 
   const openTable = async (table: TableWithSession) => {
+    // The API refuses this too - this is so staff read why on the screen they
+    // are looking at, rather than tapping a table that silently does nothing.
+    if (shiftStatus !== "OPEN") {
+      notify.warn(t.please_open_shift_first)
+      return
+    }
     // Server first, then table, then menu - the order the bar actually works
     // in. Blocking here rather than at Send means a round can never get as far
     // as being keyed with nobody to attribute it to.
@@ -171,6 +180,22 @@ export default function TablesPage() {
             {t.walk_in_sale}
           </Button>
         </div>
+
+        {/* Read before anyone taps, not after. A table that silently refuses to
+            open reads as a broken till; this says the till is fine and the
+            night has not been started yet. */}
+        {shiftStatus === "CLOSED" && (
+          <div className="mx-4 md:mx-6 mb-3 flex flex-wrap items-center gap-3 rounded-xl border-2 border-amber-300 bg-amber-50 px-4 py-3">
+            <AlertTriangle className="w-5 h-5 text-amber-700 shrink-0" />
+            <p className="font-bold text-amber-900">{t.please_open_shift_first}</p>
+            <Button
+              className="ms-auto h-11 bg-amber-600 hover:bg-amber-700 text-white font-bold"
+              onClick={() => router.push("/shifts")}
+            >
+              {t.open_shift}
+            </Button>
+          </div>
+        )}
 
         {/* Step 1 of the flow, and impossible to miss. Until a server is
             picked no table opens, so this is not a setting tucked in a corner -

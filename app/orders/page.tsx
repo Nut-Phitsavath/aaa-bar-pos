@@ -12,6 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { Header } from "@/components/header"
+import { ReceiptDialog } from "@/components/receipt-dialog"
 import { useTranslation } from "@/hooks/use-translation"
 import { APP_NAME } from "@/lib/shop"
 import { formatLongDate } from "@/lib/date"
@@ -59,6 +60,7 @@ export default function ActiveOrdersPage() {
     const [printingOrder, setPrintingOrder] = useState<Order | null>(null)
     const [cancellingOrder, setCancellingOrder] = useState<Order | null>(null)
     const [cancelReason, setCancelReason] = useState("")
+    const [receiptSrc, setReceiptSrc] = useState<string | null>(null)
     const [isProcessing, setIsProcessing] = useState(false)
     const [selectedDate, setSelectedDate] = useState<Date>(new Date())
     const [expandedOrderId, setExpandedOrderId] = useState<string | null>(null)
@@ -337,7 +339,7 @@ export default function ActiveOrdersPage() {
                                                             variant="outline"
                                                             size="sm"
                                                             className="h-8 px-3 font-bold text-xs border-blue-200 text-blue-600 hover:bg-blue-50"
-                                                            onClick={(e) => { e.stopPropagation(); window.open(`/receipt?id=${order.id}`, '_blank', 'width=450,height=600'); }}
+                                                            onClick={(e) => { e.stopPropagation(); setReceiptSrc(`/receipt?id=${order.id}`); }}
                                                         >
                                                             <Printer className="w-3.5 h-3.5 mr-1" />
                                                             {t.print}
@@ -501,6 +503,7 @@ export default function ActiveOrdersPage() {
                 )}
             </div>
 
+            <ReceiptDialog src={receiptSrc} onClose={() => setReceiptSrc(null)} />
         </div>
     )
 }
