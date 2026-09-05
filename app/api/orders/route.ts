@@ -5,6 +5,7 @@ import { cookies } from 'next/headers'
 import { calculateInclusiveTax } from '@/lib/currency'
 import { promoBlocker, promoDiscountFor } from '@/lib/promotions'
 import { decrementStock } from '@/lib/stock'
+import { requireOpenShift } from '@/lib/shift-guard'
 
 // Force dynamic to prevent caching issues with Orders
 export const dynamic = 'force-dynamic'
@@ -35,6 +36,24 @@ export async function POST(request: Request) {
                     userId = sessionUser.id
                 }
             } catch (e) { }
+        }
+
+        // 0b. No shift, no sale.
+        //
+        // This used to be a single `if` on the counter's payment button, which
+        // the table flow walked straight past because it never presses that
+        // button - so a whole night could be served and paid for with every
+        // order carrying shiftId null and the cash counted by nobody.
+        //
+        // Cancelling is exempt: a round keyed just before the shift closed must
+        // still be voidable, and its own guard below already refuses to reach
+        // into a shift that is not the current one.
+        if (status !== 'CANCELLED') {
+            const currentShift = await prisma.shift.findFirst({ where: { status: 'OPEN' } })
+            const shiftCheck = requireOpenShift(currentShift)
+            if (!shiftCheck.ok) {
+                return NextResponse.json({ error: shiftCheck.reason }, { status: 409 })
+            }
         }
 
         // 1. Validate Items & VariationSizes
@@ -462,6 +481,21 @@ export async function POST(request: Request) {
                         }
                     }
                 }
+
+                // Stamp the lines too, so a counter cancellation lands in the
+                // void audit report alongside a table void (req #24) instead of
+                // being invisible to it. The free-text reason staff typed is
+                // kept as the note; the code is OTHER because this path has no
+                // picklist to choose from.
+                await tx.orderItem.updateMany({
+                    where: { orderId: id, voidedAt: null },
+                    data: {
+                        voidedAt: new Date(),
+                        voidedById: userId,
+                        voidReason: 'OTHER',
+                        voidNote: cancellationReason || null,
+                    },
+                })
 
                 // Mirror of the money-only block above. A SENT order never
                 // earned points and never reached the drawer, so reversing

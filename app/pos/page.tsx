@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo, useCallback, useRef, memo, Suspense } fro
 import { useRouter, useSearchParams } from "next/navigation"
 import { toast } from "sonner"
 import { TicketPanel, type TicketBill } from "@/components/pos/ticket-panel"
+import { ReceiptDialog } from "@/components/receipt-dialog"
 import { SessionBanner, type Waiter } from "@/components/session-banner"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -225,6 +226,7 @@ function POSPageInner() {
   const searchParams = useSearchParams()
   const sessionIdParam = searchParams.get("session")
   const [session, setSession] = useState<TicketBill | null>(null)
+  const [receiptSrc, setReceiptSrc] = useState<string | null>(null)
   const [waiters, setWaiters] = useState<Waiter[]>([])
   const [waiterId, setWaiterId] = useState("")
 
@@ -272,7 +274,7 @@ function POSPageInner() {
       if (!res.ok) { toast.error(data.error || "Failed"); return }
       // A dead line only costs the QR; the bill still prints and cash still works.
       if (data.qrError) toast.error(data.qrError)
-      window.open(`/receipt?session=${sessionIdParam}`, "_blank", "width=520,height=760")
+      setReceiptSrc(`/receipt?session=${sessionIdParam}`)
       await loadSession()
     } finally {
       setIsProcessing(false)
@@ -1418,6 +1420,7 @@ function POSPageInner() {
           onRemove={(lineId) => setCart((prev) => prev.filter((i) => i.id !== lineId))}
           onSend={sendToTable}
           onPrint={printBill}
+          onVoided={loadSession}
           busy={isProcessing}
         />
       )}
@@ -1632,9 +1635,7 @@ function POSPageInner() {
                 <Button
                   variant="outline"
                   className="h-14 rounded-2xl border-2 text-base font-bold"
-                  onClick={() => {
-                    window.open(`/receipt?id=${lastOrderInfo.id}&mode=double`, '_blank')
-                  }}
+                  onClick={() => setReceiptSrc(`/receipt?id=${lastOrderInfo.id}`)}
                 >
                   <Printer className="w-5 h-5 mr-3" />
                   {t.receipt}
@@ -2303,6 +2304,8 @@ function POSPageInner() {
             imageUrl={productToCustomize.image}
           />
         )}
+
+        <ReceiptDialog src={receiptSrc} onClose={() => setReceiptSrc(null)} />
       </div>
       </div>
     </div>

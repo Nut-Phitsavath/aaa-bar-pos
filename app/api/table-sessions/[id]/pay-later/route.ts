@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { requireOpenShift } from '@/lib/shift-guard'
 import { getSessionUser } from '@/lib/auth'
 import { verifyManager } from '@/lib/manager-auth'
 import { sessionTotal } from '@/lib/sessions'
@@ -24,6 +25,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     try {
         const { id } = await params
         const { customerId, managerUsername, managerPin } = await request.json()
+
+        // A tab outside a shift lands in no drawer count.
+        const currentShift = await prisma.shift.findFirst({ where: { status: 'OPEN' } })
+        const shiftCheck = requireOpenShift(currentShift)
+        if (!shiftCheck.ok) {
+            return NextResponse.json({ error: shiftCheck.reason }, { status: 409 })
+        }
 
         const user = await getSessionUser()
         if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })

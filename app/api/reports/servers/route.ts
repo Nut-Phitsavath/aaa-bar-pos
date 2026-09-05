@@ -40,7 +40,11 @@ export async function GET(request: Request) {
             select: {
                 total: true, status: true, discount: true, sessionId: true,
                 waiter: { select: { id: true, name: true } },
-                items: { select: { quantity: true } }
+                // voidedAt/total per line, because voids are counted from the
+                // lines now: a round can lose one drink and survive, and a
+                // fully struck round has had its own total recomputed to zero,
+                // so reading order.total would report every void as worth 0.
+                items: { select: { quantity: true, voidedAt: true, total: true } }
             }
         })
 
@@ -59,13 +63,18 @@ export async function GET(request: Request) {
                 tables: new Set<string>(), voids: 0, voidValue: 0, discounts: 0,
             }
 
-            if (o.status === 'CANCELLED') {
-                row.voids += 1
-                row.voidValue += o.total
-            } else if (o.status === 'COMPLETED') {
+            // Voids are per line and independent of the order's own status, so
+            // one drink coming back off an otherwise good round still counts
+            // against the server who carried it (req #23).
+            const struck = o.items.filter((i) => i.voidedAt)
+            row.voids += struck.length
+            row.voidValue += struck.reduce((n, i) => n + (i.total || 0), 0)
+
+            if (o.status === 'COMPLETED') {
                 row.revenue += o.total
                 row.orders += 1
-                row.items += o.items.reduce((n, i) => n + i.quantity, 0)
+                // Only lines that survived were actually served and paid for.
+                row.items += o.items.filter((i) => !i.voidedAt).reduce((n, i) => n + i.quantity, 0)
                 row.discounts += o.discount ?? 0
                 if (o.sessionId) row.tables.add(o.sessionId)
             }

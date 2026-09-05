@@ -8,14 +8,12 @@ import Link from "next/link"
 import { useTranslation } from "@/hooks/use-translation"
 import { formatTHB } from "@/lib/currency"
 
-import { ShiftDialog } from "@/components/shift-dialog"
 import { useShift } from "@/components/shift-provider"
 
 export function Header({ title, children }: { title?: string, children?: React.ReactNode }) {
     const { t } = useTranslation()
     const [user, setUser] = useState<any>(null)
     const { status, activeShiftId, startCash, cashPayments } = useShift()
-    const [isShiftDialogOpen, setIsShiftDialogOpen] = useState(false)
 
     useEffect(() => {
         fetch('/api/auth/me')

@@ -25,6 +25,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
                         // walk-in cart.
                         items: {
                             include: {
+                                // Who struck this line, so the ticket can say so
+                                // without anyone opening the void report.
+                                voidedBy: { select: { name: true } },
                                 variationSize: {
                                     include: {
                                         variation: {

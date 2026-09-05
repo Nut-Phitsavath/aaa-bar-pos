@@ -9,6 +9,20 @@ import { BillReceipt, type ReceiptData } from "@/components/bill-receipt"
 import { useTranslation } from "@/hooks/use-translation"
 import { APP_NAME } from "@/lib/shop"
 
+/** One set of print rules, whether the slip is a page or inside the dialog. */
+const PRINT_CSS = `
+  @media print {
+    @page { margin: 0; size: 80mm auto; }
+    body { background: white !important; margin: 0 !important; padding: 0 !important; min-height: auto !important; }
+    #printable-receipt {
+      box-shadow: none !important; border: none !important;
+      width: 100% !important; max-width: 80mm !important;
+      padding: 2mm !important; margin: 0 auto !important;
+    }
+    button, a { display: none !important; }
+  }
+`
+
 const stamp = (iso: string) => {
     const d = new Date(iso)
     return `${d.toLocaleDateString("en-GB")} ${d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}`
@@ -27,6 +41,8 @@ function ReceiptContent() {
     const searchParams = useSearchParams()
     const orderId = searchParams.get("id")
     const sessionId = searchParams.get("session")
+    // Rendered inside the till's preview dialog: the slip alone, no page chrome.
+    const embed = searchParams.get("embed") === "1"
 
     const [data, setData] = useState<ReceiptData | null>(null)
     const [settings, setSettings] = useState<any>(null)
@@ -67,12 +83,6 @@ function ReceiptContent() {
                     paymentMethod: order.paymentMethod === "BANK_NOTE" ? "CASH" : order.paymentMethod,
                     cashReceived: order.cashReceived ?? null,
                 })
-                // A second job when asked, so a printer set to cut does it twice.
-                const mode = searchParams.get("mode")
-                setTimeout(() => {
-                    window.print()
-                    if (mode === "double") setTimeout(() => window.print(), 1000)
-                }, 500)
             })
             .catch((e) => { console.error(e); setError(e.message) })
         // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -93,7 +103,11 @@ function ReceiptContent() {
                 // nobody checks which round a drink came from.
                 const merged = new Map<string, any>()
                 for (const o of live) {
-                    for (const i of o.items) {
+                    // A round can survive while one of its lines was struck, so
+                    // filtering cancelled ORDERS is not enough - a voided line
+                    // would otherwise still be printed on, and charged for, a
+                    // bill whose total no longer includes it.
+                    for (const i of o.items.filter((x: any) => !x.voidedAt)) {
                         const unit = i.quantity > 0 ? i.total / i.quantity : 0
                         const key = `${i.name}::${unit}`
                         const at = merged.get(key)
@@ -135,7 +149,6 @@ function ReceiptContent() {
                     showUsd: bill.showUsd,
                     qrCodeData: qr?.qrCodeData ?? null,
                 })
-                setTimeout(() => window.print(), 500)
             })
             .catch((e) => { console.error(e); setError(e.message) })
         // Waits on settings so the VAT rate is known before the slip renders.
@@ -159,36 +172,48 @@ function ReceiptContent() {
         )
     }
 
+    // Shown inside the till's own preview dialog rather than as a page: the
+    // frame around it and the buttons under it belong to the dialog, so this
+    // renders the slip alone and nothing else.
+    if (embed) {
+        return (
+            <div className="bg-white">
+                <BillReceipt data={data} settings={settings} />
+                <style dangerouslySetInnerHTML={{ __html: PRINT_CSS }} />
+            </div>
+        )
+    }
+
     return (
         <div className="flex flex-col items-center min-h-screen bg-gray-200 py-12 px-4 print:bg-white print:p-0">
             <Card className="bg-white shadow-2xl border-none print:shadow-none print:p-0">
                 <BillReceipt data={data} settings={settings} />
             </Card>
 
+            {/* The slip is shown and then it waits. It used to fire the browser's
+                print dialog 500ms after loading, which meant a window nobody
+                asked for landed on top of a dialog nobody asked for - and on a
+                till with no printer attached there was nothing to do with it but
+                dismiss it. Printing is a decision the staff member makes. */}
             <div className="mt-8 flex gap-3 print:hidden">
-                <Button variant="outline" onClick={() => window.print()}>
-                    <Printer className="w-4 h-4 mr-2" />
-                    {t.re_print}
+                <Button
+                    onClick={() => window.print()}
+                    className="h-14 px-8 text-lg font-black bg-slate-900 hover:bg-slate-800"
+                >
+                    <Printer className="w-5 h-5 mr-2" />
+                    {t.print}
                 </Button>
-                <Button className="bg-amber-600 hover:bg-amber-700" onClick={() => window.close()}>
-                    <ArrowLeft className="w-4 h-4 mr-2" />
+                <Button
+                    variant="outline"
+                    onClick={() => window.close()}
+                    className="h-14 px-6 text-lg"
+                >
+                    <ArrowLeft className="w-5 h-5 mr-2" />
                     {t.close_and_back}
                 </Button>
             </div>
 
-            <style dangerouslySetInnerHTML={{
-                __html: `
-        @media print {
-          @page { margin: 0; size: 80mm auto; }
-          body { background: white !important; margin: 0 !important; padding: 0 !important; min-height: auto !important; }
-          #printable-receipt {
-            box-shadow: none !important; border: none !important;
-            width: 100% !important; max-width: 80mm !important;
-            padding: 2mm !important; margin: 0 auto !important;
-          }
-          button, a { display: none !important; }
-        }
-      ` }} />
+            <style dangerouslySetInnerHTML={{ __html: PRINT_CSS }} />
         </div>
     )
 }

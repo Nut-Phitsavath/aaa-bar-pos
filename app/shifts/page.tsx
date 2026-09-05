@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { useRouter } from "next/navigation"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { ArrowLeft, Calendar, ChevronRight, LogOut } from "lucide-react"
@@ -13,6 +14,7 @@ import { Input } from "@/components/ui/input"
 import { Header } from "@/components/header"
 import { useTranslation } from "@/hooks/use-translation"
 import { ShiftDialog } from "@/components/shift-dialog"
+import { ManagerApproval } from "@/components/manager-approval"
 
 interface Shift {
     id: string
@@ -34,8 +36,14 @@ export default function ShiftsPage() {
     const [shifts, setShifts] = useState<Shift[]>([])
     const [loading, setLoading] = useState(true)
     const [isEndShiftOpen, setIsEndShiftOpen] = useState(false)
+    const router = useRouter()
     const [actualCash, setActualCash] = useState("")
+    // Which tables are holding the close open. Empty until the server says so.
+    const [blocking, setBlocking] = useState<{ id: string; table: string; balance: number }[]>([])
     const [isProcessing, setIsProcessing] = useState(false)
+    // Counting the drawer out and declaring a variance is a manager's signature.
+    const [approving, setApproving] = useState(false)
+    const [approvalError, setApprovalError] = useState<string | null>(null)
     const [isShiftDialogOpen, setIsShiftDialogOpen] = useState(false)
 
     const activeShift = shifts.find(s => s.status === 'OPEN')
@@ -58,19 +66,44 @@ export default function ShiftsPage() {
         }
     }
 
-    const handleEndShift = async () => {
+    const handleEndShift = () => {
         if (!activeShift || !actualCash) return
+        setApprovalError(null)
+        setApproving(true)
+    }
+
+    const endApproved = async (creds: { managerUsername: string; managerPin: string }) => {
+        if (!activeShift) return
         setIsProcessing(true)
         try {
             const res = await fetch('/api/shifts', {
                 method: 'PUT',
                 body: JSON.stringify({
                     id: activeShift.id,
-                    actualCash: parseFloat(actualCash)
+                    actualCash: parseFloat(actualCash),
+                    ...creds,
                 }),
                 headers: { 'Content-Type': 'application/json' }
             })
+            if (res.status === 403 || res.status === 429) {
+                const err = await res.json().catch(() => ({}))
+                setApprovalError(err.error === 'TOO_MANY_ATTEMPTS' ? t.too_many_attempts : t.invalid_approval)
+                return
+            }
+            if (res.status === 409) {
+                // Live tables, not a bad PIN - close the approval so the list
+                // underneath is what the manager is looking at.
+                setApproving(false)
+                // Not "something went wrong": the shift is fine, there are just
+                // live tables. Name them so the manager can go and deal with
+                // each one instead of guessing what is holding the close.
+                const data = await res.json().catch(() => ({}))
+                setBlocking(Array.isArray(data.tables) ? data.tables : [])
+                return
+            }
             if (res.ok) {
+                setApproving(false)
+                setBlocking([])
                 setIsEndShiftOpen(false)
                 setActualCash("")
                 const channel = new BroadcastChannel("payment_channel")
@@ -239,6 +272,29 @@ export default function ShiftsPage() {
                                 {t.difference_label}: {formatCurrency(parseFloat(actualCash) - (activeShift.startCash + activeShift.cashPayments))}
                             </div>
                         )}
+
+                        {/* What is actually holding the close, each one a way in
+                            to go and deal with it. A refusal that does not say
+                            which table is the reason staff hunt the floor at 3am
+                            for something the till can already see. */}
+                        {blocking.length > 0 && (
+                            <div className="rounded-xl border-2 border-amber-300 bg-amber-50 p-3 space-y-2">
+                                <p className="text-sm font-bold text-amber-900">{t.tables_still_open}</p>
+                                {blocking.map((b) => (
+                                    <div key={b.id} className="flex items-center gap-3 text-sm">
+                                        <span className="font-bold text-slate-900">{b.table}</span>
+                                        <span className="tabular-nums text-slate-700">{formatCurrency(b.balance)}</span>
+                                        <Button
+                                            size="sm"
+                                            className="ms-auto h-9 bg-amber-600 hover:bg-amber-700 text-white"
+                                            onClick={() => router.push(`/pos/settle?session=${b.id}`)}
+                                        >
+                                            {t.settle_bill}
+                                        </Button>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
                     </div>
                     <DialogFooter>
                         <Button variant="outline" onClick={() => setIsEndShiftOpen(false)}>{t.cancel}</Button>
@@ -255,6 +311,16 @@ export default function ShiftsPage() {
             </Dialog>
 
             <ShiftDialog open={isShiftDialogOpen} onOpenChange={setIsShiftDialogOpen} />
+
+            <ManagerApproval
+                open={approving}
+                title={t.confirm_close_shift}
+                description={t.manager_closes_shift}
+                busy={isProcessing}
+                error={approvalError}
+                onCancel={() => { setApproving(false); setApprovalError(null) }}
+                onApprove={endApproved}
+            />
         </div>
     )
 }

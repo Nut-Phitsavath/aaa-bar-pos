@@ -5,6 +5,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { ManagerApproval } from "@/components/manager-approval"
 import { useShift } from "@/components/shift-provider"
 import { useTranslation } from "@/hooks/use-translation"
 import { notify } from "@/components/ui/sonner"
@@ -16,6 +17,11 @@ interface ShiftDialogProps {
 
 export function ShiftDialog({ open, onOpenChange }: ShiftDialogProps) {
     const [startCash, setStartCash] = useState("")
+    // The float set here is what every later count is measured against, so a
+    // manager signs for it - the same approval comps and tabs already use.
+    const [approving, setApproving] = useState(false)
+    const [approvalError, setApprovalError] = useState<string | null>(null)
+    const [busy, setBusy] = useState(false)
     const [userId, setUserId] = useState<string | null>(null)
     const { checkShiftStatus } = useShift()
     const { t } = useTranslation()
@@ -37,8 +43,15 @@ export function ShiftDialog({ open, onOpenChange }: ShiftDialogProps) {
         }
     }, [open])
 
-    const handleOpenShift = async () => {
+    const handleOpenShift = () => {
         if (!startCash) { notify.warn(t.please_enter_opening_cash); return }
+        setApprovalError(null)
+        setApproving(true)
+    }
+
+    const openApproved = async (creds: { managerUsername: string; managerPin: string }) => {
+        setBusy(true)
+        setApprovalError(null)
         try {
             const res = await fetch('/api/shifts', {
                 method: 'POST',
@@ -46,17 +59,29 @@ export function ShiftDialog({ open, onOpenChange }: ShiftDialogProps) {
                 body: JSON.stringify({
                     startCash: Number(startCash),
                     userId: userId,
-                    responsiblePerson: responsiblePerson
+                    responsiblePerson: responsiblePerson,
+                    ...creds,
                 })
             })
             if (res.ok) {
+                setApproving(false)
                 await checkShiftStatus() // Refresh context
                 onOpenChange(false)
-            } else {
-                const err = await res.json()
-                notify.error(err.error || t.open_shift_failed)
+                return
             }
-        } catch (e) { notify.error(t.open_shift_error) }
+            const err = await res.json().catch(() => ({}))
+            // A wrong PIN keeps the approval open to retry; anything else is a
+            // real failure and closes it rather than looking like a bad PIN.
+            if (res.status === 403 || res.status === 429) {
+                setApprovalError(err.error === 'TOO_MANY_ATTEMPTS' ? t.too_many_attempts : t.invalid_approval)
+                return
+            }
+            setApproving(false)
+            notify.error(err.error || t.open_shift_failed)
+        } catch (e) {
+            setApproving(false)
+            notify.error(t.open_shift_error)
+        } finally { setBusy(false) }
     }
 
     return (
@@ -98,6 +123,16 @@ export function ShiftDialog({ open, onOpenChange }: ShiftDialogProps) {
                     </Button>
                 </div>
             </DialogContent>
+
+            <ManagerApproval
+                open={approving}
+                title={t.open_shift}
+                description={t.manager_opens_shift}
+                busy={busy}
+                error={approvalError}
+                onCancel={() => { setApproving(false); setApprovalError(null) }}
+                onApprove={openApproved}
+            />
         </Dialog>
     )
 }
