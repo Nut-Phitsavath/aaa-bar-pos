@@ -34,6 +34,7 @@ type ZReport = {
 const METHOD_ICON: Record<string, any> = {
     CASH: Banknote,
     ONEPAY: QrCode,
+    TRANSFER: QrCode,
     OWNER_VIP: Gift,
 }
 
@@ -64,7 +65,11 @@ export function ZReport() {
     useEffect(() => { load() }, [load])
 
     const methodLabel = (m: string) =>
-        m === "CASH" ? t.pay_cash : m === "ONEPAY" ? t.pay_onepay : m === "OWNER_VIP" ? t.owner_vip : m
+        m === "CASH" ? t.pay_cash
+            : m === "ONEPAY" ? t.pay_onepay
+                : m === "TRANSFER" ? t.pay_transfer
+                    : m === "OWNER_VIP" ? t.owner_vip
+                        : m
 
     return (
         <div className="space-y-4">

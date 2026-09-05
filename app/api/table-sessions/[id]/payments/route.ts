@@ -46,7 +46,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         const user = await getSessionUser()
         if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-        if (!['CASH', 'ONEPAY'].includes(method)) {
+        // TRANSFER is the shop's own bank QR: no API, no webhook, so it counts
+        // the moment a staff member says the money landed - the same trust the
+        // walk-in till has always placed in that method. OnePay is the only one
+        // that waits, because BCEL is the only one that can answer.
+        if (!['CASH', 'ONEPAY', 'TRANSFER'].includes(method)) {
             // OWNER_VIP arrives with P2b and needs a manager approval it does
             // not have yet; refusing it here is better than booking a free
             // table nobody signed off.
@@ -85,7 +89,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
                     session: { connect: { id } },
                     method,
                     amount: applied,
-                    paymentStatus: method === 'CASH' ? 'PAID' : 'PENDING',
+                    paymentStatus: method === 'ONEPAY' ? 'PENDING' : 'PAID',
                     user: { connect: { id: user.id } },
                     ...(openShift ? { shift: { connect: { id: openShift.id } } } : {}),
                 }
@@ -102,8 +106,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
             return created
         })
 
-        // Cash may have settled the bill outright.
-        const settle = method === 'CASH'
+        // Anything that counts on the spot may have settled the bill outright.
+        // OnePay cannot: it is PENDING until the bank says otherwise, and the
+        // status poll closes the bill when it does.
+        const settle = method !== 'ONEPAY'
             ? await closeSessionIfSettled(id)
             : { closed: false }
 

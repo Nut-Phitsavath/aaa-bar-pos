@@ -2091,8 +2091,13 @@ function POSPageInner() {
                               {t.pay_exact}
                             </Button>
                           </div>
-                          <div className="grid grid-cols-4 gap-1.5">
-                            {[500, 1000, 2000, 5000, 10000, 20000, 50000, 100000].map(val => (
+                          {/* Baht notes, because the bill is in baht and this
+                              field is subtracted from a baht total. These were
+                              kip notes - 10,000 among them - so one tap on an
+                              80 baht sale recorded 10,000 baht received and
+                              offered 9,920 in change. */}
+                          <div className="grid grid-cols-3 gap-1.5">
+                            {[20, 50, 100, 200, 500, 1000].map(val => (
                               <Button
                                 key={val}
                                 variant="outline"
