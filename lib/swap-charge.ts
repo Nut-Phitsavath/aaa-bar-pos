@@ -12,6 +12,65 @@
  */
 export const EXCHANGE_CHARGE = 'ສ່ວນຕ່າງການແລກປ່ຽນ (Exchange difference)'
 
+/** The recipe rule the order path uses: the menu's base lines plus this size's. */
+async function recipeFor(tx: any, variationSizeId: string) {
+    const vs = await tx.variationSize.findUnique({
+        where: { id: variationSizeId },
+        include: { variation: { include: { menu: true } } },
+    })
+    if (!vs?.variation?.menu) return []
+    return tx.recipe.findMany({
+        where: {
+            OR: [
+                { menuId: vs.variation.menu.id, variationSizeId: null },
+                { variationSizeId },
+            ],
+        },
+    })
+}
+
+/**
+ * Undo one exchange: its stock movement backwards, its charge struck, the row
+ * marked reversed.
+ *
+ * Shared by the undo button and by voiding, because a struck package line has
+ * to take its exchanges down with it. Voiding used to reverse only the recipe,
+ * which on an exchanged set put back Heinekens that a swap had already
+ * returned and left the Beer Lao that replaced them off the shelf - the count
+ * ended the night wrong in two directions at once.
+ */
+export async function reverseSwap(
+    tx: any,
+    swap: { id: string; chargeItemId: string | null; lines: any[] },
+    userId: string,
+    decrementStock: (tx: any, ingredientId: string, quantity: number) => Promise<void>,
+): Promise<void> {
+    for (const line of swap.lines) {
+        if (!line.variationSizeId) continue
+        const sign = line.direction === 'OUT' ? 1 : -1
+        for (const r of await recipeFor(tx, line.variationSizeId)) {
+            await decrementStock(tx, r.ingredientId, sign * r.quantity * line.quantity)
+        }
+    }
+
+    if (swap.chargeItemId) {
+        await tx.orderItem.updateMany({
+            where: { id: swap.chargeItemId, voidedAt: null },
+            data: {
+                voidedAt: new Date(),
+                voidedById: userId,
+                voidReason: 'OTHER',
+                voidNote: 'Exchange reversed',
+            },
+        })
+    }
+
+    await tx.packageSwap.update({
+        where: { id: swap.id },
+        data: { reversedAt: new Date(), reversedById: userId },
+    })
+}
+
 /**
  * A round is worth what its surviving lines are worth.
  *

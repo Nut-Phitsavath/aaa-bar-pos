@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getSessionUser } from '@/lib/auth'
 import { decrementStock } from '@/lib/stock'
+import { reverseSwap } from '@/lib/swap-charge'
 import { isVoidReason, canVoid, totalsFrom, allVoided } from '@/lib/voids'
 
 export const dynamic = 'force-dynamic'
@@ -95,10 +96,26 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
                 }
             }
 
-            // What the round is worth now that those lines have stopped counting.
-            const after = order.items.map((i) =>
-                targets.some((t) => t.id === i.id) ? { ...i, voidedAt } : i
-            )
+            // A struck package takes its exchanges down with it. Reversing only
+            // the recipe would put back Heinekens a swap had already returned
+            // and leave the Beer Lao that replaced them off the shelf - the
+            // count ends the night wrong in two directions at once - and would
+            // leave the customer charged for the difference on a round that no
+            // longer exists.
+            const swaps = await tx.packageSwap.findMany({
+                where: { orderItemId: { in: targets.map((i) => i.id) }, reversedAt: null },
+                include: { lines: true },
+            })
+            for (const swap of swaps) {
+                await reverseSwap(tx, swap, user.id, decrementStock)
+            }
+
+            // What the round is worth now that those lines have stopped
+            // counting. Re-read rather than patched in memory: striking a
+            // package also strikes the exchange charges underneath it, and
+            // those are rows this handler never targeted - computing from the
+            // list it started with would leave the customer paying them.
+            const after = await tx.orderItem.findMany({ where: { orderId: id } })
             const totals = totalsFrom(after)
 
             return tx.order.update({

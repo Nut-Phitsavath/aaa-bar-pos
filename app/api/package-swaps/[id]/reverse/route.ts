@@ -3,26 +3,9 @@ import { prisma } from '@/lib/prisma'
 import { getSessionUser } from '@/lib/auth'
 import { requireOpenShift } from '@/lib/shift-guard'
 import { decrementStock } from '@/lib/stock'
-import { recomputeOrderTotal } from '@/lib/swap-charge'
+import { recomputeOrderTotal, reverseSwap } from '@/lib/swap-charge'
 
 export const dynamic = 'force-dynamic'
-
-/** The recipe rule the order path uses: the menu's base lines plus this size's. */
-async function recipeFor(tx: any, variationSizeId: string) {
-    const vs = await tx.variationSize.findUnique({
-        where: { id: variationSizeId },
-        include: { variation: { include: { menu: true } } },
-    })
-    if (!vs?.variation?.menu) return []
-    return tx.recipe.findMany({
-        where: {
-            OR: [
-                { menuId: vs.variation.menu.id, variationSizeId: null },
-                { variationSizeId },
-            ],
-        },
-    })
-}
 
 /**
  * Undo an exchange.
@@ -70,35 +53,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         }
 
         await prisma.$transaction(async (tx) => {
-            // Exactly the swap's stock movement, backwards: what it put back on
-            // the shelf comes off again, what it took comes back.
-            for (const line of swap.lines) {
-                if (!line.variationSizeId) continue
-                const sign = line.direction === 'OUT' ? 1 : -1
-                for (const r of await recipeFor(tx, line.variationSizeId)) {
-                    await decrementStock(tx, r.ingredientId, sign * r.quantity * line.quantity)
-                }
-            }
-
-            // The charge is struck rather than deleted, so the bill still shows
-            // that something was charged and then taken back off.
-            if (swap.chargeItemId) {
-                await tx.orderItem.updateMany({
-                    where: { id: swap.chargeItemId, voidedAt: null },
-                    data: {
-                        voidedAt: new Date(),
-                        voidedById: user.id,
-                        voidReason: 'OTHER',
-                        voidNote: 'Exchange reversed',
-                    },
-                })
-                await recomputeOrderTotal(tx, swap.orderItem.order.id)
-            }
-
-            await tx.packageSwap.update({
-                where: { id: swap.id },
-                data: { reversedAt: new Date(), reversedById: user.id },
-            })
+            await reverseSwap(tx, swap, user.id, decrementStock)
+            // The charge line has stopped counting, so the round is worth less.
+            if (swap.chargeItemId) await recomputeOrderTotal(tx, swap.orderItem.order.id)
         })
 
         return NextResponse.json({ reversed: true })
