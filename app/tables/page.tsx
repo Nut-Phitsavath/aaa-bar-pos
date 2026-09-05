@@ -7,6 +7,7 @@ import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { useShift } from "@/components/shift-provider"
+import { ShiftDialog } from "@/components/shift-dialog"
 import { Users, Clock, Receipt, ShoppingCart, AlertTriangle } from "lucide-react"
 import { formatTHB } from "@/lib/currency"
 import { formatDuration } from "@/lib/sessions"
@@ -43,6 +44,7 @@ export default function TablesPage() {
   const [waiters, setWaiters] = useState<{ id: string; name: string }[]>([])
   const [waiterId, setWaiterId] = useState("")
   const [serverPrompt, setServerPrompt] = useState(false)
+  const [shiftDialogOpen, setShiftDialogOpen] = useState(false)
 
   // The server who carried the order to the till. Remembered per device: one
   // server works a section all night, so re-picking every table is noise.
@@ -190,7 +192,7 @@ export default function TablesPage() {
             <p className="font-bold text-amber-900">{t.please_open_shift_first}</p>
             <Button
               className="ms-auto h-11 bg-amber-600 hover:bg-amber-700 text-white font-bold"
-              onClick={() => router.push("/shifts")}
+              onClick={() => setShiftDialogOpen(true)}
             >
               {t.open_shift}
             </Button>
@@ -399,6 +401,10 @@ export default function TablesPage() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* The same dialog the sidebar's cash widget opens. A prompt where you
+          are blocked, not a trip to another page to press a second button. */}
+      <ShiftDialog open={shiftDialogOpen} onOpenChange={setShiftDialogOpen} />
     </div>
   )
 }

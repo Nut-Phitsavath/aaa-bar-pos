@@ -14,6 +14,7 @@ import { Input } from "@/components/ui/input"
 import { Header } from "@/components/header"
 import { useTranslation } from "@/hooks/use-translation"
 import { ShiftDialog } from "@/components/shift-dialog"
+import { ManagerApproval } from "@/components/manager-approval"
 
 interface Shift {
     id: string
@@ -40,6 +41,9 @@ export default function ShiftsPage() {
     // Which tables are holding the close open. Empty until the server says so.
     const [blocking, setBlocking] = useState<{ id: string; table: string; balance: number }[]>([])
     const [isProcessing, setIsProcessing] = useState(false)
+    // Counting the drawer out and declaring a variance is a manager's signature.
+    const [approving, setApproving] = useState(false)
+    const [approvalError, setApprovalError] = useState<string | null>(null)
     const [isShiftDialogOpen, setIsShiftDialogOpen] = useState(false)
 
     const activeShift = shifts.find(s => s.status === 'OPEN')
@@ -62,19 +66,34 @@ export default function ShiftsPage() {
         }
     }
 
-    const handleEndShift = async () => {
+    const handleEndShift = () => {
         if (!activeShift || !actualCash) return
+        setApprovalError(null)
+        setApproving(true)
+    }
+
+    const endApproved = async (creds: { managerUsername: string; managerPin: string }) => {
+        if (!activeShift) return
         setIsProcessing(true)
         try {
             const res = await fetch('/api/shifts', {
                 method: 'PUT',
                 body: JSON.stringify({
                     id: activeShift.id,
-                    actualCash: parseFloat(actualCash)
+                    actualCash: parseFloat(actualCash),
+                    ...creds,
                 }),
                 headers: { 'Content-Type': 'application/json' }
             })
+            if (res.status === 403 || res.status === 429) {
+                const err = await res.json().catch(() => ({}))
+                setApprovalError(err.error === 'TOO_MANY_ATTEMPTS' ? t.too_many_attempts : t.invalid_approval)
+                return
+            }
             if (res.status === 409) {
+                // Live tables, not a bad PIN - close the approval so the list
+                // underneath is what the manager is looking at.
+                setApproving(false)
                 // Not "something went wrong": the shift is fine, there are just
                 // live tables. Name them so the manager can go and deal with
                 // each one instead of guessing what is holding the close.
@@ -83,6 +102,7 @@ export default function ShiftsPage() {
                 return
             }
             if (res.ok) {
+                setApproving(false)
                 setBlocking([])
                 setIsEndShiftOpen(false)
                 setActualCash("")
@@ -291,6 +311,16 @@ export default function ShiftsPage() {
             </Dialog>
 
             <ShiftDialog open={isShiftDialogOpen} onOpenChange={setIsShiftDialogOpen} />
+
+            <ManagerApproval
+                open={approving}
+                title={t.confirm_close_shift}
+                description={t.manager_closes_shift}
+                busy={isProcessing}
+                error={approvalError}
+                onCancel={() => { setApproving(false); setApprovalError(null) }}
+                onApprove={endApproved}
+            />
         </div>
     )
 }

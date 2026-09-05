@@ -5,6 +5,7 @@ import { existsSync } from "fs"
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { canCloseShift } from '@/lib/shift-guard'
+import { verifyManager } from '@/lib/manager-auth'
 import { sessionTotal } from '@/lib/sessions'
 import { billTotalOf, balanceOf } from '@/lib/payments'
 
@@ -38,6 +39,18 @@ export async function POST(request: Request) {
 
         if (openShift) {
             return NextResponse.json({ error: "There is already an open shift" }, { status: 400 })
+        }
+
+        // Starting the night sets the float every later count is measured
+        // against, so it is a manager's decision - the same gate comps and tabs
+        // already use. SambaPOS puts work periods behind a permission for the
+        // same reason.
+        const approval = await verifyManager(body.managerUsername, body.managerPin)
+        if (!approval.ok) {
+            return NextResponse.json(
+                { error: approval.reason, retryInMs: approval.retryInMs },
+                { status: approval.reason === 'TOO_MANY_ATTEMPTS' ? 429 : 403 }
+            )
         }
 
         const shift = await prisma.shift.create({
@@ -81,9 +94,20 @@ function backupAfterShiftClose() {
 export async function PUT(request: Request) {
     try {
         const body = await request.json()
-        const { id, actualCash, responsiblePerson } = body
+        const { id, actualCash, responsiblePerson, managerUsername, managerPin } = body
 
         if (!id) return NextResponse.json({ error: "Shift ID required" }, { status: 400 })
+
+        // Closing is where the drawer is reconciled and a variance is declared.
+        // Checked before the open-tables guard so a staff member cannot use the
+        // refusal to enumerate the floor without approval.
+        const approval = await verifyManager(managerUsername, managerPin)
+        if (!approval.ok) {
+            return NextResponse.json(
+                { error: approval.reason, retryInMs: approval.retryInMs },
+                { status: approval.reason === 'TOO_MANY_ATTEMPTS' ? 429 : 403 }
+            )
+        }
 
         const shift = await prisma.shift.findUnique({ where: { id } })
         if (!shift) return NextResponse.json({ error: "Shift not found" }, { status: 404 })
