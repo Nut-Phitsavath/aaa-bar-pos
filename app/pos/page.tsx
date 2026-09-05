@@ -1371,19 +1371,19 @@ function POSPageInner() {
       <div className="flex-1 flex min-h-0">
       {/* Left Side - Menu & Header */}
       <div className="flex-1 flex flex-col min-w-0 bg-background border-r">
-        {/* On a table, the walk-in counter number means nothing - what the
-            staff member needs to see is which table they are keying into. */}
-        {/* The banner above already names the table, so on a table screen this
-            shows nothing rather than repeating it - and never the walk-in
-            counter number, which means nothing here. Branches on the URL param
-            because that is known synchronously, so there is no flash. */}
-        <Header title={t.pos}>
-          {sessionIdParam ? null : (
+        {/* Only the walk-in counter gets a page header, and only because it
+            carries the order number. On a table the banner above already says
+            which table this is, so this row was the word "POS" and nothing
+            else - a duplicate label costing a row of menu on a till screen
+            where vertical space is what runs out first. Branches on the URL
+            param because that is known synchronously, so there is no flash. */}
+        {!sessionIdParam && (
+          <Header title={t.pos}>
             <Badge variant="secondary" className="px-3 py-1 text-lg font-mono bg-amber-50 text-amber-900 border-amber-200">
               {orderNumber ? `Order No. ${orderNumber.replace('No. ', '')}` : "Order No. --"}
             </Badge>
-          )}
-        </Header>
+          </Header>
+        )}
 
         {/* Search */}
         <div className="p-4 border-b bg-white">
