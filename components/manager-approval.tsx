@@ -6,7 +6,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { ShieldCheck } from "lucide-react"
+import { ShieldCheck, Eye, EyeOff } from "lucide-react"
 
 type Manager = { id: string; name: string; username: string }
 
@@ -29,6 +29,7 @@ export function ManagerApproval({
     onApprove,
     busy,
     error,
+    children,
 }: {
     open: boolean
     title: string
@@ -37,15 +38,22 @@ export function ManagerApproval({
     onApprove: (credentials: { managerUsername: string; managerPin: string }) => void
     busy?: boolean
     error?: string | null
+    /** Anything the approval also has to capture - a void or refund reason - so
+     *  the reason and the PIN are one decision rather than two dialogs. */
+    children?: React.ReactNode
 }) {
     const { t } = useTranslation()
     const [managers, setManagers] = useState<Manager[]>([])
     const [username, setUsername] = useState("")
     const [pin, setPin] = useState("")
+    // A PIN typed on a shared till gets mistyped, and with no way to look the
+    // only recovery is to clear it and start over.
+    const [reveal, setReveal] = useState(false)
 
     useEffect(() => {
         if (!open) return
         setPin("")
+        setReveal(false)
         fetch("/api/auth/managers")
             .then((r) => (r.ok ? r.json() : []))
             .then((list: Manager[]) => {
@@ -72,6 +80,7 @@ export function ManagerApproval({
 
                 <div className="space-y-3">
                     {description && <p className="text-sm text-slate-600">{description}</p>}
+                    {children}
 
                     <div>
                         <label className="text-sm text-slate-600">{t.manager}</label>
@@ -89,16 +98,39 @@ export function ManagerApproval({
 
                     <div>
                         <label className="text-sm text-slate-600">{t.manager_pin}</label>
-                        <Input
-                            type="password"
-                            inputMode="numeric"
-                            autoComplete="off"
-                            value={pin}
-                            onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 8))}
-                            onKeyDown={(e) => { if (e.key === "Enter") submit() }}
-                            className="h-12 text-lg mt-1 tracking-[0.5em] text-center"
-                            placeholder="••••"
-                        />
+                        {/* No placeholder dots: centred and letter-spaced, they
+                            read as a PIN already typed, which is exactly how a
+                            blank field gets mistaken for a filled one. */}
+                        <div className="relative mt-1">
+                            {/* A text field followed by a password field is read
+                                as a login form, and the browser injects a saved
+                                username and password - which lands on the till
+                                looking exactly like a PIN somebody left behind.
+                                "off" is ignored on password fields; this is not,
+                                and the data- attributes cover the third-party
+                                managers that ignore both. */}
+                            <Input
+                                type={reveal ? "text" : "password"}
+                                inputMode="numeric"
+                                autoComplete="new-password"
+                                name="manager-approval-pin"
+                                data-lpignore="true"
+                                data-1p-ignore
+                                data-form-type="other"
+                                value={pin}
+                                onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 8))}
+                                onKeyDown={(e) => { if (e.key === "Enter") submit() }}
+                                className="h-12 text-lg tracking-[0.5em] text-center pe-12 autofill:shadow-[inset_0_0_0_1000px_white]"
+                            />
+                            <button
+                                type="button"
+                                onClick={() => setReveal((v) => !v)}
+                                aria-label={t.manager_pin}
+                                className="absolute end-2 top-1/2 -translate-y-1/2 p-2 text-slate-400 hover:text-slate-700"
+                            >
+                                {reveal ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                            </button>
+                        </div>
                     </div>
 
                     {error && <p className="text-sm text-rose-600">{error}</p>}

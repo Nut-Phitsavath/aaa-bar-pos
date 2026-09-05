@@ -1,509 +1,593 @@
 "use client"
 
-import * as React from "react"
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
+import { useTranslation } from "@/hooks/use-translation"
+import { Header } from "@/components/header"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import { Clock, CheckCircle, XCircle, Play, Printer, DollarSign, Utensils } from "lucide-react"
-import Link from "next/link"
-import { formatTHB } from "@/lib/currency"
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
-import { Header } from "@/components/header"
-import { ReceiptDialog } from "@/components/receipt-dialog"
-import { useTranslation } from "@/hooks/use-translation"
-import { APP_NAME } from "@/lib/shop"
-import { formatLongDate } from "@/lib/date"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Calendar } from "@/components/ui/calendar"
-import { format, startOfDay, endOfDay, isSameDay } from "date-fns"
-import { Calendar as CalendarIcon, Filter, ChevronDown, ChevronRight, User as UserIcon, ListChecks } from "lucide-react"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { startOfDay, endOfDay, format, isSameDay } from "date-fns"
+import type { DateRange } from "react-day-picker"
+import { ReceiptDialog } from "@/components/receipt-dialog"
+import { ManagerApproval } from "@/components/manager-approval"
+import { toast } from "sonner"
 import {
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableHeader,
-    TableRow,
-} from "@/components/ui/table"
+    ChevronRight, Clock, Receipt as ReceiptIcon, Users, Ban, Search,
+    Calendar as CalendarIcon,
+} from "lucide-react"
+import { formatTHB } from "@/lib/currency"
+import { formatDuration } from "@/lib/sessions"
 
-type Order = {
+type Line = {
     id: string
-    orderNumber: string
-    status: string
+    name: string
+    quantity: number
     total: number
-    subtotal: number
-    tax: number
-    discount: number
-    pointsRedeemed?: number
-    customerId?: string
-    customerName?: string
-    customer?: { name: string; phone?: string }
-    promotion?: { name: string; code: string }
-    paymentMethod: string
-    cashReceived?: number
-    changeAmount?: number
-    beeperNumber?: string
-    createdAt: string
-    items?: any[]
-    cancellationReason?: string
-    isReportable?: boolean
+    voidedAt: string | null
+    voidReason: string | null
+    voidNote: string | null
+    voidedBy: string | null
 }
 
-export default function ActiveOrdersPage() {
-    const { t, lang } = useTranslation()
-    const [orders, setOrders] = useState<Order[]>([])
-    const [filter, setFilter] = useState<string>("ALL")
-    const [paymentFilter, setPaymentFilter] = useState<string>("ALL")
-    const [printingOrder, setPrintingOrder] = useState<Order | null>(null)
-    const [cancellingOrder, setCancellingOrder] = useState<Order | null>(null)
-    const [cancelReason, setCancelReason] = useState("")
+type Round = {
+    id: string
+    number: number | null
+    at: string
+    status: string
+    waiter: string | null
+    total: number
+    items: Line[]
+}
+
+type Bill = {
+    id: string
+    kind: "TABLE" | "WALK_IN"
+    reference: string
+    area: string | null
+    openedAt: string
+    closedAt: string | null
+    servers: string[]
+    staff: string[]
+    rounds: number
+    items: number
+    voidedLines: number
+    gross: number
+    discount: number
+    total: number
+    paid: number
+    tenders: { method: string; amount: number }[]
+    payments: {
+        id: string; method: string; amount: number; paymentStatus: string | null
+        voidedAt: string | null; voidReason: string | null; voidedBy: string | null; at: string
+    }[]
+    reopenedAt: string | null
+    status: string
+    customer: { id: string; name: string } | null
+    detail: Round[]
+}
+
+const STATUSES = ["ALL", "PAID", "PART_PAID", "TAB", "COMPED", "VOIDED", "OPEN"]
+
+/**
+ * Trading history, one row per bill.
+ *
+ * This listed orders, which is right for a cafe where an order is a customer is
+ * a payment. In a bar 94% of orders belong to a table and a bill runs to
+ * several rounds settled once - so the old page showed 531 fragments of 176
+ * transactions, and called every table one CASH because a table order's
+ * paymentMethod is a default nothing sets.
+ *
+ * A row is a bill; expanding it shows the rounds inside. Counter sales appear
+ * as single-round bills so there is one history rather than two.
+ */
+export default function BillsPage() {
+    const { t } = useTranslation()
+    const [bills, setBills] = useState<Bill[]>([])
+    const [loading, setLoading] = useState(true)
+    const [status, setStatus] = useState("ALL")
+    const [method, setMethod] = useState("ALL")
+    const [query, setQuery] = useState("")
+    const [expanded, setExpanded] = useState<string | null>(null)
     const [receiptSrc, setReceiptSrc] = useState<string | null>(null)
-    const [isProcessing, setIsProcessing] = useState(false)
-    const [selectedDate, setSelectedDate] = useState<Date>(new Date())
-    const [expandedOrderId, setExpandedOrderId] = useState<string | null>(null)
+    // A range, not a day: "this week" and "the weekend" are questions a manager
+    // asks as often as "last night". Opens on today, so the common case is one
+    // tap and the range is there when it is wanted. Same picker the reports
+    // page uses, so there is one way to choose dates in this app.
+    const [range, setRange] = useState<DateRange | undefined>({
+        from: new Date(),
+        to: new Date(),
+    })
+    const [revenue, setRevenue] = useState(0)
+    const [exceptions, setExceptions] = useState<{
+        discountTotal: number; discountCount: number
+        compedTotal: number; compedCount: number
+        voidedLines: number; owedTotal: number; tabCount: number
+    } | null>(null)
+    // Reopening a bill and handing a tender back both move money a shift has
+    // counted, so both go through the manager approval comps already use.
+    const [pending, setPending] = useState<
+        { kind: "REOPEN"; billId: string } | { kind: "REFUND"; paymentId: string } | null
+    >(null)
+    const [approvalError, setApprovalError] = useState<string | null>(null)
+    const [busy, setBusy] = useState(false)
+    const [reasonText, setReasonText] = useState("")
 
-    useEffect(() => {
-        document.title = `Orders | ${APP_NAME}`
-        fetchOrders()
-        const interval = setInterval(fetchOrders, 5000)
-        return () => clearInterval(interval)
-    }, [selectedDate, paymentFilter])
-
-    const fetchOrders = async () => {
+    const load = useCallback(async () => {
+        setLoading(true)
         try {
-            const start = startOfDay(selectedDate).toISOString()
-            const end = endOfDay(selectedDate).toISOString()
-            let url = `/api/orders?startDate=${start}&endDate=${end}`
-            if (paymentFilter !== "ALL") url += `&paymentMethod=${paymentFilter}`
-            const res = await fetch(url)
+            // An open-ended range (a first click with no second yet) reads as
+            // that single day rather than as everything since it.
+            const from = range?.from ?? new Date()
+            const to = range?.to ?? from
+            const params = new URLSearchParams({
+                startDate: startOfDay(from).toISOString(),
+                endDate: endOfDay(to).toISOString(),
+            })
+            if (status !== "ALL") params.set("status", status)
+            if (method !== "ALL") params.set("method", method)
+            const res = await fetch(`/api/bills?${params}`)
             if (res.ok) {
                 const data = await res.json()
-                setOrders(data)
+                setBills(data.bills ?? [])
+                setRevenue(data.totals?.revenue ?? 0)
+                setExceptions(data.exceptions ?? null)
             }
-        } catch (e) {
-            console.error(e)
-        }
-    }
-
-    const handleResumeOrder = async (orderId: string) => {
-        try {
-            const res = await fetch(`/api/orders/${orderId}/resume`, {
-                method: 'PUT'
-            })
-            if (res.ok) {
-                // Redirect to POS with order data
-                window.location.href = `/pos?resumeOrder=${orderId}`
-            }
-        } catch (e) {
-            console.error(e)
-        }
-    }
-
-    const handleCancelOrder = async () => {
-        if (!cancellingOrder || !cancelReason) return
-        setIsProcessing(true)
-        try {
-            const res = await fetch('/api/orders', {
-                method: 'POST',
-                body: JSON.stringify({
-                    id: cancellingOrder.id,
-                    items: cancellingOrder.items || [],
-                    total: cancellingOrder.total,
-                    subtotal: cancellingOrder.subtotal || cancellingOrder.total,
-                    tax: cancellingOrder.tax || 0,
-                    paymentMethod: cancellingOrder.paymentMethod,
-                    status: 'CANCELLED',
-                    cancellationReason: cancelReason
-                }),
-                headers: { 'Content-Type': 'application/json' }
-            })
-            if (res.ok) {
-                setCancellingOrder(null)
-                setCancelReason("")
-                fetchOrders()
-
-                // Broadcast to update cash drawer
-                const channel = new BroadcastChannel("pos_channel")
-                channel.postMessage({ type: "PAYMENT_COMPLETE" }) // Triggers shift status refresh
-                channel.close()
-            }
-        } catch (e) {
-            console.error(e)
         } finally {
-            setIsProcessing(false)
+            setLoading(false)
         }
+    }, [status, method, range])
+
+    useEffect(() => { load() }, [load])
+
+    const statusLabel: Record<string, string> = {
+        ALL: t.all_status,
+        PAID: t.status_paid,
+        PART_PAID: t.status_part_paid,
+        TAB: t.status_tab,
+        COMPED: t.status_comped,
+        VOIDED: t.status_voided,
+        OPEN: t.status_open,
     }
 
-    const filteredOrders = filter === "ALL"
-        ? orders
-        : orders.filter(o => o.status === filter)
+    // Colour carries the state at a glance down a long list; the label carries
+    // it for anyone who cannot rely on colour.
+    const statusStyle: Record<string, string> = {
+        PAID: "bg-emerald-100 text-emerald-800",
+        PART_PAID: "bg-amber-100 text-amber-900",
+        TAB: "bg-amber-100 text-amber-900",
+        COMPED: "bg-violet-100 text-violet-800",
+        VOIDED: "bg-rose-100 text-rose-800",
+        OPEN: "bg-sky-100 text-sky-800",
+    }
 
-    const getStatusBadge = (status: string) => {
-        const variants: Record<string, { color: string; icon: any; label: string }> = {
-            PENDING: { color: "bg-yellow-100 text-yellow-800", icon: Clock, label: t.pending_status },
-            // A round sitting on an open table bill: served and deducted from
-            // stock, but not yet paid for.
-            SENT: { color: "bg-amber-100 text-amber-900", icon: Utensils, label: t.sent_status },
-            COMPLETED: { color: "bg-green-100 text-green-800", icon: CheckCircle, label: t.completed_status },
-            HOLD: { color: "bg-orange-100 text-orange-800", icon: Clock, label: t.hold_status },
-            CANCELLED: { color: "bg-red-100 text-red-800", icon: XCircle, label: t.cancelled_status }
-        }
+    const methodLabel: Record<string, string> = {
+        CASH: t.cash, ONEPAY: "BCEL QR", OWNER_VIP: t.owner_vip,
+    }
 
-        // Never index the map for the fallback: a key that is missing or later
-        // commented out makes every unknown status crash the whole page rather
-        // than render a plain badge.
-        const config = variants[status] ?? {
-            color: "bg-slate-100 text-slate-700",
-            icon: Clock,
-            label: status,
-        }
-        const Icon = config.icon
+    const time = (iso: string) =>
+        new Date(iso).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })
+    const day = (iso: string) => new Date(iso).toLocaleDateString("en-GB")
 
+    const runApproved = async (creds: { managerUsername: string; managerPin: string }) => {
+        if (!pending) return
+        setBusy(true)
+        setApprovalError(null)
+        try {
+            const url = pending.kind === "REOPEN"
+                ? `/api/table-sessions/${pending.billId}/reopen`
+                : `/api/payments/${pending.paymentId}/refund`
+            const res = await fetch(url, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ ...creds, reason: reasonText.trim() }),
+            })
+            const data = await res.json().catch(() => ({}))
+            if (res.status === 403 || res.status === 429) {
+                setApprovalError(data.error === "TOO_MANY_ATTEMPTS" ? t.too_many_attempts : t.invalid_approval)
+                return
+            }
+            setPending(null)
+            if (!res.ok) { toast.error(data.error || t.error); return }
+            toast.success(pending.kind === "REOPEN" ? t.reopen_bill : t.refunded)
+            setReasonText("")
+            await load()
+        } finally { setBusy(false) }
+    }
+
+    const visible = bills.filter((b) => {
+        const q = query.trim().toLowerCase()
+        if (!q) return true
         return (
-            <Badge className={`${config.color} flex items-center gap-1`}>
-                <Icon className="w-3 h-3" />
-                {config.label}
-            </Badge>
+            b.reference.toLowerCase().includes(q) ||
+            b.servers.some((s) => s.toLowerCase().includes(q)) ||
+            (b.customer?.name.toLowerCase().includes(q) ?? false)
         )
-    }
+    })
 
     return (
-        <div className="min-h-screen bg-background text-foreground">
-            <Header title={t.all_orders} />
+        <div className="min-h-screen bg-slate-50">
+            <Header title={t.bill_history} />
 
-            <div className="p-6 space-y-6">
-                {/* Filter Tabs */}
-                <div className="flex flex-col gap-4">
-                    <div className="flex gap-2 overflow-x-auto pb-2">
-                        {["ALL", "SENT", "HOLD", "COMPLETED", "CANCELLED"].map((status) => (
+            {/* Full width, not a centred column. The shell already animates its
+                left padding between 260px and 80px as the sidebar collapses, so
+                the page only has to stop capping itself to follow along. The
+                outer cap is there to stop an ultrawide screen stretching a row
+                until its table name and its total are a foot apart. */}
+            <div className="p-4 md:p-6 w-full max-w-[1800px] space-y-4">
+                {/* Which night. The old page had this and I dropped it in the
+                    rewrite; without it the page loads all history and grows
+                    into something nobody can read. */}
+                <div className="flex flex-wrap items-center gap-3 bg-white p-3 rounded-xl border shadow-sm">
+                    <Popover>
+                        <PopoverTrigger asChild>
                             <Button
-                                key={status}
-                                variant={filter === status ? "default" : "outline"}
-                                onClick={() => setFilter(status)}
-                                className={filter === status ? "bg-amber-600 hover:bg-amber-700 font-bold" : ""}
+                                variant="outline"
+                                className="h-11 gap-2 font-bold border-amber-200 text-amber-900 bg-amber-50 hover:bg-amber-100"
                             >
-                                {t[status.toLowerCase() + "_status"] || status}
+                                <CalendarIcon className="w-4 h-4" />
+                                {range?.from
+                                    ? range.to && !isSameDay(range.from, range.to)
+                                        ? `${format(range.from, "d MMM yyyy")} – ${format(range.to, "d MMM yyyy")}`
+                                        : format(range.from, "d MMM yyyy")
+                                    : t.select_date_range}
+                            </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0" align="start">
+                            <Calendar
+                                initialFocus
+                                mode="range"
+                                defaultMonth={range?.from}
+                                selected={range}
+                                onSelect={setRange}
+                                numberOfMonths={2}
+                            />
+                        </PopoverContent>
+                    </Popover>
+                    <Button
+                        variant="outline"
+                        className="h-11 text-amber-700 hover:text-amber-800"
+                        onClick={() => setRange({ from: new Date(), to: new Date() })}
+                    >
+                        {t.today}
+                    </Button>
+
+                    {/* By tender, so a split bill answers to both. */}
+                    <div className="flex items-center gap-1.5">
+                        {["ALL", "CASH", "ONEPAY", "OWNER_VIP"].map((m) => (
+                            <Button
+                                key={m}
+                                variant="ghost"
+                                onClick={() => setMethod(m)}
+                                className={`h-9 px-3 text-xs font-bold border ${method === m ? "bg-slate-800 text-white border-slate-800 hover:bg-slate-800 hover:text-white" : "border-slate-200"}`}
+                            >
+                                {m === "ALL" ? t.all_status : methodLabel[m] ?? m}
                             </Button>
                         ))}
                     </div>
 
-                    <div className="flex gap-2 overflow-x-auto">
-                        <span className="text-sm font-bold text-slate-400 self-center mr-2 uppercase tracking-widest">{t.pay_label}</span>
-                        {["ALL", "CASH", "ONEPAY", "TRANSFER"].map((method) => (
-                            <Button
-                                key={method}
-                                variant={paymentFilter === method ? "secondary" : "ghost"}
-                                onClick={() => setPaymentFilter(method)}
-                                className={`h-8 px-3 text-xs font-bold border ${paymentFilter === method ? "bg-slate-800 text-white border-slate-800" : "border-slate-200"}`}
-                            >
-                                {method === "ALL" ? t.all :
-                                 method === "CASH" ? t.cash :
-                                 method === "ONEPAY" ? "OnePay" : t.bank_transfer}
-                            </Button>
-                        ))}
+                    <div className="ms-auto text-end">
+                        <p className="text-sm font-medium text-slate-500">
+                            {visible.length} {t.bills}
+                        </p>
+                        <p className="text-lg font-black text-slate-900 tabular-nums leading-none">
+                            {formatTHB(revenue)}
+                        </p>
                     </div>
                 </div>
 
-                {/* Date and Filter Controls */}
-                <div className="flex flex-col md:flex-row gap-4 justify-between items-start md:items-center bg-white p-4 rounded-xl border shadow-sm">
-                    <div className="flex items-center gap-3">
-                        <Popover>
-                            <PopoverTrigger asChild>
-                                <Button
-                                    variant="outline"
-                                    className="flex items-center gap-2 font-bold border-amber-200 text-amber-900 bg-amber-50 hover:bg-amber-100"
-                                >
-                                    <CalendarIcon className="w-4 h-4" />
-                                    {formatLongDate(selectedDate, lang)}
-                                </Button>
-                            </PopoverTrigger>
-                            <PopoverContent className="w-auto p-0" align="start">
-                                <Calendar
-                                    mode="single"
-                                    selected={selectedDate}
-                                    onSelect={(date) => date && setSelectedDate(date)}
-                                    initialFocus
-                                />
-                            </PopoverContent>
-                        </Popover>
+                <div className="flex flex-wrap items-center gap-2">
+                    {STATUSES.map((s) => (
                         <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => setSelectedDate(new Date())}
-                            className="text-xs text-amber-700 hover:text-amber-800"
+                            key={s}
+                            variant={status === s ? "default" : "outline"}
+                            onClick={() => setStatus(s)}
+                            className={`h-10 ${status === s ? "bg-amber-600 hover:bg-amber-700 font-bold" : ""}`}
                         >
-                            {t.today}
+                            {statusLabel[s]}
                         </Button>
-                    </div>
-
-                    <div className="text-sm font-medium text-slate-500">
-                        {filteredOrders.length} {t.orders_found}
+                    ))}
+                    <div className="relative ms-auto">
+                        <Search className="w-4 h-4 absolute start-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                        <Input
+                            value={query}
+                            onChange={(e) => setQuery(e.target.value)}
+                            placeholder={t.search}
+                            className="h-10 ps-9 w-56 rounded-xl"
+                        />
                     </div>
                 </div>
 
-                {/* Orders Table */}
-                <div className="bg-white rounded-xl border shadow-sm overflow-hidden">
-                    <Table>
-                        <TableHeader className="bg-slate-50">
-                            <TableRow>
-                                <TableHead className="w-[50px]"></TableHead>
-                                <TableHead className="font-bold">{t.order_number || "Order #"}</TableHead>
-                                <TableHead className="font-bold">{t.time || "Time"}</TableHead>
-                                <TableHead className="font-bold">{t.status || "Status"}</TableHead>
-                                <TableHead className="font-bold">{t.customer || "Customer"}</TableHead>
-                                <TableHead className="font-bold text-center">{t.items || "Items"}</TableHead>
-                                <TableHead className="font-bold text-right">{t.total || "Total"}</TableHead>
-                                <TableHead className="font-bold">{t.payment || "Payment"}</TableHead>
-                                <TableHead className="text-right font-bold">{t.actions || "Actions"}</TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            {filteredOrders.length === 0 ? (
-                                <TableRow>
-                                    <TableCell colSpan={9} className="h-64 text-center">
-                                        <div className="flex flex-col items-center justify-center text-muted-foreground">
-                                            <Clock className="w-12 h-12 mb-4 opacity-50" />
-                                            <p>{t.no_orders_found} ({filter})</p>
-                                        </div>
-                                    </TableCell>
-                                </TableRow>
-                            ) : (
-                                filteredOrders.map((order) => (
-                                    <React.Fragment key={order.id}>
-                                        <TableRow 
-                                            className={`cursor-pointer hover:bg-amber-50/50 transition-colors ${expandedOrderId === order.id ? "bg-amber-50/30" : ""}`}
-                                            onClick={() => setExpandedOrderId(expandedOrderId === order.id ? null : order.id)}
-                                        >
-                                            <TableCell>
-                                                {expandedOrderId === order.id ? <ChevronDown className="w-5 h-5 text-amber-600" /> : <ChevronRight className="w-5 h-5 text-slate-400" />}
-                                            </TableCell>
-                                            <TableCell>
-                                                <div className="flex items-center gap-2">
-                                                    <span className="font-black text-lg">{order.orderNumber}</span>
-                                                    {order.isReportable === false && (
-                                                        <Badge variant="outline" className="border-rose-300 text-rose-600 bg-rose-50 font-black text-[9px] px-1 py-0">
-                                                            FREE
-                                                        </Badge>
-                                                    )}
-                                                </div>
-                                            </TableCell>
-                                            <TableCell className="text-sm font-medium text-slate-500">
-                                                {format(new Date(order.createdAt), "HH:mm")}
-                                            </TableCell>
-                                            <TableCell>
-                                                {getStatusBadge(order.status)}
-                                                {order.beeperNumber && (
-                                                    <Badge variant="outline" className="ml-2 border-orange-200 text-orange-700 bg-orange-50 font-bold text-[9px] px-1">
-                                                        BP: {order.beeperNumber}
-                                                    </Badge>
-                                                )}
-                                            </TableCell>
-                                            <TableCell>
-                                                {(order.customerName || order.customer?.name) ? (
-                                                    <div className="flex items-center gap-1.5 text-sm font-bold text-slate-700">
-                                                        <UserIcon className="w-3.5 h-3.5 text-slate-400" />
-                                                        {order.customerName || order.customer?.name}
-                                                    </div>
-                                                ) : <span className="text-slate-300">--</span>}
-                                            </TableCell>
-                                            <TableCell className="text-center font-bold">
-                                                {order.items?.reduce((sum, item) => sum + item.quantity, 0) || 0}
-                                            </TableCell>
-                                            <TableCell className="text-right font-black text-amber-600">
-                                                {formatTHB(order.total)}
-                                            </TableCell>
-                                            <TableCell>
-                                                <div className="flex items-center gap-1.5 text-xs font-bold text-slate-600">
-                                                    {order.paymentMethod === 'CASH' || order.paymentMethod === 'BANK_NOTE' ? '💵 Cash' : 
-                                                     order.paymentMethod === 'ONEPAY' ? '📱 OnePay' : 
-                                                     order.paymentMethod === 'TRANSFER' ? '🏦 Transfer' : order.paymentMethod}
-                                                </div>
-                                            </TableCell>
-                                            <TableCell className="text-right">
-                                                <div className="flex justify-end gap-2">
-                                                    {["HOLD", "PENDING", "PREPARING"].includes(order.status) && (
-                                                        <Button
-                                                            size="sm"
-                                                            className="bg-green-600 hover:bg-green-700 h-8 px-3 font-bold text-xs"
-                                                            onClick={(e) => { e.stopPropagation(); window.location.href = `/pos?resumeOrder=${order.id}`; }}
-                                                        >
-                                                            <Play className="w-3.5 h-3.5 mr-1 fill-current" />
-                                                            {t.resume}
-                                                        </Button>
-                                                    )}
-                                                    {order.status === "COMPLETED" && (
-                                                        <Button
-                                                            variant="outline"
-                                                            size="sm"
-                                                            className="h-8 px-3 font-bold text-xs border-blue-200 text-blue-600 hover:bg-blue-50"
-                                                            onClick={(e) => { e.stopPropagation(); setReceiptSrc(`/receipt?id=${order.id}`); }}
-                                                        >
-                                                            <Printer className="w-3.5 h-3.5 mr-1" />
-                                                            {t.print}
-                                                        </Button>
-                                                    )}
-                                                    {isSameDay(new Date(order.createdAt), new Date()) && order.status !== "CANCELLED" && (
-                                                        <Button
-                                                            variant="outline"
-                                                            size="sm"
-                                                            className="h-8 px-3 font-bold text-xs border-red-200 text-red-600 hover:bg-red-50"
-                                                            onClick={(e) => { e.stopPropagation(); setCancellingOrder(order); }}
-                                                        >
-                                                            <XCircle className="w-3.5 h-3.5 mr-1" />
-                                                            {t.cancel}
-                                                        </Button>
-                                                    )}
-                                                </div>
-                                            </TableCell>
-                                        </TableRow>
-
-                                        {expandedOrderId === order.id && (
-                                            <TableRow className="bg-slate-50/50 hover:bg-slate-50/50 border-b-2 border-slate-100">
-                                                <TableCell colSpan={9} className="p-4">
-                                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8 animate-in fade-in slide-in-from-top-2 duration-300">
-                                                        <div className="space-y-4">
-                                                            <div className="flex items-center gap-2 mb-2">
-                                                                <ListChecks className="w-5 h-5 text-amber-600" />
-                                                                <h4 className="font-black text-slate-800 uppercase tracking-wider text-sm">{t.order_items || "Order Items"}</h4>
-                                                            </div>
-                                                            <div className="bg-white rounded-lg border border-slate-200 overflow-hidden shadow-sm">
-                                                                <Table>
-                                                                    <TableHeader className="bg-slate-50">
-                                                                        <TableRow className="hover:bg-transparent">
-                                                                            <TableHead className="text-[10px] font-black uppercase text-slate-400">{t.item}</TableHead>
-                                                                            <TableHead className="text-[10px] font-black uppercase text-slate-400 text-center">{t.qty}</TableHead>
-                                                                            <TableHead className="text-[10px] font-black uppercase text-slate-400 text-right">{t.price}</TableHead>
-                                                                        </TableRow>
-                                                                    </TableHeader>
-                                                                    <TableBody>
-                                                                        {order.items?.map((item, idx) => (
-                                                                            <TableRow key={idx} className="hover:bg-transparent">
-                                                                                <TableCell>
-                                                                                    <div className="font-bold text-slate-700">{item.name}</div>
-                                                                                    {(item.sugarLevel || item.shotType || item.cupSize || item.isTakeaway) && (
-                                                                                        <div className="text-[10px] text-slate-400 font-medium italic">
-                                                                                            {[
-                                                                                                item.cupSize,
-                                                                                                item.sugarLevel,
-                                                                                                item.shotType,
-                                                                                                item.isTakeaway ? "Take Away" : null
-                                                                                            ].filter(Boolean).join(" · ")}
-                                                                                        </div>
-                                                                                    )}
-                                                                                </TableCell>
-                                                                                <TableCell className="text-center font-black">x{item.quantity}</TableCell>
-                                                                                <TableCell className="text-right font-bold text-slate-600">{formatTHB(item.total)}</TableCell>
-                                                                            </TableRow>
-                                                                        ))}
-                                                                    </TableBody>
-                                                                </Table>
-                                                            </div>
-                                                        </div>
-
-                                                        <div className="space-y-4">
-                                                            <div className="flex items-center gap-2 mb-2">
-                                                                <DollarSign className="w-5 h-5 text-emerald-600" />
-                                                                <h4 className="font-black text-slate-800 uppercase tracking-wider text-sm">{t.payment_details || "Payment Details"}</h4>
-                                                            </div>
-                                                            <div className="bg-slate-100/50 p-4 rounded-xl border border-slate-200 space-y-3">
-                                                                <div className="flex justify-between text-sm py-1 border-b border-slate-200/50">
-                                                                    <span className="text-slate-500 font-bold uppercase text-[10px] tracking-tight">{t.subtotal}</span>
-                                                                    <span className="font-bold text-slate-700">{formatTHB(order.subtotal || order.total + (order.discount || 0))}</span>
-                                                                </div>
-                                                                {order.discount > 0 && (
-                                                                    <div className="flex justify-between text-sm py-1 border-b border-slate-200/50 text-rose-600">
-                                                                        <span className="font-bold uppercase text-[10px] tracking-tight">{t.discount}</span>
-                                                                        <span className="font-black">-{formatTHB(order.discount)}</span>
-                                                                    </div>
-                                                                )}
-                                                                <div className="flex justify-between text-lg py-2">
-                                                                    <span className="text-slate-800 font-black uppercase text-xs tracking-widest">{t.total}</span>
-                                                                    <span className="font-black text-amber-600">{formatTHB(order.total)}</span>
-                                                                </div>
-                                                                { (order.paymentMethod === 'CASH' || order.paymentMethod === 'BANK_NOTE') && order.cashReceived !== undefined && order.cashReceived > 0 && (
-                                                                    <div className="pt-2 mt-2 border-t border-slate-300 border-dashed space-y-2">
-                                                                        <div className="flex justify-between text-xs">
-                                                                            <span className="text-slate-500 font-bold uppercase tracking-tight">{t.received_label}</span>
-                                                                            <span className="font-bold text-slate-800">{formatTHB(order.cashReceived || 0)}</span>
-                                                                        </div>
-                                                                        <div className="flex justify-between text-xs text-emerald-600 bg-emerald-50 p-2 rounded-lg border border-emerald-100">
-                                                                            <span className="font-black uppercase tracking-tight">{t.change_due}</span>
-                                                                            <span className="font-black">{formatTHB(order.changeAmount || ((order.cashReceived || 0) - order.total))}</span>
-                                                                        </div>
-                                                                    </div>
-                                                                )}
-                                                                {order.status === "CANCELLED" && order.cancellationReason && (
-                                                                    <div className="mt-4 p-3 bg-red-50 rounded-lg border border-red-100">
-                                                                        <p className="text-[10px] font-black text-red-800 uppercase mb-1">{t.cancellation_reason}</p>
-                                                                        <p className="text-sm text-red-700 italic font-medium">{order.cancellationReason}</p>
-                                                                    </div>
-                                                                )}
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                </TableCell>
-                                            </TableRow>
-                                        )}
-                                    </React.Fragment>
-                                ))
-                            )}
-                        </TableBody>
-                    </Table>
-                </div>
-
-                {/* Cancellation Modal */}
-                <Dialog open={!!cancellingOrder} onOpenChange={() => setCancellingOrder(null)}>
-                    <DialogContent>
-                        <div className="space-y-4">
-                            <DialogHeader>
-                                <DialogTitle>{t.cancel_order} {cancellingOrder?.orderNumber}</DialogTitle>
-                            </DialogHeader>
-                            <p className="text-sm text-muted-foreground">{t.cancel_order_confirm_msg}</p>
-                            <div className="space-y-2">
-                                <Label>{t.cancellation_reason || "Reason for Cancellation"}</Label>
-                                <Input
-                                    placeholder={t.order_reason_placeholder}
-                                    value={cancelReason}
-                                    onChange={e => setCancelReason(e.target.value)}
-                                />
+                {/* The morning read. Every figure here already existed, buried
+                    one bill at a time inside an expanded row - a manager could
+                    not ask "what did we give away last night" without opening
+                    them all. Only shown when there is something to report. */}
+                {exceptions && (exceptions.discountTotal > 0 || exceptions.compedTotal > 0 || exceptions.voidedLines > 0 || exceptions.owedTotal > 0) && (
+                    <div className="grid gap-3 grid-cols-2 lg:grid-cols-4 rounded-xl border-2 border-amber-200 bg-amber-50/60 p-3">
+                        {[
+                            { label: t.discounts_given, value: formatTHB(exceptions.discountTotal), sub: `${exceptions.discountCount} ${t.bills}` },
+                            { label: t.comped_away, value: formatTHB(exceptions.compedTotal), sub: `${exceptions.compedCount} ${t.bills}` },
+                            { label: t.status_voided, value: String(exceptions.voidedLines), sub: t.items_label },
+                            { label: t.still_owed, value: formatTHB(exceptions.owedTotal), sub: `${exceptions.tabCount} ${t.status_tab}` },
+                        ].map((x) => (
+                            <div key={x.label}>
+                                <p className="text-[10px] font-bold uppercase tracking-widest text-amber-700/80">{x.label}</p>
+                                <p className="text-xl font-black text-slate-900 tabular-nums mt-1 leading-none">{x.value}</p>
+                                <p className="text-[11px] text-slate-500 mt-1">{x.sub}</p>
                             </div>
-                            <div className="flex justify-end gap-2">
-                                <Button variant="outline" onClick={() => setCancellingOrder(null)}>{t.keep_order}</Button>
-                                <Button
-                                    variant="destructive"
-                                    onClick={handleCancelOrder}
-                                    disabled={!cancelReason || isProcessing}
-                                >
-                                    {isProcessing ? `${t.processing}...` : t.yes_cancel_order}
-                                </Button>
-                            </div>
+                        ))}
+                    </div>
+                )}
+
+                {loading ? (
+                    <div className="space-y-2">
+                        {[0, 1, 2].map((i) => (
+                            <div key={i} className="h-20 rounded-xl bg-white border border-slate-200 animate-pulse" />
+                        ))}
+                    </div>
+                ) : visible.length === 0 ? (
+                    <div className="text-center py-20">
+                        <div className="w-12 h-12 rounded-full bg-slate-100 grid place-items-center mx-auto mb-3">
+                            <ReceiptIcon className="w-6 h-6 text-slate-400" />
                         </div>
-                    </DialogContent>
-                </Dialog>
+                        <p className="text-slate-900 font-semibold">{t.no_bills_found}</p>
+                    </div>
+                ) : (
+                    <div className="space-y-2 @container">
+                        {visible.map((b) => {
+                            const open = expanded === b.id
+                            return (
+                                <Card key={b.id} className="overflow-hidden">
+                                    <button
+                                        onClick={() => setExpanded(open ? null : b.id)}
+                                        className="w-full text-start p-4 hover:bg-slate-50 transition-colors duration-150"
+                                    >
+                                        {/* A grid, not a flex row: the money and the
+                                            status then line up down the whole list
+                                            instead of landing wherever each row's
+                                            text happens to end. The middle column is
+                                            minmax(0,1fr) so it absorbs the width the
+                                            sidebar gives back when it collapses. */}
+                                        <div className="grid grid-cols-[1.25rem_minmax(0,1fr)_auto] @2xl:grid-cols-[1.25rem_minmax(0,1fr)_auto_6.5rem] @5xl:grid-cols-[1.25rem_minmax(14rem,1fr)_minmax(0,1fr)_auto_6.5rem] gap-x-4 gap-y-2 items-start">
+                                            <ChevronRight
+                                                className={`w-5 h-5 mt-1 text-slate-400 shrink-0 transition-transform duration-150 ${open ? "rotate-90" : ""}`}
+                                            />
+                                            <div className="min-w-0">
+                                                <p className="font-black text-lg text-slate-900 leading-none">
+                                                    {b.reference}
+                                                    {b.kind === "WALK_IN" && (
+                                                        <span className="ms-2 text-[10px] font-bold uppercase tracking-widest text-slate-400">
+                                                            {t.walk_in}
+                                                        </span>
+                                                    )}
+                                                    {b.area && (
+                                                        <span className="ms-2 text-xs font-bold text-slate-400">{b.area}</span>
+                                                    )}
+                                                </p>
+                                                <p className="text-sm text-slate-500 mt-1.5 flex items-center gap-x-3 gap-y-1 flex-wrap">
+                                                    <span className="tabular-nums">
+                                                        {day(b.openedAt)} {time(b.openedAt)}
+                                                        {b.closedAt && ` → ${time(b.closedAt)}`}
+                                                    </span>
+                                                    {b.closedAt && (
+                                                        <span className="inline-flex items-center gap-1 tabular-nums">
+                                                            <Clock className="w-3.5 h-3.5" />
+                                                            {formatDuration(b.openedAt, new Date(b.closedAt))}
+                                                        </span>
+                                                    )}
+                                                    {b.servers.length > 0 && (
+                                                        <span className="inline-flex items-center gap-1">
+                                                            <Users className="w-3.5 h-3.5" />
+                                                            {b.servers.join(", ")}
+                                                        </span>
+                                                    )}
+                                                    <span className="tabular-nums">
+                                                        {b.rounds} {t.rounds_label} · {b.items} {t.items_label}
+                                                    </span>
+                                                    {b.voidedLines > 0 && (
+                                                        <span className="inline-flex items-center gap-1 text-rose-600 font-bold">
+                                                            <Ban className="w-3.5 h-3.5" />
+                                                            {b.voidedLines} {t.voided_lines}
+                                                        </span>
+                                                    )}
+                                                </p>
+                                            </div>
 
-                {/* Printing Modal (placeholder for future implementation) */}
-                <Dialog open={!!printingOrder} onOpenChange={() => setPrintingOrder(null)}>
-                    <DialogContent>
-                        <DialogHeader>
-                            <DialogTitle>{t.print_receipt}</DialogTitle>
-                        </DialogHeader>
-                        <p>{t.print_not_implemented}</p>
-                        <Button onClick={() => setPrintingOrder(null)}>{t.close}</Button>
-                    </DialogContent>
-                </Dialog>
+                                            {/* What actually settled it, in its own column from lg
+                                                up. A single method column could never say "2,597 by
+                                                QR and 1,248 cash", which is 17% of the bills here -
+                                                and giving it the room the sidebar frees up puts
+                                                something readable in the middle of a wide row
+                                                instead of a stretch of white. */}
+                                            <p className="hidden @5xl:block text-sm text-slate-500 tabular-nums self-center">
+                                                {b.tenders.length > 0
+                                                    ? b.tenders.map((x) => `${formatTHB(x.amount)} ${methodLabel[x.method] ?? x.method}`).join("  +  ")
+                                                    : b.customer
+                                                        ? b.customer.name
+                                                        : "—"}
+                                            </p>
 
-                {filteredOrders.length === 0 && (
-                    <div className="text-center py-12 text-muted-foreground">
-                        <Clock className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                        <p>{t.no_orders_found} ({filter})</p>
+                                            <div className="text-end shrink-0">
+                                                <p className="text-2xl font-black text-slate-900 tabular-nums leading-none">
+                                                    {formatTHB(b.total)}
+                                                </p>
+                                                {/* Below lg the tenders tuck under the total instead
+                                                    of claiming a column there is no room for. */}
+                                                <p className="@5xl:hidden text-xs text-slate-500 mt-1.5 tabular-nums">
+                                                    {b.tenders.length > 0
+                                                        ? b.tenders.map((x) => `${formatTHB(x.amount)} ${methodLabel[x.method] ?? x.method}`).join(" + ")
+                                                        : b.customer
+                                                            ? b.customer.name
+                                                            : "—"}
+                                                </p>
+                                            </div>
+
+                                            {/* Its own column from sm up, so the badges
+                                                form a readable stripe down the list.
+                                                Below that it tucks under the amount
+                                                rather than squeezing both. */}
+                                            <span className={`col-start-3 @2xl:col-start-4 @5xl:col-start-5 justify-self-end @2xl:justify-self-start shrink-0 self-start px-2.5 py-1 rounded-md text-xs font-bold whitespace-nowrap ${statusStyle[b.status] ?? "bg-slate-100 text-slate-700"}`}>
+                                                {statusLabel[b.status] ?? b.status}
+                                            </span>
+                                        </div>
+                                    </button>
+
+                                    {open && (
+                                        <div className="border-t border-slate-200 bg-slate-50/60 divide-y divide-slate-200">
+                                            {b.detail.map((r) => (
+                                                <div key={r.id} className="px-4 py-3">
+                                                    <div className="flex items-baseline gap-2 text-xs font-bold text-slate-500">
+                                                        <span>
+                                                            {r.number != null ? `${t.round_no} #${r.number}` : t.walk_in}
+                                                        </span>
+                                                        <span className="tabular-nums">{time(r.at)}</span>
+                                                        {r.waiter && <span>· {r.waiter}</span>}
+                                                        {r.status === "CANCELLED" && (
+                                                            <span className="text-rose-600">· {t.state_void}</span>
+                                                        )}
+                                                        <span className="ms-auto tabular-nums text-slate-700">
+                                                            {formatTHB(r.total)}
+                                                        </span>
+                                                    </div>
+                                                    <div className="mt-2 space-y-1">
+                                                        {r.items.map((i) => {
+                                                            const struck = Boolean(i.voidedAt) || r.status === "CANCELLED"
+                                                            return (
+                                                                <div key={i.id} className="flex items-baseline gap-3 text-sm">
+                                                                    <span className="w-6 tabular-nums text-slate-500 shrink-0">
+                                                                        {i.quantity}
+                                                                    </span>
+                                                                    <span className={struck ? "line-through text-slate-400" : "text-slate-900"}>
+                                                                        {i.name}
+                                                                    </span>
+                                                                    {i.voidedAt && (
+                                                                        <span className="text-[11px] text-rose-600 truncate">
+                                                                            {(t[`void_${(i.voidReason ?? "").toLowerCase()}` as keyof typeof t] as string) ?? i.voidReason}
+                                                                            {i.voidedBy ? ` · ${i.voidedBy}` : ""}
+                                                                        </span>
+                                                                    )}
+                                                                    <span className={`ms-auto tabular-nums shrink-0 ${struck ? "line-through text-slate-400" : "text-slate-700"}`}>
+                                                                        {formatTHB(i.total)}
+                                                                    </span>
+                                                                </div>
+                                                            )
+                                                        })}
+                                                    </div>
+                                                </div>
+                                            ))}
+
+                                            {/* Each tender on its own line, refundable on its
+                                                own: 17% of bills are split, and a customer may
+                                                want the cash back while the QR leg stands. */}
+                                            {b.payments.length > 0 && (
+                                                <div className="px-4 py-3 space-y-1.5">
+                                                    {b.payments.map((pmt) => (
+                                                        <div key={pmt.id} className="flex items-center gap-3 text-sm">
+                                                            <span className={`tabular-nums ${pmt.voidedAt ? "line-through text-slate-400" : "text-slate-800 font-semibold"}`}>
+                                                                {formatTHB(pmt.amount)}
+                                                            </span>
+                                                            <span className="text-slate-500">{methodLabel[pmt.method] ?? pmt.method}</span>
+                                                            <span className="text-slate-400 tabular-nums">{time(pmt.at)}</span>
+                                                            {pmt.voidedAt ? (
+                                                                <span className="text-xs text-rose-600 truncate">
+                                                                    {t.refunded}{pmt.voidedBy ? ` · ${pmt.voidedBy}` : ""}{pmt.voidReason ? ` · ${pmt.voidReason}` : ""}
+                                                                </span>
+                                                            ) : (
+                                                                <Button
+                                                                    variant="outline"
+                                                                    className="ms-auto h-9 text-rose-600 border-rose-200 hover:bg-rose-50"
+                                                                    onClick={() => { setReasonText(""); setApprovalError(null); setPending({ kind: "REFUND", paymentId: pmt.id }) }}
+                                                                >
+                                                                    {t.refund}
+                                                                </Button>
+                                                            )}
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            )}
+
+                                            <div className="px-4 py-3 flex items-center gap-3 flex-wrap">
+                                                {b.discount > 0 && (
+                                                    <span className="text-sm text-rose-600 font-bold tabular-nums">
+                                                        {t.discount} −{formatTHB(b.discount)}
+                                                    </span>
+                                                )}
+                                                {b.reopenedAt && (
+                                                    <span className="text-xs font-bold text-amber-700">
+                                                        {t.reopen_bill} · {time(b.reopenedAt)}
+                                                    </span>
+                                                )}
+                                                {/* Offered on any settled table bill; the server
+                                                    refuses one from a shift already counted. */}
+                                                {b.kind === "TABLE" && b.status !== "OPEN" && (
+                                                    <Button
+                                                        variant="outline"
+                                                        className="h-10"
+                                                        onClick={() => { setReasonText(""); setApprovalError(null); setPending({ kind: "REOPEN", billId: b.id }) }}
+                                                    >
+                                                        {t.reopen_bill}
+                                                    </Button>
+                                                )}
+                                                <Button
+                                                    variant="outline"
+                                                    className="ms-auto h-10"
+                                                    onClick={() =>
+                                                        setReceiptSrc(
+                                                            b.kind === "TABLE"
+                                                                ? `/receipt?session=${b.id}`
+                                                                : `/receipt?id=${b.id}`
+                                                        )
+                                                    }
+                                                >
+                                                    <ReceiptIcon className="w-4 h-4 mr-2" />
+                                                    {t.receipt}
+                                                </Button>
+                                            </div>
+                                        </div>
+                                    )}
+                                </Card>
+                            )
+                        })}
                     </div>
                 )}
             </div>
 
             <ReceiptDialog src={receiptSrc} onClose={() => setReceiptSrc(null)} />
+
+            {/* Both operations move money a shift has counted, so both take the
+                same manager approval a comp does - and both state a reason,
+                because the point of doing this here is the audit trail. */}
+            <ManagerApproval
+                open={!!pending}
+                title={pending?.kind === "REOPEN" ? t.reopen_bill : t.refund}
+                description={pending?.kind === "REOPEN" ? t.manager_reopens_bill : t.manager_refunds}
+                busy={busy}
+                error={approvalError}
+                onCancel={() => { setPending(null); setApprovalError(null); setReasonText("") }}
+                onApprove={runApproved}
+            >
+                {/* Labelled, because unlabelled and sitting above the manager
+                    selector it reads as a username field - which is exactly how
+                    it got a staff login typed into it. */}
+                <div>
+                    <label className="text-sm text-slate-600">
+                        {pending?.kind === "REOPEN" ? t.reopen_reason : t.refund_reason}
+                    </label>
+                    <Input
+                        value={reasonText}
+                        onChange={(e) => setReasonText(e.target.value)}
+                        placeholder={t.reason_example}
+                        className="h-12 mt-1 autofill:shadow-[inset_0_0_0_1000px_white]"
+                        autoComplete="off"
+                        name="approval-reason"
+                        data-lpignore="true"
+                        data-1p-ignore
+                        data-form-type="other"
+                        autoFocus
+                    />
+                </div>
+            </ManagerApproval>
         </div>
     )
 }

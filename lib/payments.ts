@@ -14,6 +14,8 @@ export type PaymentLike = {
     method: string
     amount: number
     paymentStatus?: string | null
+    /** Set when the tender was handed back; it stops counting as money held. */
+    voidedAt?: Date | string | null
 }
 
 export type PaymentCheck = { ok: true } | { ok: false; reason: string }
@@ -28,6 +30,10 @@ export type PaymentCheck = { ok: true } | { ok: false; reason: string }
  * that may never land.
  */
 export function isConfirmed(payment: PaymentLike): boolean {
+    // A refunded tender arrived and then left again. Every balance in the app
+    // flows through this one gate, so checking it here is what stops a refunded
+    // bill still reading as settled on the ticket, the receipt and the history.
+    if (payment.voidedAt) return false
     if (payment.method === 'ONEPAY') return payment.paymentStatus === 'PAID'
     return true
 }

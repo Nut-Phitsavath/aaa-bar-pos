@@ -64,6 +64,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         // Comp only what is still owed. Anything already paid in cash stays
         // paid - the house does not refund a settled leg to comp it.
         await prisma.$transaction(async (tx) => {
+            // A comp is a tender like any other, so it records its shift too -
+            // otherwise the night it was given away cannot be established later.
+            const openShift = await tx.shift.findFirst({ where: { status: 'OPEN' } })
             await tx.payment.create({
                 data: {
                     session: { connect: { id } },
@@ -71,7 +74,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
                     amount: balance,
                     paymentStatus: 'PAID',
                     user: { connect: { id: user.id } },
-                    approvedBy: { connect: { id: approval.manager.id } }
+                    approvedBy: { connect: { id: approval.manager.id } },
+                    ...(openShift ? { shift: { connect: { id: openShift.id } } } : {}),
                 }
             })
             await tx.tableSession.update({ where: { id }, data: { isOwnerVip: true } })
