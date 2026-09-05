@@ -6,9 +6,14 @@ import { Header } from "@/components/header"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Calendar } from "@/components/ui/calendar"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { startOfDay, endOfDay, format, isSameDay } from "date-fns"
+import type { DateRange } from "react-day-picker"
 import { ReceiptDialog } from "@/components/receipt-dialog"
 import {
     ChevronRight, Clock, Receipt as ReceiptIcon, Users, Ban, Search,
+    Calendar as CalendarIcon,
 } from "lucide-react"
 import { formatTHB } from "@/lib/currency"
 import { formatDuration } from "@/lib/sessions"
@@ -75,21 +80,43 @@ export default function BillsPage() {
     const [bills, setBills] = useState<Bill[]>([])
     const [loading, setLoading] = useState(true)
     const [status, setStatus] = useState("ALL")
+    const [method, setMethod] = useState("ALL")
     const [query, setQuery] = useState("")
     const [expanded, setExpanded] = useState<string | null>(null)
     const [receiptSrc, setReceiptSrc] = useState<string | null>(null)
+    // A range, not a day: "this week" and "the weekend" are questions a manager
+    // asks as often as "last night". Opens on today, so the common case is one
+    // tap and the range is there when it is wanted. Same picker the reports
+    // page uses, so there is one way to choose dates in this app.
+    const [range, setRange] = useState<DateRange | undefined>({
+        from: new Date(),
+        to: new Date(),
+    })
+    const [revenue, setRevenue] = useState(0)
 
     const load = useCallback(async () => {
         setLoading(true)
         try {
-            const params = new URLSearchParams()
+            // An open-ended range (a first click with no second yet) reads as
+            // that single day rather than as everything since it.
+            const from = range?.from ?? new Date()
+            const to = range?.to ?? from
+            const params = new URLSearchParams({
+                startDate: startOfDay(from).toISOString(),
+                endDate: endOfDay(to).toISOString(),
+            })
             if (status !== "ALL") params.set("status", status)
+            if (method !== "ALL") params.set("method", method)
             const res = await fetch(`/api/bills?${params}`)
-            if (res.ok) setBills((await res.json()).bills ?? [])
+            if (res.ok) {
+                const data = await res.json()
+                setBills(data.bills ?? [])
+                setRevenue(data.totals?.revenue ?? 0)
+            }
         } finally {
             setLoading(false)
         }
-    }, [status])
+    }, [status, method, range])
 
     useEffect(() => { load() }, [load])
 
@@ -136,7 +163,73 @@ export default function BillsPage() {
         <div className="min-h-screen bg-slate-50">
             <Header title={t.bill_history} />
 
-            <div className="p-4 md:p-6 max-w-6xl mx-auto space-y-4">
+            {/* Full width, not a centred column. The shell already animates its
+                left padding between 260px and 80px as the sidebar collapses, so
+                the page only has to stop capping itself to follow along. The
+                outer cap is there to stop an ultrawide screen stretching a row
+                until its table name and its total are a foot apart. */}
+            <div className="p-4 md:p-6 w-full max-w-[1800px] space-y-4">
+                {/* Which night. The old page had this and I dropped it in the
+                    rewrite; without it the page loads all history and grows
+                    into something nobody can read. */}
+                <div className="flex flex-wrap items-center gap-3 bg-white p-3 rounded-xl border shadow-sm">
+                    <Popover>
+                        <PopoverTrigger asChild>
+                            <Button
+                                variant="outline"
+                                className="h-11 gap-2 font-bold border-amber-200 text-amber-900 bg-amber-50 hover:bg-amber-100"
+                            >
+                                <CalendarIcon className="w-4 h-4" />
+                                {range?.from
+                                    ? range.to && !isSameDay(range.from, range.to)
+                                        ? `${format(range.from, "d MMM yyyy")} – ${format(range.to, "d MMM yyyy")}`
+                                        : format(range.from, "d MMM yyyy")
+                                    : t.select_date_range}
+                            </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0" align="start">
+                            <Calendar
+                                initialFocus
+                                mode="range"
+                                defaultMonth={range?.from}
+                                selected={range}
+                                onSelect={setRange}
+                                numberOfMonths={2}
+                            />
+                        </PopoverContent>
+                    </Popover>
+                    <Button
+                        variant="outline"
+                        className="h-11 text-amber-700 hover:text-amber-800"
+                        onClick={() => setRange({ from: new Date(), to: new Date() })}
+                    >
+                        {t.today}
+                    </Button>
+
+                    {/* By tender, so a split bill answers to both. */}
+                    <div className="flex items-center gap-1.5">
+                        {["ALL", "CASH", "ONEPAY", "OWNER_VIP"].map((m) => (
+                            <Button
+                                key={m}
+                                variant="ghost"
+                                onClick={() => setMethod(m)}
+                                className={`h-9 px-3 text-xs font-bold border ${method === m ? "bg-slate-800 text-white border-slate-800 hover:bg-slate-800 hover:text-white" : "border-slate-200"}`}
+                            >
+                                {m === "ALL" ? t.all_status : methodLabel[m] ?? m}
+                            </Button>
+                        ))}
+                    </div>
+
+                    <div className="ms-auto text-end">
+                        <p className="text-sm font-medium text-slate-500">
+                            {visible.length} {t.bills}
+                        </p>
+                        <p className="text-lg font-black text-slate-900 tabular-nums leading-none">
+                            {formatTHB(revenue)}
+                        </p>
+                    </div>
+                </div>
+
                 <div className="flex flex-wrap items-center gap-2">
                     {STATUSES.map((s) => (
                         <Button
@@ -173,7 +266,7 @@ export default function BillsPage() {
                         <p className="text-slate-900 font-semibold">{t.no_bills_found}</p>
                     </div>
                 ) : (
-                    <div className="space-y-2">
+                    <div className="space-y-2 @container">
                         {visible.map((b) => {
                             const open = expanded === b.id
                             return (
@@ -182,7 +275,13 @@ export default function BillsPage() {
                                         onClick={() => setExpanded(open ? null : b.id)}
                                         className="w-full text-start p-4 hover:bg-slate-50 transition-colors duration-150"
                                     >
-                                        <div className="flex items-start gap-3 flex-wrap">
+                                        {/* A grid, not a flex row: the money and the
+                                            status then line up down the whole list
+                                            instead of landing wherever each row's
+                                            text happens to end. The middle column is
+                                            minmax(0,1fr) so it absorbs the width the
+                                            sidebar gives back when it collapses. */}
+                                        <div className="grid grid-cols-[1.25rem_minmax(0,1fr)_auto] @2xl:grid-cols-[1.25rem_minmax(0,1fr)_auto_6.5rem] @5xl:grid-cols-[1.25rem_minmax(14rem,1fr)_minmax(0,1fr)_auto_6.5rem] gap-x-4 gap-y-2 items-start">
                                             <ChevronRight
                                                 className={`w-5 h-5 mt-1 text-slate-400 shrink-0 transition-transform duration-150 ${open ? "rotate-90" : ""}`}
                                             />
@@ -227,14 +326,27 @@ export default function BillsPage() {
                                                 </p>
                                             </div>
 
-                                            <div className="ms-auto text-end shrink-0">
+                                            {/* What actually settled it, in its own column from lg
+                                                up. A single method column could never say "2,597 by
+                                                QR and 1,248 cash", which is 17% of the bills here -
+                                                and giving it the room the sidebar frees up puts
+                                                something readable in the middle of a wide row
+                                                instead of a stretch of white. */}
+                                            <p className="hidden @5xl:block text-sm text-slate-500 tabular-nums self-center">
+                                                {b.tenders.length > 0
+                                                    ? b.tenders.map((x) => `${formatTHB(x.amount)} ${methodLabel[x.method] ?? x.method}`).join("  +  ")
+                                                    : b.customer
+                                                        ? b.customer.name
+                                                        : "—"}
+                                            </p>
+
+                                            <div className="text-end shrink-0">
                                                 <p className="text-2xl font-black text-slate-900 tabular-nums leading-none">
                                                     {formatTHB(b.total)}
                                                 </p>
-                                                {/* What actually settled it. A single method column
-                                                    could never say "500 cash and 3,680 by QR", which
-                                                    is 17% of the bills here. */}
-                                                <p className="text-xs text-slate-500 mt-1.5 tabular-nums">
+                                                {/* Below lg the tenders tuck under the total instead
+                                                    of claiming a column there is no room for. */}
+                                                <p className="@5xl:hidden text-xs text-slate-500 mt-1.5 tabular-nums">
                                                     {b.tenders.length > 0
                                                         ? b.tenders.map((x) => `${formatTHB(x.amount)} ${methodLabel[x.method] ?? x.method}`).join(" + ")
                                                         : b.customer
@@ -243,7 +355,11 @@ export default function BillsPage() {
                                                 </p>
                                             </div>
 
-                                            <span className={`shrink-0 self-start px-2.5 py-1 rounded-md text-xs font-bold ${statusStyle[b.status] ?? "bg-slate-100 text-slate-700"}`}>
+                                            {/* Its own column from sm up, so the badges
+                                                form a readable stripe down the list.
+                                                Below that it tucks under the amount
+                                                rather than squeezing both. */}
+                                            <span className={`col-start-3 @2xl:col-start-4 @5xl:col-start-5 justify-self-end @2xl:justify-self-start shrink-0 self-start px-2.5 py-1 rounded-md text-xs font-bold whitespace-nowrap ${statusStyle[b.status] ?? "bg-slate-100 text-slate-700"}`}>
                                                 {statusLabel[b.status] ?? b.status}
                                             </span>
                                         </div>

@@ -29,6 +29,7 @@ export async function GET(request: Request) {
         const endDate = searchParams.get('endDate')
         const waiterId = searchParams.get('waiterId')
         const wanted = searchParams.get('status')
+        const method = searchParams.get('method')
         // Nothing is silently hidden at the volumes this bar trades at. A date filter,
         // not a lower cap, is what this page needs once history runs to months.
         const take = Math.min(Number(searchParams.get('take')) || 500, 500)
@@ -175,6 +176,9 @@ export async function GET(request: Request) {
         // Filtered after shaping: status is derived, not a column, and a server
         // is on the rounds rather than on the bill.
         if (wanted) bills = bills.filter((b) => b.status === wanted)
+        // By tender, not by a method column: a split bill is genuinely both, so
+        // "show me the QR takings" has to match a bill that was half cash.
+        if (method) bills = bills.filter((b) => b.tenders.some((x) => x.method === method))
         if (waiterId) {
             const name = (await prisma.user.findUnique({ where: { id: waiterId }, select: { name: true } }))?.name
             if (name) bills = bills.filter((b) => b.servers.includes(name))
