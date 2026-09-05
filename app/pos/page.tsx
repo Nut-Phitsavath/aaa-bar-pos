@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation"
 import { toast } from "sonner"
 import { TicketPanel, type TicketBill } from "@/components/pos/ticket-panel"
 import { ReceiptDialog } from "@/components/receipt-dialog"
+import { cartKey } from "@/lib/cart-storage"
 import { SessionBanner, type Waiter } from "@/components/session-banner"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -395,11 +396,32 @@ function POSPageInner() {
     return () => channel.close()
   }, [isPaymentOpen, paymentMethod])
 
+  /**
+   * The unsent lines belonging to whichever ticket is on screen.
+   *
+   * Keyed on the session because the counter and every table are the same page
+   * component: one shared key meant a drink added at the counter turned up on
+   * the next table opened, one tap from Send.
+   *
+   * Reacting to sessionIdParam rather than only mounting, because moving from
+   * the counter to a table is a search-param change that never remounts this
+   * component - so without it the in-memory cart would simply carry over.
+   *
+   * `cartOwner` is the session the loaded lines belong to. Until it agrees with
+   * the ticket on screen the save below stands down, so the outgoing cart is
+   * never written under the incoming ticket's key - which would recreate the
+   * very leak this fixes.
+   */
+  const [cartOwner, setCartOwner] = useState<string | null | undefined>(undefined)
+
+  useEffect(() => {
+    const saved = localStorage.getItem(cartKey(sessionIdParam))
+    setCart(saved ? JSON.parse(saved) : [])
+    setCartOwner(sessionIdParam ?? null)
+  }, [sessionIdParam])
+
   // Load persisted state
   useEffect(() => {
-    const savedCart = localStorage.getItem("pos_cart")
-    if (savedCart) setCart(JSON.parse(savedCart))
-
     const savedTable = localStorage.getItem("pos_table")
     if (savedTable) setTableNumber(savedTable)
 
@@ -446,8 +468,11 @@ function POSPageInner() {
 
   useEffect(() => {
     if (isInitialLoad) return
+    // The cart on screen still belongs to the ticket we came from; writing it
+    // now would file it under the ticket we just moved to.
+    if (cartOwner !== (sessionIdParam ?? null)) return
 
-    localStorage.setItem("pos_cart", JSON.stringify(cart))
+    localStorage.setItem(cartKey(sessionIdParam), JSON.stringify(cart))
     localStorage.setItem("pos_customer", JSON.stringify(selectedCustomer))
     localStorage.setItem("pos_table", tableNumber)
     localStorage.setItem("pos_orderNumber", orderNumber)
@@ -458,7 +483,7 @@ function POSPageInner() {
     } else {
       localStorage.removeItem("pos_resumedOrderId")
     }
-  }, [cart, selectedCustomer, tableNumber, orderNumber, resumedOrderId, isInitialLoad])
+  }, [cart, selectedCustomer, tableNumber, orderNumber, resumedOrderId, isInitialLoad, sessionIdParam, cartOwner])
 
   // Sync Complimentary mode with payment
   useEffect(() => {
@@ -482,7 +507,7 @@ function POSPageInner() {
     setResumedOrderId(null)
     setTableNumber("")
     fetchNextOrderNumber()
-    localStorage.removeItem("pos_cart")
+    localStorage.removeItem(cartKey(sessionIdParam))
     localStorage.removeItem("pos_customer")
     localStorage.removeItem("pos_table")
     localStorage.removeItem("pos_orderNumber")
