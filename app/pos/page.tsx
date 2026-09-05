@@ -251,6 +251,17 @@ function POSPageInner() {
 
   useEffect(() => { loadSession() }, [loadSession])
 
+  // The floor plan has polled every 5s since it shipped; this screen never did,
+  // so a round rung up on a second device stayed invisible here until someone
+  // navigated away and back. Harmless with one till, wrong the moment there are
+  // three - and unsent lines live in the local cart, so a refresh cannot
+  // disturb what the person at this till is halfway through typing.
+  useEffect(() => {
+    if (!sessionIdParam) return
+    const poll = setInterval(() => { loadSession() }, 5000)
+    return () => clearInterval(poll)
+  }, [sessionIdParam, loadSession])
+
   useEffect(() => {
     if (!sessionIdParam) return
     fetch("/api/waiters")

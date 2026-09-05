@@ -164,7 +164,9 @@ export type SwapLine = { direction: string; name: string; quantity: number }
  * appearing in two swaps is added up rather than listed twice. The audit report
  * keeps the individual events; this is for the ticket and the printed slip.
  */
-export function summariseSwaps(swaps: { lines: SwapLine[] }[]): { out: SwapLine[]; in: SwapLine[] } {
+export function summariseSwaps(
+    swaps: { lines: SwapLine[]; reversedAt?: string | Date | null }[],
+): { out: SwapLine[]; in: SwapLine[] } {
     const merge = (lines: SwapLine[]) => {
         const totals = new Map<string, SwapLine>()
         for (const line of lines) {
@@ -174,7 +176,9 @@ export function summariseSwaps(swaps: { lines: SwapLine[] }[]): { out: SwapLine[
         }
         return Array.from(totals.values())
     }
-    const all = swaps.flatMap((s) => s.lines ?? [])
+    // A reversed swap did not survive, so it describes nothing the customer
+    // ended up with. It stays in the audit report; it leaves the bill.
+    const all = swaps.filter((s) => !s.reversedAt).flatMap((s) => s.lines ?? [])
     return {
         out: merge(all.filter((l) => l.direction === 'OUT')),
         in: merge(all.filter((l) => l.direction === 'IN')),

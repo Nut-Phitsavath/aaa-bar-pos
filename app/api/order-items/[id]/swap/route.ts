@@ -7,6 +7,8 @@ import {
     type SellableMenu,
 } from '@/lib/packages'
 import { sellableMenus } from '@/lib/packages-db'
+import { requireOpenShift } from '@/lib/shift-guard'
+import { EXCHANGE_CHARGE, recomputeOrderTotal } from '@/lib/swap-charge'
 
 export const dynamic = 'force-dynamic'
 
@@ -49,7 +51,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
             ? contentsOf(menu.recipes.map((r) => ({ ingredientId: r.ingredientId, quantity: r.quantity })), index)
                 .map((c) => ({ ...c, quantity: c.quantity * item.quantity }))
             : []
-        const alreadyRemoved = item.swaps.flatMap((s) =>
+        const alreadyRemoved = item.swaps.filter((s) => !s.reversedAt).flatMap((s) =>
             s.lines.filter((l) => l.direction === 'OUT' && l.menuId)
                 .map((l) => ({ menuId: l.menuId as string, quantity: l.quantity })))
 
@@ -84,6 +86,15 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         const { id } = await params
         const user = await getSessionUser()
         if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+        // Every other money path in this app refuses to run with the night
+        // closed - orders, payments, voids. A swap moves stock and can add a
+        // charge, so it belongs to a shift for exactly the same reasons.
+        const openShift = await prisma.shift.findFirst({ where: { status: 'OPEN' } })
+        const shiftCheck = requireOpenShift(openShift)
+        if (!shiftCheck.ok) {
+            return NextResponse.json({ error: shiftCheck.reason }, { status: 409 })
+        }
 
         const body = await request.json()
         const removing: { menuId: string; quantity: number }[] = Array.isArray(body.removing) ? body.removing : []
@@ -125,7 +136,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         const contents = perPackage.map((c) => ({ ...c, quantity: c.quantity * item.quantity }))
         if (contents.length === 0) return NextResponse.json({ error: 'NOT_A_PACKAGE' }, { status: 409 })
 
-        const alreadyRemoved = item.swaps.flatMap((s) =>
+        const alreadyRemoved = item.swaps.filter((s) => !s.reversedAt).flatMap((s) =>
             s.lines.filter((l) => l.direction === 'OUT' && l.menuId)
                 .map((l) => ({ menuId: l.menuId as string, quantity: l.quantity })))
         const left = remainingContents(contents, alreadyRemoved)
@@ -195,24 +206,25 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
             // package it belongs to. A cheaper one changes nothing: the package
             // price is a floor.
             if (charged > 0) {
-                await tx.orderItem.create({
+                // Named for what it is. The detail of what was traded prints
+                // directly above it, so repeating the drinks here only made an
+                // 80mm slip wrap a line nobody needed twice.
+                const chargeItem = await tx.orderItem.create({
                     data: {
                         orderId: item.order.id,
-                        name: `${item.name} — ${inLines.map((l) => `${l.quantity}x ${l.name}`).join(', ')}`,
+                        name: EXCHANGE_CHARGE,
                         price: charged,
                         quantity: 1,
                         total: charged,
                     },
                 })
-                const live = await tx.orderItem.findMany({
-                    where: { orderId: item.order.id, voidedAt: null },
-                    select: { total: true },
+                // Recorded on the swap so undoing it strikes this exact line
+                // rather than hunting for one that looks similar.
+                await tx.packageSwap.update({
+                    where: { id: created.id },
+                    data: { chargeItemId: chargeItem.id },
                 })
-                const total = live.reduce((sum, l) => sum + l.total, 0)
-                await tx.order.update({
-                    where: { id: item.order.id },
-                    data: { total, subtotal: total },
-                })
+                await recomputeOrderTotal(tx, item.order.id)
             }
 
             return created

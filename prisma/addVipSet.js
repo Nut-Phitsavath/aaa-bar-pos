@@ -62,14 +62,16 @@ async function main() {
 
     // Sold singly, which is the only reason wine can be swapped out of a set.
     await ensureMenu({
-        name: WINE, lao: 'ເຫຼົ້າແວງ (ຂວດ)', categoryName: 'Spirits', price: 400,
+        name: WINE, lao: 'ເຫຼົ້າແວງ (ຂວດ)', categoryName: 'Spirits', price: 750,
         recipe: { [WINE]: 1 },
     }, ingredients)
 
-    // Contents are worth 610 on the menu and the set sells for 550, so trading
-    // down leaves that margin with the bar.
+    // Placeholder prices: they clear the pour-cost bands this project checks,
+    // but the owner has the real wine cost and should replace both. Contents
+    // are worth 960 on the menu and the set sells for 850, so trading down
+    // leaves that margin with the bar.
     await ensureMenu({
-        name: 'VIP Set', lao: 'ຊຸດ VIP', categoryName: 'Sets', price: 550,
+        name: 'VIP Set', lao: 'ຊຸດ VIP', categoryName: 'Sets', price: 850,
         recipe: { [WINE]: 1, 'Beer Lao (bottle)': 2, 'Heineken (bottle)': 2, 'Ice (kg)': 2 },
     }, ingredients)
 

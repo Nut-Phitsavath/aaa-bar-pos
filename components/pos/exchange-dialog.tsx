@@ -5,10 +5,17 @@ import { useTranslation } from "@/hooks/use-translation"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Minus, Plus, Search, ArrowRight } from "lucide-react"
+import { Minus, Plus, Search, ArrowRight, Undo2 } from "lucide-react"
 import { toast } from "sonner"
 import { formatTHB } from "@/lib/currency"
 import { chargeFor, valueOf, type Component } from "@/lib/packages"
+
+type PastSwap = {
+    id: string
+    charged: number
+    reversedAt: string | null
+    lines: { direction: string; name: string; quantity: number }[]
+}
 
 type MenuItem = {
     id: string
@@ -41,7 +48,7 @@ export function ExchangeDialog({
     onDone: () => void
 }) {
     const { t } = useTranslation()
-    const [pkg, setPkg] = useState<{ name: string; remaining: Component[] } | null>(null)
+    const [pkg, setPkg] = useState<{ name: string; remaining: Component[]; swaps: PastSwap[] } | null>(null)
     const [menu, setMenu] = useState<MenuItem[]>([])
     const [out, setOut] = useState<Record<string, number>>({})
     const [inn, setInn] = useState<Record<string, number>>({})
@@ -53,9 +60,27 @@ export function ExchangeDialog({
         const res = await fetch(`/api/order-items/${itemId}/swap`)
         if (res.ok) {
             const data = await res.json()
-            setPkg({ name: data.name, remaining: data.remaining ?? [] })
+            setPkg({ name: data.name, remaining: data.remaining ?? [], swaps: data.swaps ?? [] })
         }
     }, [itemId])
+
+    /**
+     * A swap cannot be un-swapped: what it added never becomes part of the
+     * package, so a second exchange can never take it back. Undo is the only
+     * way back from the wrong drink tapped at 1am.
+     */
+    const undo = async (swapId: string) => {
+        setBusy(true)
+        try {
+            const res = await fetch(`/api/package-swaps/${swapId}/reverse`, { method: "POST" })
+            const data = await res.json().catch(() => ({}))
+            if (!res.ok) { toast.error(errorText(data.error)); return }
+            toast.success(t.exchange_reversed)
+            setOut({}); setInn({})
+            await load()
+            onDone()
+        } finally { setBusy(false) }
+    }
 
     useEffect(() => {
         if (!itemId) return
@@ -140,7 +165,8 @@ export function ExchangeDialog({
         code === "MORE_THAN_PACKAGE_HOLDS" ? t.exchange_more_than_held
             : code === "NOT_IN_PACKAGE" ? t.exchange_not_in_package
                 : code === "SESSION_ALREADY_CLOSED" ? t.session_already_closed
-                    : t.save_failed
+                    : code === "NO_OPEN_SHIFT" ? t.no_open_shift_exchange
+                        : t.save_failed
 
     const visible = query
         ? menu.filter((m) =>
@@ -229,6 +255,44 @@ export function ExchangeDialog({
                         </div>
                     </div>
                 </div>
+
+                {/* What has already been traded on this package, and the only
+                    way back from a mistake. A reversed one stays listed, struck
+                    through: the audit keeps it, the bill does not. */}
+                {(pkg?.swaps ?? []).length > 0 && (
+                    <div className="rounded-xl border border-slate-200 divide-y">
+                        {pkg!.swaps.map((s) => {
+                            const gone = Boolean(s.reversedAt)
+                            const text = (dir: string) => s.lines
+                                .filter((l) => l.direction === dir)
+                                .map((l) => `${l.quantity} × ${l.name}`).join(", ")
+                            return (
+                                <div key={s.id} className="flex items-center gap-3 px-3 py-2 text-sm">
+                                    <span className={`min-w-0 flex-1 ${gone ? "line-through text-slate-400" : "text-slate-700"}`}>
+                                        <span className="text-rose-600">− {text("OUT") || "—"}</span>
+                                        {"  "}
+                                        <span className="text-emerald-700">+ {text("IN") || "—"}</span>
+                                        {s.charged > 0 && (
+                                            <strong className="ms-2 tabular-nums text-slate-900">{formatTHB(s.charged)}</strong>
+                                        )}
+                                    </span>
+                                    {gone ? (
+                                        <span className="text-xs font-bold text-slate-400 shrink-0">{t.exchange_reversed}</span>
+                                    ) : (
+                                        <Button
+                                            variant="outline" size="sm" className="h-9 shrink-0"
+                                            onClick={() => undo(s.id)}
+                                            disabled={busy}
+                                        >
+                                            <Undo2 className="w-4 h-4 mr-1.5" />
+                                            {t.undo}
+                                        </Button>
+                                    )}
+                                </div>
+                            )
+                        })}
+                    </div>
+                )}
 
                 {/* The money, before the button that takes it. */}
                 <div className="flex items-center gap-3 flex-wrap rounded-xl bg-slate-50 border border-slate-200 px-4 py-3">

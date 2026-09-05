@@ -459,6 +459,14 @@ model PackageSwap {
   outValue    Float
   inValue     Float
   charged     Float             @default(0)
+  /// The line this swap added to the bill when the replacement cost more, so
+  /// undoing the swap can strike the same charge rather than guessing at it.
+  chargeItemId String?
+  /// Undone rather than deleted. A swap that happened and was reversed is two
+  /// facts an audit wants, and deleting the row would leave the second one as
+  /// an unexplained stock movement.
+  reversedAt   DateTime?
+  reversedById String?
   createdAt   DateTime          @default(now())
   orderItem   OrderItem         @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
   session     TableSession?     @relation(fields: [sessionId], references: [id], onDelete: SetNull)

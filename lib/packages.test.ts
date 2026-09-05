@@ -182,3 +182,27 @@ test('a line with no swaps summarises to nothing', () => {
     assert.deepEqual(summary.out, [])
     assert.deepEqual(summary.in, [])
 })
+
+test('a reversed swap leaves the bill but keeps its rows', () => {
+    // The wrong drink was tapped and undone. What the customer ended up with is
+    // the original package, so the slip must say nothing at all.
+    const summary = summariseSwaps([
+        {
+            reversedAt: '2026-09-06T01:00:00Z',
+            lines: [
+                { direction: 'OUT', name: 'Heineken', quantity: 2 },
+                { direction: 'IN', name: 'Water', quantity: 2 },
+            ],
+        },
+    ])
+    assert.deepEqual(summary.out, [])
+    assert.deepEqual(summary.in, [])
+})
+
+test('a reversed swap does not hide a live one', () => {
+    const summary = summariseSwaps([
+        { reversedAt: new Date(), lines: [{ direction: 'OUT', name: 'Heineken', quantity: 2 }] },
+        { reversedAt: null, lines: [{ direction: 'OUT', name: 'Heineken', quantity: 1 }] },
+    ])
+    assert.deepEqual(summary.out, [{ direction: 'OUT', name: 'Heineken', quantity: 1 }])
+})

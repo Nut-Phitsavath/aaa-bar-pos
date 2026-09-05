@@ -110,11 +110,11 @@ const MENU = [
     // The owner's own example, and the one to test an exchange against: its
     // contents are worth 610 on the menu and it sells for 550, so a customer
     // who trades down leaves that margin with the bar.
-    { cat: "Sets", name: "VIP Set", lao: "ຊຸດ VIP", price: 550, recipe: { "Wine (bottle)": 1, "Beer Lao (bottle)": 2, "Heineken (bottle)": 2, "Ice (kg)": 2 } },
+    { cat: "Sets", name: "VIP Set", lao: "ຊຸດ VIP", price: 850, recipe: { "Wine (bottle)": 1, "Beer Lao (bottle)": 2, "Heineken (bottle)": 2, "Ice (kg)": 2 } },
 
     { cat: "Spirits", name: "Whisky (glass)", lao: "ວິສກີ້ (ຈອກ)", price: 70, recipe: { "Hongthong (bottle)": SINGLE, "Ice (kg)": 0.15 } },
     { cat: "Spirits", name: "Vodka (glass)", lao: "ວອດກ້າ (ຈອກ)", price: 90, recipe: { "Vodka (bottle)": SINGLE, "Ice (kg)": 0.15 } },
-    { cat: "Spirits", name: "Wine (bottle)", lao: "ເຫຼົ້າແວງ (ຂວດ)", price: 400, recipe: { "Wine (bottle)": 1 } },
+    { cat: "Spirits", name: "Wine (bottle)", lao: "ເຫຼົ້າແວງ (ຂວດ)", price: 750, recipe: { "Wine (bottle)": 1 } },
 
     { cat: "Cocktails", name: "Mojito", lao: "ໂມຈິໂຕ້", price: 150, recipe: { "White Rum (bottle)": COCKTAIL, "Lime": 1, "Mint": 0.15, "Sugar syrup (litre)": 0.02, "Soda water (bottle)": 1, "Ice (kg)": 0.2 } },
     { cat: "Cocktails", name: "Gin Tonic", lao: "ຈິນໂທນິກ", price: 160, recipe: { "Gin (bottle)": COCKTAIL, "Tonic water (bottle)": 1, "Lime": 0.25, "Ice (kg)": 0.2 } },
