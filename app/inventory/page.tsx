@@ -1,13 +1,14 @@
 "use client"
 
 import { useState, useEffect, useMemo } from "react"
+import { useRouter } from "next/navigation"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog"
-import { Plus, Edit, Trash2, Package, ShoppingCart, Minus, Settings, Search, ArrowUpDown, Store, Warehouse } from "lucide-react"
+import { Plus, Edit, Trash2, Package, ShoppingCart, Minus, Settings, Search, ArrowUpDown, Store, Warehouse, Printer } from "lucide-react"
 import { formatTHB } from "@/lib/currency"
 import { formatStock } from "@/lib/stock"
 import { Header } from "@/components/header"
@@ -57,6 +58,7 @@ type SortConfig = {
 
 export default function InventoryPage() {
   const { t } = useTranslation()
+  const router = useRouter()
   const confirm = useConfirm()
   const [ingredients, setIngredients] = useState<Ingredient[]>([])
   const [categories, setCategories] = useState<Category[]>([])
@@ -348,6 +350,16 @@ export default function InventoryPage() {
                 ))}
               </select>
               
+              {/* Req #22: the count starts on paper, at the fridge. */}
+              <Button
+                variant="outline"
+                className="border-slate-200"
+                onClick={() => router.push('/inventory/audit-sheet')}
+              >
+                <Printer className="w-4 h-4 mr-2" />
+                {t.print_count_sheet}
+              </Button>
+
               <Dialog open={isCatDialogOpen} onOpenChange={setIsCatDialogOpen}>
                 <DialogTrigger asChild>
                   <Button variant="outline" className="border-amber-200 text-amber-700 hover:bg-amber-50">

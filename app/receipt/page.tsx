@@ -76,6 +76,7 @@ function ReceiptContent() {
                         sugar: i.sugarLevel ?? null,
                         shot: i.shotType ?? null,
                         isTakeaway: i.isTakeaway,
+                        note: i.note ?? null,
                     })),
                     discount: order.discount ?? 0,
                     tax: order.taxAmount ?? order.tax ?? 0,
@@ -109,10 +110,12 @@ function ReceiptContent() {
                     // bill whose total no longer includes it.
                     for (const i of o.items.filter((x: any) => !x.voidedAt)) {
                         const unit = i.quantity > 0 ? i.total / i.quantity : 0
-                        const key = `${i.name}::${unit}`
+                        // The note is part of the key: "no ice" is why one of
+                        // the two is different, so merging them would lose it.
+                        const key = `${i.name}::${unit}::${i.note ?? ""}`
                         const at = merged.get(key)
                         if (at) { at.quantity += i.quantity; at.total += i.total }
-                        else merged.set(key, { name: i.name, quantity: i.quantity, total: i.total })
+                        else merged.set(key, { name: i.name, quantity: i.quantity, total: i.total, note: i.note ?? null })
                     }
                 }
 

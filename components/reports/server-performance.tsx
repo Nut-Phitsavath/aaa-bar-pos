@@ -26,27 +26,95 @@ export function ServerPerformance({ startDate, endDate }: { startDate: string; e
     const [rows, setRows] = useState<ServerRow[]>([])
     const [total, setTotal] = useState(0)
     const [loading, setLoading] = useState(true)
+    // Req #23 asks for this per shift, and a shift is not a date: the night
+    // crosses midnight, so "5 Sep" cuts one night's takings in two. The dates
+    // stay the default because they are what the rest of the reports page is
+    // showing; picking a shift overrides them.
+    const [shifts, setShifts] = useState<{ id: string; startTime: string; endTime: string | null }[]>([])
+    const [shiftId, setShiftId] = useState("")
+
+    // Only the shifts inside the dates chosen at the top of the page. The
+    // calendar stays the one thing that sets the period; this narrows it to a
+    // single night within it, rather than being a second, disagreeing filter.
+    useEffect(() => {
+        const from = new Date(startDate).getTime()
+        const to = new Date(endDate).getTime()
+        fetch('/api/shifts')
+            .then((r) => (r.ok ? r.json() : []))
+            .then((s: any[]) => {
+                const inRange = (Array.isArray(s) ? s : []).filter((x) => {
+                    const began = new Date(x.startTime).getTime()
+                    // An open shift runs up to now, so it counts against a range
+                    // that ends today.
+                    const ended = x.endTime ? new Date(x.endTime).getTime() : Date.now()
+                    return began <= to && ended >= from
+                })
+                setShifts(inRange)
+                // The picked shift may have just fallen outside the new dates.
+                setShiftId((id) => (inRange.some((x) => x.id === id) ? id : ""))
+            })
+            .catch(() => setShifts([]))
+    }, [startDate, endDate])
 
     useEffect(() => {
         setLoading(true)
-        fetch(`/api/reports/servers?startDate=${startDate}&endDate=${endDate}`)
+        const query = shiftId
+            ? `shiftId=${shiftId}`
+            : `startDate=${startDate}&endDate=${endDate}`
+        fetch(`/api/reports/servers?${query}`)
             .then((r) => (r.ok ? r.json() : { servers: [], totalRevenue: 0 }))
             .then((d) => { setRows(d.servers ?? []); setTotal(d.totalRevenue ?? 0) })
             .catch(() => setRows([]))
             .finally(() => setLoading(false))
-    }, [startDate, endDate])
+    }, [startDate, endDate, shiftId])
+
+    const stamp = (iso: string) => new Date(iso).toLocaleString(undefined, {
+        day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit",
+    })
+
+    // ponytail: a native select. One control, no popover, and it is already
+    // the right thing on a touch till. Nothing to drill into when the chosen
+    // dates hold no shifts, so the control does not appear at all.
+    const scope = shifts.length === 0 ? null : (
+        <div className="flex items-center gap-2">
+            <label htmlFor="server-scope" className="text-xs font-bold uppercase tracking-widest text-slate-500">
+                {t.report_scope}
+            </label>
+            <select
+                id="server-scope"
+                value={shiftId}
+                onChange={(e) => setShiftId(e.target.value)}
+                className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-800 max-w-full"
+            >
+                <option value="">{t.scope_selected_dates}</option>
+                {shifts.map((s) => (
+                    <option key={s.id} value={s.id}>
+                        {stamp(s.startTime)} → {s.endTime ? stamp(s.endTime) : t.shift_in_progress}
+                    </option>
+                ))}
+            </select>
+        </div>
+    )
 
     if (loading) {
-        return <div className="h-64 rounded-xl bg-white border border-slate-200 animate-pulse" />
+        return (
+            <div className="space-y-6">
+                {scope}
+                <div className="h-64 rounded-xl bg-white border border-slate-200 animate-pulse" />
+            </div>
+        )
     }
 
     if (rows.length === 0) {
         return (
-            <Card>
-                <CardContent className="py-16 text-center text-slate-500">
-                    {t.no_server_sales}
-                </CardContent>
-            </Card>
+            <div className="space-y-6">
+                {scope}
+                <Card>
+                    <CardContent className="py-16 text-center text-slate-500">
+                        {t.no_server_sales}
+                    </CardContent>
+                </Card>
+            </div>
         )
     }
 
@@ -55,6 +123,7 @@ export function ServerPerformance({ startDate, endDate }: { startDate: string; e
 
     return (
         <div className="space-y-6">
+            {scope}
             <Card className="border-amber-200 bg-amber-50">
                 <CardContent className="py-5 flex items-center gap-4">
                     <div className="w-12 h-12 rounded-full bg-amber-500 grid place-items-center shrink-0">
