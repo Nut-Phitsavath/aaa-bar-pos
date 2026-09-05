@@ -33,6 +33,8 @@ model User {
   // is deliberately not the same person as `waitedOrders`: the report has to
   // separate who took the round from who cancelled it.
   itemsVoided       OrderItem[]        @relation("OrderItemVoidedBy")
+  paymentsVoided    Payment[]          @relation("PaymentVoidedBy")
+  sessionsReopened  TableSession[]     @relation("SessionReopenedBy")
 }
 
 model Category {
@@ -303,10 +305,17 @@ model TableSession {
   customerId           String?
   payLaterApprovedById String?
   openedById String?
+  /// Set when a settled bill was put back into play. Kept as a fact on the
+  /// session rather than a flag that gets cleared: a bill that was reopened
+  /// once stays a bill that was reopened, which is what an audit asks.
+  reopenedAt   DateTime?
+  reopenedById String?
+  reopenReason String?
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @updatedAt
   table              Table     @relation(fields: [tableId], references: [id])
   openedBy           User?     @relation("SessionOpenedBy", fields: [openedById], references: [id])
+  reopenedBy         User?     @relation("SessionReopenedBy", fields: [reopenedById], references: [id])
   discountApprovedBy User?     @relation("SessionDiscountApprover", fields: [discountApprovedById], references: [id])
   payLaterApprovedBy User?     @relation("SessionTabApprover", fields: [payLaterApprovedById], references: [id])
   customer           Customer? @relation(fields: [customerId], references: [id])
@@ -339,11 +348,22 @@ model Payment {
   userId        String?
   /// Manager who authorised a comp. Null for ordinary tenders.
   approvedById  String?
+  /// Handed back. Recorded on the payment rather than as a negative one, so the
+  /// original tender stays legible on the bill and a reversal can never be
+  /// mistaken for a second sale. Mirrors how a voided OrderItem is kept.
+  voidedAt      DateTime?
+  voidedById    String?
+  voidReason    String?
+  /// The shift this tender was taken in, so a refund can be refused once that
+  /// shift has been counted and signed off.
+  shiftId       String?
   createdAt     DateTime     @default(now())
   updatedAt     DateTime     @updatedAt
   session       TableSession @relation(fields: [sessionId], references: [id])
   user          User?        @relation("PaymentTakenBy", fields: [userId], references: [id])
   approvedBy    User?        @relation("PaymentApprovedBy", fields: [approvedById], references: [id])
+  voidedBy      User?        @relation("PaymentVoidedBy", fields: [voidedById], references: [id])
+  shift         Shift?       @relation(fields: [shiftId], references: [id])
 
   @@index([sessionId])
   @@index([method])
@@ -371,6 +391,7 @@ model Shift {
   responsiblePerson String?
   user              User?     @relation(fields: [userId], references: [id])
   orders            Order[]
+  payments          Payment[]
 
   // findFirst({ where: { status: 'OPEN' } }) runs on every completed order.
   @@index([status])

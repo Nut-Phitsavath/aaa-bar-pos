@@ -75,25 +75,28 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         const applied = Math.min(requested, balance)
 
         const payment = await prisma.$transaction(async (tx) => {
+            // Resolved once, before the write: the tender records which shift
+            // took it, so a refund can tell "taken minutes ago" from "taken on a
+            // night whose drawer has already been counted and signed off".
+            const openShift = await tx.shift.findFirst({ where: { status: 'OPEN' } })
+
             const created = await tx.payment.create({
                 data: {
                     session: { connect: { id } },
                     method,
                     amount: applied,
                     paymentStatus: method === 'CASH' ? 'PAID' : 'PENDING',
-                    user: { connect: { id: user.id } }
+                    user: { connect: { id: user.id } },
+                    ...(openShift ? { shift: { connect: { id: openShift.id } } } : {}),
                 }
             })
 
             // The drawer only ever sees cash, and only the applied amount.
-            if (method === 'CASH') {
-                const openShift = await tx.shift.findFirst({ where: { status: 'OPEN' } })
-                if (openShift) {
-                    await tx.shift.update({
-                        where: { id: openShift.id },
-                        data: { cashPayments: { increment: applied } }
-                    })
-                }
+            if (method === 'CASH' && openShift) {
+                await tx.shift.update({
+                    where: { id: openShift.id },
+                    data: { cashPayments: { increment: applied } }
+                })
             }
 
             return created

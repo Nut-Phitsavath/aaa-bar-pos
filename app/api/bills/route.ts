@@ -4,6 +4,7 @@ import { startOfDay, endOfDay } from 'date-fns'
 import { sessionTotal, BILLABLE_ORDER_STATUSES } from '@/lib/sessions'
 import { billTotalOf, discountAmount, paidTotal } from '@/lib/payments'
 import { tendersOf, billStatus } from '@/lib/bills'
+import { exceptionsOf } from '@/lib/bill-operations'
 
 export const dynamic = 'force-dynamic'
 
@@ -46,7 +47,7 @@ export async function GET(request: Request) {
             include: {
                 table: { select: { name: true, area: true } },
                 customer: { select: { id: true, name: true } },
-                payments: true,
+                payments: { orderBy: { createdAt: 'asc' }, include: { voidedBy: { select: { name: true } } } },
                 orders: {
                     orderBy: { tableOrderNumber: 'asc' },
                     include: {
@@ -114,6 +115,14 @@ export async function GET(request: Request) {
                 total,
                 paid: paidTotal(s.payments),
                 tenders: tendersOf(s.payments),
+                // Individually refundable, so the row can offer one leg back.
+                payments: s.payments.map((p) => ({
+                    id: p.id, method: p.method, amount: p.amount,
+                    paymentStatus: p.paymentStatus, voidedAt: p.voidedAt,
+                    voidReason: p.voidReason, voidedBy: p.voidedBy?.name ?? null,
+                    at: p.createdAt,
+                })),
+                reopenedAt: s.reopenedAt,
                 status,
                 customer: s.customer ? { id: s.customer.id, name: s.customer.name } : null,
                 detail: s.orders.map((o) => ({
@@ -155,6 +164,8 @@ export async function GET(request: Request) {
                 total: o.total,
                 paid: o.status === 'COMPLETED' ? o.total : 0,
                 tenders,
+                payments: [] as unknown[],
+                reopenedAt: null as Date | null,
                 status: o.status === 'CANCELLED' ? 'VOIDED' : o.status === 'COMPLETED' ? 'PAID' : 'OPEN',
                 customer: null,
                 detail: [{
@@ -184,11 +195,16 @@ export async function GET(request: Request) {
             if (name) bills = bills.filter((b) => b.servers.includes(name))
         }
 
+        const page = bills.slice(0, take)
         return NextResponse.json({
-            bills: bills.slice(0, take),
+            bills: page,
+            // The morning read: what was given away, struck or left owing over
+            // the range on screen. Every figure existed already, buried one bill
+            // at a time inside an expanded row.
+            exceptions: exceptionsOf(page),
             totals: {
                 count: bills.length,
-                revenue: bills
+                revenue: page
                     .filter((b) => b.status === 'PAID' || b.status === 'PART_PAID')
                     .reduce((sum, b) => sum + b.paid, 0),
             },

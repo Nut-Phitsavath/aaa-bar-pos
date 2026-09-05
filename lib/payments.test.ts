@@ -191,3 +191,39 @@ test('canAcceptPayment refuses money on a tab already paid off', () => {
     const tab = { status: 'CLOSED', customerId: 'cust-1' }
     assert.equal(canAcceptPayment(tab, 1000, [cash(1000)], 100).ok, false)
 })
+
+// --- Refunded tenders (a payment handed back) --------------------------------
+
+test('a refunded payment stops counting as money held', () => {
+    // Every balance in the app flows through isConfirmed, so this one check is
+    // what stops a refunded bill still reading as settled everywhere it shows.
+    assert.equal(isConfirmed({ method: 'CASH', amount: 500, voidedAt: new Date() }), false)
+})
+
+test('a refunded cash leg comes back off the paid total', () => {
+    const payments = [cash(500), { method: 'CASH', amount: 200, paymentStatus: 'PAID', voidedAt: new Date() }]
+    assert.equal(paidTotal(payments), 500)
+})
+
+test('refunding the only tender puts the bill back into debt', () => {
+    const refunded = [{ method: 'CASH', amount: 645, paymentStatus: 'PAID', voidedAt: new Date() }]
+    assert.equal(balanceOf(645, refunded), 645)
+    assert.equal(isFullySettled(645, refunded), false)
+})
+
+test('refunding one leg of a split bill leaves the other standing', () => {
+    const payments = [
+        { method: 'CASH', amount: 500, paymentStatus: 'PAID', voidedAt: new Date() },
+        onepay(1000, 'PAID'),
+    ]
+    assert.equal(paidTotal(payments), 1000)
+    assert.equal(balanceOf(1500, payments), 500)
+})
+
+test('a tab whose payment was refunded owes the full amount again', () => {
+    const sessions = [{
+        total: 1000,
+        payments: [{ method: 'CASH', amount: 400, paymentStatus: 'PAID', voidedAt: new Date() }],
+    }]
+    assert.equal(outstandingOf(sessions), 1000)
+})

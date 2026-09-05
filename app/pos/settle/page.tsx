@@ -365,13 +365,23 @@ function SettleScreen() {
                     "am I taking all of it?" without doing arithmetic. */}
                 <div className="bg-white px-6 py-4 shrink-0">
                     <div className="flex items-baseline gap-6">
+                        {/* Once part of the bill is paid, the figure the next
+                            tender is measured against is what is LEFT, not what
+                            the bill came to - so the top row follows the money
+                            instead of staying on the opening total while the
+                            panel beside it says something different. */}
                         <span className="text-3xl font-light text-slate-300 shrink-0 w-32">
-                            {t.bill_total}
+                            {paid > 0 ? t.balance_due : t.bill_total}
                         </span>
                         <span className="flex-1 text-right text-4xl font-light text-slate-500 tabular-nums border-b border-slate-200 pb-1">
-                            {formatTHB(bill.total)}
+                            {formatTHB(paid > 0 ? bill.balance : bill.total)}
                         </span>
                     </div>
+                    {paid > 0 && (
+                        <p className="text-right text-xs text-slate-400 mt-1 tabular-nums">
+                            {t.bill_total} {formatTHB(bill.total)} · {t.amount_paid} {formatTHB(paid)}
+                        </p>
+                    )}
                     <div className="flex items-baseline gap-6 mt-3">
                         <span className="text-3xl font-light text-slate-300 shrink-0 w-32">
                             {t.charged}

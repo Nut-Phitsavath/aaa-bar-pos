@@ -11,6 +11,8 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { startOfDay, endOfDay, format, isSameDay } from "date-fns"
 import type { DateRange } from "react-day-picker"
 import { ReceiptDialog } from "@/components/receipt-dialog"
+import { ManagerApproval } from "@/components/manager-approval"
+import { toast } from "sonner"
 import {
     ChevronRight, Clock, Receipt as ReceiptIcon, Users, Ban, Search,
     Calendar as CalendarIcon,
@@ -56,6 +58,11 @@ type Bill = {
     total: number
     paid: number
     tenders: { method: string; amount: number }[]
+    payments: {
+        id: string; method: string; amount: number; paymentStatus: string | null
+        voidedAt: string | null; voidReason: string | null; voidedBy: string | null; at: string
+    }[]
+    reopenedAt: string | null
     status: string
     customer: { id: string; name: string } | null
     detail: Round[]
@@ -93,6 +100,19 @@ export default function BillsPage() {
         to: new Date(),
     })
     const [revenue, setRevenue] = useState(0)
+    const [exceptions, setExceptions] = useState<{
+        discountTotal: number; discountCount: number
+        compedTotal: number; compedCount: number
+        voidedLines: number; owedTotal: number; tabCount: number
+    } | null>(null)
+    // Reopening a bill and handing a tender back both move money a shift has
+    // counted, so both go through the manager approval comps already use.
+    const [pending, setPending] = useState<
+        { kind: "REOPEN"; billId: string } | { kind: "REFUND"; paymentId: string } | null
+    >(null)
+    const [approvalError, setApprovalError] = useState<string | null>(null)
+    const [busy, setBusy] = useState(false)
+    const [reasonText, setReasonText] = useState("")
 
     const load = useCallback(async () => {
         setLoading(true)
@@ -112,6 +132,7 @@ export default function BillsPage() {
                 const data = await res.json()
                 setBills(data.bills ?? [])
                 setRevenue(data.totals?.revenue ?? 0)
+                setExceptions(data.exceptions ?? null)
             }
         } finally {
             setLoading(false)
@@ -148,6 +169,32 @@ export default function BillsPage() {
     const time = (iso: string) =>
         new Date(iso).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })
     const day = (iso: string) => new Date(iso).toLocaleDateString("en-GB")
+
+    const runApproved = async (creds: { managerUsername: string; managerPin: string }) => {
+        if (!pending) return
+        setBusy(true)
+        setApprovalError(null)
+        try {
+            const url = pending.kind === "REOPEN"
+                ? `/api/table-sessions/${pending.billId}/reopen`
+                : `/api/payments/${pending.paymentId}/refund`
+            const res = await fetch(url, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ ...creds, reason: reasonText.trim() }),
+            })
+            const data = await res.json().catch(() => ({}))
+            if (res.status === 403 || res.status === 429) {
+                setApprovalError(data.error === "TOO_MANY_ATTEMPTS" ? t.too_many_attempts : t.invalid_approval)
+                return
+            }
+            setPending(null)
+            if (!res.ok) { toast.error(data.error || t.error); return }
+            toast.success(pending.kind === "REOPEN" ? t.reopen_bill : t.refunded)
+            setReasonText("")
+            await load()
+        } finally { setBusy(false) }
+    }
 
     const visible = bills.filter((b) => {
         const q = query.trim().toLowerCase()
@@ -251,6 +298,27 @@ export default function BillsPage() {
                         />
                     </div>
                 </div>
+
+                {/* The morning read. Every figure here already existed, buried
+                    one bill at a time inside an expanded row - a manager could
+                    not ask "what did we give away last night" without opening
+                    them all. Only shown when there is something to report. */}
+                {exceptions && (exceptions.discountTotal > 0 || exceptions.compedTotal > 0 || exceptions.voidedLines > 0 || exceptions.owedTotal > 0) && (
+                    <div className="grid gap-3 grid-cols-2 lg:grid-cols-4 rounded-xl border-2 border-amber-200 bg-amber-50/60 p-3">
+                        {[
+                            { label: t.discounts_given, value: formatTHB(exceptions.discountTotal), sub: `${exceptions.discountCount} ${t.bills}` },
+                            { label: t.comped_away, value: formatTHB(exceptions.compedTotal), sub: `${exceptions.compedCount} ${t.bills}` },
+                            { label: t.status_voided, value: String(exceptions.voidedLines), sub: t.items_label },
+                            { label: t.still_owed, value: formatTHB(exceptions.owedTotal), sub: `${exceptions.tabCount} ${t.status_tab}` },
+                        ].map((x) => (
+                            <div key={x.label}>
+                                <p className="text-[10px] font-bold uppercase tracking-widest text-amber-700/80">{x.label}</p>
+                                <p className="text-xl font-black text-slate-900 tabular-nums mt-1 leading-none">{x.value}</p>
+                                <p className="text-[11px] text-slate-500 mt-1">{x.sub}</p>
+                            </div>
+                        ))}
+                    </div>
+                )}
 
                 {loading ? (
                     <div className="space-y-2">
@@ -409,11 +477,57 @@ export default function BillsPage() {
                                                 </div>
                                             ))}
 
-                                            <div className="px-4 py-3 flex items-center gap-3">
+                                            {/* Each tender on its own line, refundable on its
+                                                own: 17% of bills are split, and a customer may
+                                                want the cash back while the QR leg stands. */}
+                                            {b.payments.length > 0 && (
+                                                <div className="px-4 py-3 space-y-1.5">
+                                                    {b.payments.map((pmt) => (
+                                                        <div key={pmt.id} className="flex items-center gap-3 text-sm">
+                                                            <span className={`tabular-nums ${pmt.voidedAt ? "line-through text-slate-400" : "text-slate-800 font-semibold"}`}>
+                                                                {formatTHB(pmt.amount)}
+                                                            </span>
+                                                            <span className="text-slate-500">{methodLabel[pmt.method] ?? pmt.method}</span>
+                                                            <span className="text-slate-400 tabular-nums">{time(pmt.at)}</span>
+                                                            {pmt.voidedAt ? (
+                                                                <span className="text-xs text-rose-600 truncate">
+                                                                    {t.refunded}{pmt.voidedBy ? ` · ${pmt.voidedBy}` : ""}{pmt.voidReason ? ` · ${pmt.voidReason}` : ""}
+                                                                </span>
+                                                            ) : (
+                                                                <Button
+                                                                    variant="outline"
+                                                                    className="ms-auto h-9 text-rose-600 border-rose-200 hover:bg-rose-50"
+                                                                    onClick={() => { setReasonText(""); setApprovalError(null); setPending({ kind: "REFUND", paymentId: pmt.id }) }}
+                                                                >
+                                                                    {t.refund}
+                                                                </Button>
+                                                            )}
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            )}
+
+                                            <div className="px-4 py-3 flex items-center gap-3 flex-wrap">
                                                 {b.discount > 0 && (
                                                     <span className="text-sm text-rose-600 font-bold tabular-nums">
                                                         {t.discount} −{formatTHB(b.discount)}
                                                     </span>
+                                                )}
+                                                {b.reopenedAt && (
+                                                    <span className="text-xs font-bold text-amber-700">
+                                                        {t.reopen_bill} · {time(b.reopenedAt)}
+                                                    </span>
+                                                )}
+                                                {/* Offered on any settled table bill; the server
+                                                    refuses one from a shift already counted. */}
+                                                {b.kind === "TABLE" && b.status !== "OPEN" && (
+                                                    <Button
+                                                        variant="outline"
+                                                        className="h-10"
+                                                        onClick={() => { setReasonText(""); setApprovalError(null); setPending({ kind: "REOPEN", billId: b.id }) }}
+                                                    >
+                                                        {t.reopen_bill}
+                                                    </Button>
                                                 )}
                                                 <Button
                                                     variant="outline"
@@ -440,6 +554,40 @@ export default function BillsPage() {
             </div>
 
             <ReceiptDialog src={receiptSrc} onClose={() => setReceiptSrc(null)} />
+
+            {/* Both operations move money a shift has counted, so both take the
+                same manager approval a comp does - and both state a reason,
+                because the point of doing this here is the audit trail. */}
+            <ManagerApproval
+                open={!!pending}
+                title={pending?.kind === "REOPEN" ? t.reopen_bill : t.refund}
+                description={pending?.kind === "REOPEN" ? t.manager_reopens_bill : t.manager_refunds}
+                busy={busy}
+                error={approvalError}
+                onCancel={() => { setPending(null); setApprovalError(null); setReasonText("") }}
+                onApprove={runApproved}
+            >
+                {/* Labelled, because unlabelled and sitting above the manager
+                    selector it reads as a username field - which is exactly how
+                    it got a staff login typed into it. */}
+                <div>
+                    <label className="text-sm text-slate-600">
+                        {pending?.kind === "REOPEN" ? t.reopen_reason : t.refund_reason}
+                    </label>
+                    <Input
+                        value={reasonText}
+                        onChange={(e) => setReasonText(e.target.value)}
+                        placeholder={t.reason_example}
+                        className="h-12 mt-1 autofill:shadow-[inset_0_0_0_1000px_white]"
+                        autoComplete="off"
+                        name="approval-reason"
+                        data-lpignore="true"
+                        data-1p-ignore
+                        data-form-type="other"
+                        autoFocus
+                    />
+                </div>
+            </ManagerApproval>
         </div>
     )
 }
