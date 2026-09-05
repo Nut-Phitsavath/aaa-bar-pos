@@ -1371,19 +1371,19 @@ function POSPageInner() {
       <div className="flex-1 flex min-h-0">
       {/* Left Side - Menu & Header */}
       <div className="flex-1 flex flex-col min-w-0 bg-background border-r">
-        {/* On a table, the walk-in counter number means nothing - what the
-            staff member needs to see is which table they are keying into. */}
-        {/* The banner above already names the table, so on a table screen this
-            shows nothing rather than repeating it - and never the walk-in
-            counter number, which means nothing here. Branches on the URL param
-            because that is known synchronously, so there is no flash. */}
-        <Header title={t.pos}>
-          {sessionIdParam ? null : (
+        {/* Only the walk-in counter gets a page header, and only because it
+            carries the order number. On a table the banner above already says
+            which table this is, so this row was the word "POS" and nothing
+            else - a duplicate label costing a row of menu on a till screen
+            where vertical space is what runs out first. Branches on the URL
+            param because that is known synchronously, so there is no flash. */}
+        {!sessionIdParam && (
+          <Header title={t.pos}>
             <Badge variant="secondary" className="px-3 py-1 text-lg font-mono bg-amber-50 text-amber-900 border-amber-200">
               {orderNumber ? `Order No. ${orderNumber.replace('No. ', '')}` : "Order No. --"}
             </Badge>
-          )}
-        </Header>
+          </Header>
+        )}
 
         {/* Search */}
         <div className="p-4 border-b bg-white">
@@ -2091,8 +2091,13 @@ function POSPageInner() {
                               {t.pay_exact}
                             </Button>
                           </div>
-                          <div className="grid grid-cols-4 gap-1.5">
-                            {[500, 1000, 2000, 5000, 10000, 20000, 50000, 100000].map(val => (
+                          {/* Baht notes, because the bill is in baht and this
+                              field is subtracted from a baht total. These were
+                              kip notes - 10,000 among them - so one tap on an
+                              80 baht sale recorded 10,000 baht received and
+                              offered 9,920 in change. */}
+                          <div className="grid grid-cols-3 gap-1.5">
+                            {[20, 50, 100, 200, 500, 1000].map(val => (
                               <Button
                                 key={val}
                                 variant="outline"

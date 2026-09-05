@@ -64,6 +64,10 @@ function SettleScreen() {
     const [selected, setSelected] = useState<Set<string>>(new Set())
     const [busy, setBusy] = useState(false)
     const [pendingQr, setPendingQr] = useState<{ paymentId: string; qr: string; amount: number } | null>(null)
+    // The shop's own bank QR, uploaded in settings. Held here while the
+    // customer scans it, and only written as a tender once staff confirm.
+    const [transferAmount, setTransferAmount] = useState<number | null>(null)
+    const [transferQrUrl, setTransferQrUrl] = useState<string | null>(null)
     const [receiptSrc, setReceiptSrc] = useState<string | null>(null)
     // A settled bill returns to the floor plan - but only once the slip has
     // been dealt with. Navigating straight away would unmount the dialog under
@@ -100,6 +104,13 @@ function SettleScreen() {
 
     useEffect(() => { load() }, [load])
     useCustomerDisplay(bill as any)
+
+    useEffect(() => {
+        fetch("/api/settings")
+            .then((r) => (r.ok ? r.json() : {}))
+            .then((s: any) => setTransferQrUrl(s?.transfer_qr_url ?? null))
+            .catch(() => setTransferQrUrl(null))
+    }, [])
 
     // BCEL has no callback into this app; the till asks until the bank says yes.
     useEffect(() => {
@@ -168,7 +179,16 @@ function SettleScreen() {
         })
     }
 
-    const takePayment = async (method: "CASH" | "ONEPAY") => {
+    const takePayment = async (method: "CASH" | "ONEPAY" | "TRANSFER") => {
+        // The shop's own bank QR has no API behind it, so the customer has to
+        // scan and the staff member has to look at their phone before this is
+        // money. Showing the code first and recording second is the order the
+        // walk-in till already works in.
+        if (method === "TRANSFER") {
+            setTransferAmount(tendering)
+            new BroadcastChannel("pos_channel").postMessage({ type: "TRANSFER_SELECTED" })
+            return
+        }
         setBusy(true)
         try {
             const res = await fetch(`/api/table-sessions/${bill.id}/payments`, {
@@ -197,6 +217,33 @@ function SettleScreen() {
             if (!gen.ok) { toast.error(genData.error || "Failed"); await load(); return }
             setPendingQr({ paymentId: data.payment.id, qr: genData.qrCode, amount: tendering })
         } finally { setBusy(false) }
+    }
+
+    /** The staff member has seen the money arrive; write it as a tender. */
+    const confirmTransfer = async () => {
+        if (transferAmount === null) return
+        setBusy(true)
+        try {
+            const res = await fetch(`/api/table-sessions/${bill.id}/payments`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ method: "TRANSFER", amount: transferAmount }),
+            })
+            const data = await res.json().catch(() => ({}))
+            if (!res.ok) { toast.error(data.error || "Failed"); return }
+            closeTransfer()
+            setEntry("")
+            setSelected(new Set())
+            if (data.closed) { setReturnAfterReceipt(true); printSettled(); toast.success(t.session_closed); return }
+            toast.success(t.payment_confirmed)
+            await load()
+        } finally { setBusy(false) }
+    }
+
+    const closeTransfer = () => {
+        setTransferAmount(null)
+        // Puts the customer screen back to the bill.
+        new BroadcastChannel("pos_channel").postMessage({ type: "PAYMENT_COMPLETE" })
     }
 
     const runApproved = async (creds: { managerUsername: string; managerPin: string }) => {
@@ -452,7 +499,13 @@ function SettleScreen() {
                 </div>
             </main>
 
-            {/* Tenders, always in the same place however long the bill is. */}
+            {/* Three ways money arrives, then the two ways a bill closes
+                without any. They were one undifferentiated column of five
+                buttons, which said they were five of the same thing; a comp is
+                not a tender and putting it a keypad's width from Cash is how it
+                gets tapped by mistake. Same three methods, same colours, as the
+                walk-in till's dialog - a staff member who learns one has
+                learned the other. */}
             <aside className="w-[180px] flex flex-col gap-px shrink-0">
                 <button
                     onClick={() => takePayment("CASH")}
@@ -467,9 +520,22 @@ function SettleScreen() {
                     disabled={busy || bill.balance <= 0 || untouched}
                     className="flex-[2] bg-slate-900 text-white hover:bg-slate-800 font-black text-lg flex flex-col items-center justify-center gap-1.5 transition-colors disabled:opacity-40 disabled:pointer-events-none"
                 >
-                    <QrCode className="w-7 h-7" />
+                    <img src="/bcel-one.png" alt="" className="w-7 h-7 rounded object-contain" />
                     {t.pay_onepay}
                 </button>
+                <button
+                    onClick={() => takePayment("TRANSFER")}
+                    disabled={busy || bill.balance <= 0 || untouched}
+                    className="flex-[2] bg-purple-600 text-white hover:bg-purple-700 font-black text-lg flex flex-col items-center justify-center gap-1.5 transition-colors disabled:opacity-40 disabled:pointer-events-none"
+                >
+                    <QrCode className="w-7 h-7" />
+                    {t.pay_transfer}
+                </button>
+
+                {/* Not a tender: no money arrives, the bill just stops being
+                    owed. The gap is the whole point. */}
+                <div className="h-2 bg-slate-300 shrink-0" />
+
                 <button
                     onClick={() => { setApprovalError(null); setApproving("COMP") }}
                     disabled={busy || bill.balance <= 0}
@@ -513,6 +579,41 @@ function SettleScreen() {
                             <p className="text-sm text-amber-700">{t.waiting_for_payment}</p>
                         </div>
                     )}
+                </DialogContent>
+            </Dialog>
+
+            {/* The shop's own QR. Unlike BCEL there is nothing to poll, so the
+                staff member is the confirmation - which is why the amount is
+                the loudest thing here: it is what they are agreeing arrived. */}
+            <Dialog open={transferAmount !== null} onOpenChange={(o) => { if (!o) closeTransfer() }}>
+                <DialogContent className="max-w-sm">
+                    <DialogHeader><DialogTitle>{t.pay_transfer}</DialogTitle></DialogHeader>
+                    <div className="text-center space-y-3">
+                        {transferQrUrl ? (
+                            <div className="mx-auto w-fit rounded-xl border-2 bg-white p-3">
+                                <img src={transferQrUrl} alt={t.store_transfer_qr} className="w-60 h-60 object-contain" />
+                            </div>
+                        ) : (
+                            <p className="rounded-xl border-2 border-dashed border-amber-300 bg-amber-50 px-4 py-8 text-sm font-bold text-amber-800">
+                                {t.no_transfer_qr}
+                            </p>
+                        )}
+                        <p className="text-3xl font-black tabular-nums">{formatTHB(transferAmount ?? 0)}</p>
+                        <p className="text-sm text-slate-500">{t.transfer_show_qr}</p>
+                        <div className="grid grid-cols-2 gap-2 pt-1">
+                            <Button variant="outline" className="h-12" onClick={closeTransfer} disabled={busy}>
+                                {t.cancel}
+                            </Button>
+                            <Button
+                                className="h-12 bg-purple-600 hover:bg-purple-700 font-bold"
+                                onClick={confirmTransfer}
+                                disabled={busy}
+                            >
+                                <Check className="w-4 h-4 mr-2" />
+                                {t.transfer_received}
+                            </Button>
+                        </div>
+                    </div>
                 </DialogContent>
             </Dialog>
 

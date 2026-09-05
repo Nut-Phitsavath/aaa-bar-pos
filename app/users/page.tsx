@@ -7,6 +7,7 @@ import { CustomersTab } from "./customers-tab"
 import { StaffTab } from "./staff-tab"
 import { useState, useEffect } from "react"
 import { useTranslation } from "@/hooks/use-translation"
+import { canManageStaff } from "@/lib/roles"
 
 export default function UsersPage() {
   const [user, setUser] = useState<any>(null)
@@ -21,7 +22,10 @@ export default function UsersPage() {
       .catch(() => { })
   }, [])
 
-  const isStaff = user?.role === 'STAFF'
+  // The staff tab used to hide only from STAFF, which let a manager open a
+  // list the API would not serve them: empty screen, failing saves. It is now
+  // the same question on both sides.
+  const canManage = canManageStaff(user?.role)
   return (
     <div className="min-h-screen bg-background">
       <Header title={t.users_management} />
@@ -33,7 +37,7 @@ export default function UsersPage() {
               <UsersIcon className="w-4 h-4 mr-2" />
               {t.customers}
             </TabsTrigger>
-            {!isStaff && (
+            {canManage && (
               <TabsTrigger value="staff" className="font-bold">
                 <BadgeCheck className="w-4 h-4 mr-2" />
                 {t.staff || "Staff"}
@@ -43,9 +47,9 @@ export default function UsersPage() {
           <TabsContent value="customers">
             <CustomersTab />
           </TabsContent>
-          {!isStaff && (
+          {canManage && (
             <TabsContent value="staff">
-              <StaffTab />
+              <StaffTab actorRole={user?.role} />
             </TabsContent>
           )}
         </Tabs>

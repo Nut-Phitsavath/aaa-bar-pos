@@ -1,5 +1,6 @@
 import { cookies } from "next/headers"
 import { prisma } from "@/lib/prisma"
+import { canManageStaff } from "@/lib/roles"
 
 /**
  * Server-side session checks for API routes.
@@ -49,5 +50,19 @@ export async function requireAdmin(): Promise<SessionUser | Response> {
     const user = await getSessionUser()
     if (!user) return Response.json({ error: "Not signed in" }, { status: 401 })
     if (user.role !== "ADMIN") return Response.json({ error: "Not found" }, { status: 404 })
+    return user
+}
+
+/**
+ * The same gate for the owner and whoever is running the floor tonight.
+ *
+ * Used by the staff list and the floor plan editor: both are jobs a manager
+ * does at 6pm without waking the owner, and neither is a job for a server.
+ * Who may edit *whom* is a separate question, answered by canManageUser.
+ */
+export async function requireManager(): Promise<SessionUser | Response> {
+    const user = await getSessionUser()
+    if (!user) return Response.json({ error: "Not signed in" }, { status: 401 })
+    if (!canManageStaff(user.role)) return Response.json({ error: "Not found" }, { status: 404 })
     return user
 }

@@ -8,9 +8,10 @@ import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { useShift } from "@/components/shift-provider"
 import { ShiftDialog } from "@/components/shift-dialog"
-import { Users, Clock, Receipt, ShoppingCart, AlertTriangle } from "lucide-react"
+import { Users, Clock, Receipt, ShoppingCart, AlertTriangle, LayoutGrid } from "lucide-react"
 import { formatTHB } from "@/lib/currency"
 import { formatDuration } from "@/lib/sessions"
+import { canManageTables } from "@/lib/roles"
 import { notify } from "@/components/ui/sonner"
 
 type TableWithSession = {
@@ -45,6 +46,15 @@ export default function TablesPage() {
   const [waiterId, setWaiterId] = useState("")
   const [serverPrompt, setServerPrompt] = useState(false)
   const [shiftDialogOpen, setShiftDialogOpen] = useState(false)
+  // Only a manager or the owner edits the floor, so only they see the way in.
+  const [canManage, setCanManage] = useState(false)
+
+  useEffect(() => {
+    fetch("/api/auth/me")
+      .then((r) => r.json())
+      .then((d) => setCanManage(canManageTables(d?.user?.role)))
+      .catch(() => setCanManage(false))
+  }, [])
 
   // The server who carried the order to the till. Remembered per device: one
   // server works a section all night, so re-picking every table is noise.
@@ -173,14 +183,26 @@ export default function TablesPage() {
             </p>
           </div>
 
-          <Button
-            variant="outline"
-            className="h-11 border-slate-300 text-slate-700"
-            onClick={() => router.push("/pos")}
-          >
-            <ShoppingCart className="w-4 h-4 mr-2" />
-            {t.walk_in_sale}
-          </Button>
+          <div className="flex items-center gap-2">
+            {canManage && (
+              <Button
+                variant="outline"
+                className="h-11 border-slate-300 text-slate-700"
+                onClick={() => router.push("/tables/manage")}
+              >
+                <LayoutGrid className="w-4 h-4 mr-2" />
+                {t.manage_floor}
+              </Button>
+            )}
+            <Button
+              variant="outline"
+              className="h-11 border-slate-300 text-slate-700"
+              onClick={() => router.push("/pos")}
+            >
+              <ShoppingCart className="w-4 h-4 mr-2" />
+              {t.walk_in_sale}
+            </Button>
+          </div>
         </div>
 
         {/* Read before anyone taps, not after. A table that silently refuses to

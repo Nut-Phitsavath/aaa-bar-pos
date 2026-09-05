@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { requireManager } from '@/lib/auth'
 import { sessionTotal, BILLABLE_ORDER_STATUSES } from '@/lib/sessions'
 import { billTotalOf } from '@/lib/payments'
 import { outstandingByCustomer } from '@/lib/customer-tabs'
@@ -75,6 +76,12 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+    // The floor plan is read by every till all night, but changing it is a
+    // manager's job. Until now these three handlers had no check at all, so
+    // anything that could reach the host could rename or delete a table.
+    const gate = await requireManager()
+    if (gate instanceof Response) return gate
+
     try {
         const { name, area, seats, displayOrder } = await request.json()
 
@@ -85,7 +92,10 @@ export async function POST(request: Request) {
         const table = await prisma.table.create({
             data: {
                 name: name.trim(),
-                area: area || 'INDOOR',
+                // Free text on purpose: the floor plan builds its filter tabs
+                // from whatever areas the tables actually name, so a new one
+                // appears as a new tab without a migration.
+                area: String(area || 'INDOOR').trim().slice(0, 24) || 'INDOOR',
                 seats: Number(seats) || 4,
                 displayOrder: Number(displayOrder) || 0
             }
