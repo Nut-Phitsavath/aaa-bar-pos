@@ -4,6 +4,8 @@ import { sessionTotal } from '@/lib/sessions'
 import { balanceOf, changeDue, billTotalOf, discountAmount } from '@/lib/payments'
 import { DEFAULT_RATE_LAK, DEFAULT_RATE_USD } from '@/lib/currency'
 import { outstandingForCustomer } from '@/lib/customer-tabs'
+import { componentIndex, contentsOf } from '@/lib/packages'
+import { sellableMenus } from '@/lib/packages-db'
 
 export const dynamic = 'force-dynamic'
 
@@ -28,6 +30,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
                                 // Who struck this line, so the ticket can say so
                                 // without anyone opening the void report.
                                 voidedBy: { select: { name: true } },
+                                // What this package actually delivered, so the
+                                // ticket and the printed bill can say so (req #9).
+                                swaps: { include: { lines: true }, orderBy: { createdAt: "asc" } },
                                 variationSize: {
                                     include: {
                                         variation: {
@@ -36,7 +41,10 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
                                                     select: {
                                                         image: true,
                                                         localName: true,
-                                                        category: { select: { name: true } }
+                                                        category: { select: { name: true } },
+                                                        // Enough to say whether this line is a
+                                                        // package with anything swappable in it.
+                                                        recipes: { select: { ingredientId: true, quantity: true } }
                                                     }
                                                 }
                                             }
@@ -95,6 +103,10 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
         const gross = sessionTotal(session.orders)
         const total = billTotalOf(gross, session.discountType, session.discountValue)
 
+        // Built once for the whole bill: which components a package holds is
+        // the same question for every line on it.
+        const sellableIndex = componentIndex(await sellableMenus())
+
         // Flatten the menu lookup onto each line so no screen has to walk the
         // relation itself. A deleted menu item leaves variationSize null, and
         // the line still renders from its snapshotted name and price.
@@ -107,7 +119,11 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
                     ...line,
                     image: menu?.image ?? null,
                     localName: menu?.localName ?? null,
-                    category: menu?.category?.name ?? null
+                    category: menu?.category?.name ?? null,
+                    // Whether the ticket offers an Exchange button on this line.
+                    // Derived rather than keyed off a category name, so renaming
+                    // "Sets" cannot silently remove the feature from the floor.
+                    swappable: contentsOf(menu?.recipes ?? [], sellableIndex).length > 0
                 }
             })
         }))

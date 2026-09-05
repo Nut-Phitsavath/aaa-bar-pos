@@ -16,6 +16,9 @@ export type ReceiptLine = {
     shot?: string | null
     isTakeaway?: boolean
     note?: string | null
+    /** What this package actually delivered after an exchange (req #9). */
+    swapOut?: { name: string; quantity: number }[]
+    swapIn?: { name: string; quantity: number }[]
 }
 
 export type ReceiptData = {
@@ -179,6 +182,20 @@ export function BillReceipt({ data, settings }: { data: ReceiptData; settings: a
                                     + {item.note}
                                 </div>
                             )}
+                            {/* An exchanged package: the customer paid for one
+                                thing and drank another, and the slip says so -
+                                including when the swap cost nothing, which is
+                                exactly the case they query afterwards. */}
+                            {(item.swapOut?.length || item.swapIn?.length) ? (
+                                <div className="text-[10px] font-bold text-slate-600 leading-snug">
+                                    {item.swapOut?.length ? (
+                                        <div>− {item.swapOut.map((l) => `${l.quantity} x ${l.name}`).join(", ")}</div>
+                                    ) : null}
+                                    {item.swapIn?.length ? (
+                                        <div>+ {item.swapIn.map((l) => `${l.quantity} x ${l.name}`).join(", ")}</div>
+                                    ) : null}
+                                </div>
+                            ) : null}
                         </div>
                     )
                 })}

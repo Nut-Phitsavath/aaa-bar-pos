@@ -18,6 +18,7 @@ import {
     Calendar as CalendarIcon,
 } from "lucide-react"
 import { formatTHB } from "@/lib/currency"
+import { SwapSummary } from "@/components/pos/swap-summary"
 import { formatDuration } from "@/lib/sessions"
 
 type Line = {
@@ -26,6 +27,7 @@ type Line = {
     quantity: number
     total: number
     voidedAt: string | null
+    swaps?: { lines: { direction: string; name: string; quantity: number }[] }[]
     voidReason: string | null
     voidNote: string | null
     voidedBy: string | null
@@ -454,7 +456,8 @@ export default function BillsPage() {
                                                         {r.items.map((i) => {
                                                             const struck = Boolean(i.voidedAt) || r.status === "CANCELLED"
                                                             return (
-                                                                <div key={i.id} className="flex items-baseline gap-3 text-sm">
+                                                              <div key={i.id}>
+                                                                <div className="flex items-baseline gap-3 text-sm">
                                                                     <span className="w-6 tabular-nums text-slate-500 shrink-0">
                                                                         {i.quantity}
                                                                     </span>
@@ -471,6 +474,12 @@ export default function BillsPage() {
                                                                         {formatTHB(i.total)}
                                                                     </span>
                                                                 </div>
+                                                                {/* The same two lines the ticket and
+                                                                    the printed slip showed (req #9). */}
+                                                                <div className="ps-9">
+                                                                    <SwapSummary swaps={i.swaps} struck={struck} />
+                                                                </div>
+                                                              </div>
                                                             )
                                                         })}
                                                     </div>

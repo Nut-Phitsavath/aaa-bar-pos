@@ -1,0 +1,229 @@
+import { NextResponse } from 'next/server'
+import { prisma } from '@/lib/prisma'
+import { getSessionUser } from '@/lib/auth'
+import { decrementStock } from '@/lib/stock'
+import {
+    canSwap, chargeFor, componentIndex, contentsOf, remainingContents, valueOf,
+    type SellableMenu,
+} from '@/lib/packages'
+import { sellableMenus } from '@/lib/packages-db'
+
+export const dynamic = 'force-dynamic'
+
+/** The recipe rule the order path uses: the menu's base lines plus this size's. */
+async function recipeFor(tx: any, variationSizeId: string) {
+    const vs = await tx.variationSize.findUnique({
+        where: { id: variationSizeId },
+        include: { variation: { include: { menu: true } } },
+    })
+    if (!vs?.variation?.menu) return []
+    return tx.recipe.findMany({
+        where: {
+            OR: [
+                { menuId: vs.variation.menu.id, variationSizeId: null },
+                { variationSizeId },
+            ],
+        },
+    })
+}
+
+/** What this package still holds, so the screen can cap what may leave it. */
+export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
+    try {
+        const { id } = await params
+        const user = await getSessionUser()
+        if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+        const item = await prisma.orderItem.findUnique({
+            where: { id },
+            include: {
+                swaps: { include: { lines: true }, orderBy: { createdAt: 'asc' } },
+                variationSize: { include: { variation: { include: { menu: { include: { recipes: true } } } } } },
+            },
+        })
+        if (!item) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+
+        const menu = item.variationSize?.variation?.menu
+        const index = componentIndex(await sellableMenus())
+        const contents = menu
+            ? contentsOf(menu.recipes.map((r) => ({ ingredientId: r.ingredientId, quantity: r.quantity })), index)
+                .map((c) => ({ ...c, quantity: c.quantity * item.quantity }))
+            : []
+        const alreadyRemoved = item.swaps.flatMap((s) =>
+            s.lines.filter((l) => l.direction === 'OUT' && l.menuId)
+                .map((l) => ({ menuId: l.menuId as string, quantity: l.quantity })))
+
+        return NextResponse.json({
+            name: item.name,
+            quantity: item.quantity,
+            contents,
+            remaining: remainingContents(contents, alreadyRemoved),
+            swaps: item.swaps,
+        })
+    } catch (error) {
+        console.error('[package swap] GET failed', error)
+        return NextResponse.json({ error: 'Failed to load package' }, { status: 500 })
+    }
+}
+
+/**
+ * Swap what a package delivered (req #8), logging it as we go (req #9).
+ *
+ * No manager PIN: the owner's call, and the right one - this happens ten times
+ * a night and a PIN each time would be worked around within a week. The price
+ * floor and the per-package cap are what stop it being abused, and the log is
+ * what a manager reads afterwards.
+ *
+ * The bill's package line is never touched. It still says what was sold at what
+ * price; the swap is a separate fact about what left the shelf, and a dearer
+ * replacement arrives as its own charged line rather than by quietly editing
+ * the price of something the customer already agreed to.
+ */
+export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
+    try {
+        const { id } = await params
+        const user = await getSessionUser()
+        if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+        const body = await request.json()
+        const removing: { menuId: string; quantity: number }[] = Array.isArray(body.removing) ? body.removing : []
+        const adding: { variationSizeId: string; quantity: number }[] = Array.isArray(body.adding) ? body.adding : []
+
+        const item = await prisma.orderItem.findUnique({
+            where: { id },
+            include: {
+                order: { select: { id: true, status: true, sessionId: true } },
+                swaps: { include: { lines: true } },
+                variationSize: { include: { variation: { include: { menu: { include: { recipes: true } } } } } },
+            },
+        })
+        if (!item) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+        if (item.voidedAt) return NextResponse.json({ error: 'LINE_VOIDED' }, { status: 409 })
+        if (item.order.status === 'CANCELLED') return NextResponse.json({ error: 'ORDER_CANCELLED' }, { status: 409 })
+
+        // A settled bill is closed for business: changing what it delivered
+        // after the money is counted is a different job (reopen it first).
+        if (item.order.sessionId) {
+            const session = await prisma.tableSession.findUnique({
+                where: { id: item.order.sessionId },
+                select: { status: true },
+            })
+            if (session?.status === 'CLOSED') {
+                return NextResponse.json({ error: 'SESSION_ALREADY_CLOSED' }, { status: 409 })
+            }
+        }
+
+        const menu = item.variationSize?.variation?.menu
+        if (!menu) return NextResponse.json({ error: 'NOT_A_PACKAGE' }, { status: 409 })
+
+        const index = componentIndex(await sellableMenus())
+        // A line of two buckets holds twice the contents of one.
+        const perPackage = contentsOf(
+            menu.recipes.map((r) => ({ ingredientId: r.ingredientId, quantity: r.quantity })),
+            index,
+        )
+        const contents = perPackage.map((c) => ({ ...c, quantity: c.quantity * item.quantity }))
+        if (contents.length === 0) return NextResponse.json({ error: 'NOT_A_PACKAGE' }, { status: 409 })
+
+        const alreadyRemoved = item.swaps.flatMap((s) =>
+            s.lines.filter((l) => l.direction === 'OUT' && l.menuId)
+                .map((l) => ({ menuId: l.menuId as string, quantity: l.quantity })))
+        const left = remainingContents(contents, alreadyRemoved)
+
+        const check = canSwap(left, removing, adding)
+        if (!check.ok) return NextResponse.json({ error: check.reason }, { status: 409 })
+
+        // Priced from the menu as it stands right now, then snapshotted onto the
+        // swap: tomorrow's price rise must not rewrite tonight's exchange.
+        const outLines = removing.map((r) => {
+            const held = left.find((c) => c.menuId === r.menuId)!
+            return {
+                direction: 'OUT', menuId: held.menuId, variationSizeId: held.variationSizeId,
+                name: held.name, quantity: r.quantity, unitPrice: held.unitPrice,
+            }
+        })
+
+        const sizes = await prisma.variationSize.findMany({
+            where: { id: { in: adding.map((a) => a.variationSizeId) } },
+            include: { variation: { include: { menu: true } } },
+        })
+        const inLines = adding.map((a) => {
+            const size = sizes.find((s) => s.id === a.variationSizeId)
+            if (!size) throw new Error('UNKNOWN_ITEM')
+            return {
+                direction: 'IN', menuId: size.variation.menu.id, variationSizeId: size.id,
+                name: size.variation.menu.localName
+                    ? `${size.variation.menu.localName} (${size.variation.menu.name})`
+                    : size.variation.menu.name,
+                quantity: a.quantity, unitPrice: size.price,
+            }
+        })
+
+        const outValue = valueOf(outLines)
+        const inValue = valueOf(inLines)
+        const charged = chargeFor(outValue, inValue)
+
+        const swap = await prisma.$transaction(async (tx) => {
+            // Stock moves both ways through the same recipes the order path
+            // used, so a bottle returned to the shelf is the same bottle the
+            // package took off it.
+            for (const line of outLines) {
+                if (!line.variationSizeId) continue
+                for (const r of await recipeFor(tx, line.variationSizeId)) {
+                    await decrementStock(tx, r.ingredientId, -(r.quantity * line.quantity))
+                }
+            }
+            for (const line of inLines) {
+                if (!line.variationSizeId) continue
+                for (const r of await recipeFor(tx, line.variationSizeId)) {
+                    await decrementStock(tx, r.ingredientId, r.quantity * line.quantity)
+                }
+            }
+
+            const created = await tx.packageSwap.create({
+                data: {
+                    orderItemId: item.id,
+                    sessionId: item.order.sessionId,
+                    userId: user.id,
+                    outValue, inValue, charged,
+                    lines: { create: [...outLines, ...inLines] },
+                },
+                include: { lines: true },
+            })
+
+            // Only a dearer replacement reaches the bill, as one line under the
+            // package it belongs to. A cheaper one changes nothing: the package
+            // price is a floor.
+            if (charged > 0) {
+                await tx.orderItem.create({
+                    data: {
+                        orderId: item.order.id,
+                        name: `${item.name} — ${inLines.map((l) => `${l.quantity}x ${l.name}`).join(', ')}`,
+                        price: charged,
+                        quantity: 1,
+                        total: charged,
+                    },
+                })
+                const live = await tx.orderItem.findMany({
+                    where: { orderId: item.order.id, voidedAt: null },
+                    select: { total: true },
+                })
+                const total = live.reduce((sum, l) => sum + l.total, 0)
+                await tx.order.update({
+                    where: { id: item.order.id },
+                    data: { total, subtotal: total },
+                })
+            }
+
+            return created
+        })
+
+        return NextResponse.json({ swap, charged, outValue, inValue })
+    } catch (error: any) {
+        if (error?.message === 'UNKNOWN_ITEM') {
+            return NextResponse.json({ error: 'UNKNOWN_ITEM' }, { status: 400 })
+        }
+        console.error('[package swap] POST failed', error)
+        return NextResponse.json({ error: 'Failed to swap' }, { status: 500 })
+    }
+}

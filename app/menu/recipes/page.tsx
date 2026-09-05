@@ -67,6 +67,9 @@ export default function RecipesPage() {
     const [ingredients, setIngredients] = useState<Ingredient[]>([])
     const [selectedProduct, setSelectedProduct] = useState<Product | null>(null)
     const [recipe, setRecipe] = useState<RecipeItem[]>([])
+    // Which ingredients the menu also sells one of, and for how much. Without
+    // this the screen cannot say whether a package component is swappable.
+    const [components, setComponents] = useState<Record<string, { name: string; localName: string | null; unitPrice: number }> | null>(null)
     const [searchQuery, setSearchQuery] = useState("")
     const [isAddIngredientOpen, setIsAddIngredientOpen] = useState(false)
     const [isLoading, setIsLoading] = useState(false)
@@ -86,6 +89,10 @@ export default function RecipesPage() {
         fetchProducts()
         fetchIngredients()
         fetchCategories()
+        fetch('/api/packages/components')
+            .then((r) => (r.ok ? r.json() : { components: {} }))
+            .then((d) => setComponents(d.components ?? {}))
+            .catch(() => setComponents({}))
     }, [])
 
     const fetchCategories = async () => {
@@ -195,6 +202,23 @@ export default function RecipesPage() {
         setIsAddIngredientOpen(true)
     }
 
+    /**
+     * What this recipe's swappable contents are worth on the menu.
+     *
+     * The number a package is priced against: sell a set for less than its
+     * parts and the gap is the deal; sell it for more and there is no reason to
+     * buy the set. Only counts components a customer could actually swap, since
+     * those are the ones an exchange values.
+     */
+    const contentsValue = (items: RecipeItem[]) =>
+        components
+            ? items.reduce((sum, i) => {
+                const sellable = components[i.ingredientId]
+                if (!sellable || !Number.isInteger(i.quantity) || i.quantity < 1) return sum
+                return sum + sellable.unitPrice * i.quantity
+            }, 0)
+            : 0
+
     const RecipeSection = ({ items, scopeId }: { items: RecipeItem[], scopeId: string | null }) => (
         <div className="space-y-4">
             <div className="flex items-center justify-between">
@@ -222,7 +246,25 @@ export default function RecipesPage() {
                                 </div>
                                 <div>
                                     <p className="font-semibold text-slate-800">{item.ingredientName}</p>
-                                    <p className="text-xs text-muted-foreground uppercase">{item.unit}</p>
+                                    <div className="flex items-center gap-2">
+                                        <p className="text-xs text-muted-foreground uppercase">{item.unit}</p>
+                                        {/* Whether a customer could swap this out of the
+                                            package. It hinges on something invisible here -
+                                            the menu selling exactly one of this ingredient -
+                                            so the screen says it rather than leaving it to be
+                                            discovered at a table. */}
+                                        {components && (
+                                            components[item.ingredientId] && Number.isInteger(item.quantity) && item.quantity >= 1 ? (
+                                                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                                    {t.swappable} · {formatTHB(components[item.ingredientId].unitPrice)}
+                                                </span>
+                                            ) : (
+                                                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 border border-slate-200">
+                                                    {t.not_sold_singly}
+                                                </span>
+                                            )
+                                        )}
+                                    </div>
                                 </div>
                             </div>
                             <div className="flex items-center gap-6">
@@ -241,6 +283,28 @@ export default function RecipesPage() {
                             </div>
                         </Card>
                     ))}
+
+                    {/* The package's economics on one line: what its swappable
+                        contents are worth beside what it sells for. A set priced
+                        above its parts is a set nobody has a reason to buy. */}
+                    {contentsValue(items) > 0 && (
+                        <div className="flex items-center gap-3 flex-wrap px-4 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-sm">
+                            <span className="text-slate-600">
+                                {t.contents_value} <strong className="text-slate-900 tabular-nums">{formatTHB(contentsValue(items))}</strong>
+                            </span>
+                            {(() => {
+                                const price = selectedProduct?.variations.flatMap((v) => v.sizes)[0]?.price ?? 0
+                                if (!price) return null
+                                const gap = contentsValue(items) - price
+                                return (
+                                    <span className={`ms-auto font-bold tabular-nums ${gap > 0 ? "text-emerald-700" : "text-amber-700"}`}>
+                                        {t.package_price} {formatTHB(price)}
+                                        {gap > 0 ? ` · −${formatTHB(gap)}` : gap < 0 ? ` · +${formatTHB(-gap)}` : ""}
+                                    </span>
+                                )
+                            })()}
+                        </div>
+                    )}
                 </div>
             ) : (
                 <div className="py-12 border-2 border-dashed rounded-xl flex flex-col items-center justify-center text-center bg-slate-50/50">

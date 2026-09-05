@@ -35,6 +35,7 @@ model User {
   itemsVoided       OrderItem[]        @relation("OrderItemVoidedBy")
   paymentsVoided    Payment[]          @relation("PaymentVoidedBy")
   sessionsReopened  TableSession[]     @relation("SessionReopenedBy")
+  packageSwaps      PackageSwap[]
 }
 
 model Category {
@@ -321,6 +322,8 @@ model TableSession {
   customer           Customer? @relation(fields: [customerId], references: [id])
   orders             Order[]
   payments           Payment[]
+  /// Package swaps made at this table (req #9: the log lives on the session).
+  packageSwaps       PackageSwap[]
 
   @@index([customerId])
   // "Does this table already have a bill open?" runs on every table tap.
@@ -427,10 +430,59 @@ model OrderItem {
   // (name/price snapshots remain on the order item).
   variationSize   VariationSize? @relation(fields: [variationSizeId], references: [id], onDelete: SetNull)
   voidedBy        User?          @relation("OrderItemVoidedBy", fields: [voidedById], references: [id])
+  /// Swaps made against this line when it is a package (req #8).
+  swaps           PackageSwap[]
 
   // orderId is looked up once per order on any query that includes items.
   @@index([orderId])
   @@index([variationSizeId])
   // The void report filters on this across a date range.
   @@index([voidedAt])
+}
+
+/// A swap of what a package delivered (req #8) and the log of it (req #9).
+///
+/// Kept as its own row rather than as an edit to the package line: the bill
+/// still says "Chivas Set 3,500" because that is what was sold, and the swap
+/// is a separate fact about what left the shelf. With no manager PIN on the
+/// screen that makes it, this table is the only record that a staff member
+/// traded a set for a bottle of water, so it is written before anything moves.
+model PackageSwap {
+  id          String            @id @default(uuid())
+  orderItemId String
+  /// Null for a walk-in sale; set for a table so the log reads per session.
+  sessionId   String?
+  userId      String?
+  /// Menu value of what came out and what went in, and what the customer was
+  /// charged - which is the difference, or zero. Stored rather than derived so
+  /// a later menu price change cannot rewrite last night's swap.
+  outValue    Float
+  inValue     Float
+  charged     Float             @default(0)
+  createdAt   DateTime          @default(now())
+  orderItem   OrderItem         @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+  session     TableSession?     @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+  user        User?             @relation(fields: [userId], references: [id])
+  lines       PackageSwapLine[]
+
+  @@index([sessionId])
+  @@index([createdAt])
+  @@index([orderItemId])
+}
+
+model PackageSwapLine {
+  id              String      @id @default(uuid())
+  swapId          String
+  /// OUT left the package, IN replaced it.
+  direction       String
+  menuId          String?
+  variationSizeId String?
+  /// Snapshotted, like an order line: the report must still read correctly
+  /// after a drink is renamed or removed from the menu.
+  name            String
+  quantity        Int
+  unitPrice       Float
+  swap            PackageSwap @relation(fields: [swapId], references: [id], onDelete: Cascade)
+
+  @@index([swapId])
 }

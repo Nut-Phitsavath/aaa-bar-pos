@@ -4,9 +4,11 @@ import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { useTranslation } from "@/hooks/use-translation"
 import { Button } from "@/components/ui/button"
-import { Printer, Plus, Minus, Trash2, Ban } from "lucide-react"
+import { Printer, Plus, Minus, Trash2, Ban, Repeat } from "lucide-react"
 import { formatTHB } from "@/lib/currency"
 import { VoidDialog, type VoidTarget } from "@/components/pos/void-dialog"
+import { ExchangeDialog } from "@/components/pos/exchange-dialog"
+import { SwapSummary } from "@/components/pos/swap-summary"
 
 export type TicketOrder = {
     id: string
@@ -19,6 +21,8 @@ export type TicketOrder = {
     items: {
         id: string; name: string; localName: string | null; quantity: number; total: number
         note?: string | null
+        swappable?: boolean
+        swaps?: { lines: { direction: string; name: string; quantity: number }[] }[]
         voidedAt?: string | null; voidReason?: string | null; voidNote?: string | null
         voidedBy?: { name: string } | null
     }[]
@@ -83,6 +87,7 @@ export function TicketPanel({
     const router = useRouter()
     const [now, setNow] = useState(() => new Date())
     const [voiding, setVoiding] = useState<VoidTarget | null>(null)
+    const [exchanging, setExchanging] = useState<string | null>(null)
 
     useEffect(() => {
         const tick = setInterval(() => setNow(new Date()), 30000)
@@ -152,6 +157,11 @@ export function TicketPanel({
                                                     {item.note}
                                                 </p>
                                             )}
+                                            {/* What this package actually delivered
+                                                after an exchange (req #9). On the
+                                                ticket because the bar pours from
+                                                this, not from the package's name. */}
+                                            <SwapSummary swaps={item.swaps} struck={struck} />
                                             <p className={`text-[11px] font-bold tracking-wide mt-0.5 ${struck ? "text-rose-500" : "text-emerald-600"}`}>
                                                 {struck ? t.state_void : t.state_submitted}
                                             </p>
@@ -169,6 +179,17 @@ export function TicketPanel({
                                         <span className={`text-base font-semibold tabular-nums shrink-0 ${struck ? "line-through text-slate-400" : "text-slate-800"}`}>
                                             {formatTHB(item.total)}
                                         </span>
+                                        {/* The customer wants different drinks in
+                                            the set they already bought (req #8). */}
+                                        {!struck && item.swappable && (
+                                            <button
+                                                onClick={() => setExchanging(item.id)}
+                                                aria-label={t.exchange_items}
+                                                className="h-8 w-8 grid place-items-center rounded-md text-slate-300 hover:text-amber-700 hover:bg-amber-50 shrink-0 transition-colors duration-150"
+                                            >
+                                                <Repeat className="w-4 h-4" />
+                                            </button>
+                                        )}
                                         {/* One of the five beers came back. */}
                                         {!struck && (
                                             <button
@@ -287,6 +308,12 @@ export function TicketPanel({
                     )}
                 </div>
             </footer>
+
+            <ExchangeDialog
+                itemId={exchanging}
+                onClose={() => setExchanging(null)}
+                onDone={onVoided}
+            />
 
             <VoidDialog
                 target={voiding}
