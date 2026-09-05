@@ -1,9 +1,13 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { requireManager } from '@/lib/auth'
 
 export const dynamic = 'force-dynamic'
 
 export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> }) {
+    const gate = await requireManager()
+    if (gate instanceof Response) return gate
+
     try {
         const { id } = await params
         const { name, area, seats, displayOrder, isActive } = await request.json()
@@ -22,7 +26,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
             where: { id },
             data: {
                 ...(name !== undefined && { name: String(name).trim() }),
-                ...(area !== undefined && { area }),
+                ...(area !== undefined && { area: String(area).trim().slice(0, 24) || 'INDOOR' }),
                 ...(seats !== undefined && { seats: Number(seats) }),
                 ...(displayOrder !== undefined && { displayOrder: Number(displayOrder) }),
                 ...(isActive !== undefined && { isActive: Boolean(isActive) })
@@ -37,6 +41,9 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
 }
 
 export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
+    const gate = await requireManager()
+    if (gate instanceof Response) return gate
+
     try {
         const { id } = await params
 
