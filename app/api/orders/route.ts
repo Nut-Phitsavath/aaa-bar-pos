@@ -4,6 +4,7 @@ import { startOfDay } from 'date-fns'
 import { cookies } from 'next/headers'
 import { calculateInclusiveTax } from '@/lib/currency'
 import { promoBlocker, promoDiscountFor } from '@/lib/promotions'
+import { decrementStock } from '@/lib/stock'
 
 // Force dynamic to prevent caching issues with Orders
 export const dynamic = 'force-dynamic'
@@ -395,10 +396,7 @@ export async function POST(request: Request) {
                         })
 
                         for (const recipe of recipes) {
-                            await tx.ingredient.update({
-                                where: { id: recipe.ingredientId },
-                                data: { subStock: { decrement: recipe.quantity * item.quantity } }
-                            })
+                            await decrementStock(tx, recipe.ingredientId, recipe.quantity * item.quantity)
                         }
                     }
                 }
@@ -460,10 +458,7 @@ export async function POST(request: Request) {
                         })
 
                         for (const recipe of recipes) {
-                            await tx.ingredient.update({
-                                where: { id: recipe.ingredientId },
-                                data: { subStock: { increment: recipe.quantity * item.quantity } }
-                            })
+                            await decrementStock(tx, recipe.ingredientId, -(recipe.quantity * item.quantity))
                         }
                     }
                 }

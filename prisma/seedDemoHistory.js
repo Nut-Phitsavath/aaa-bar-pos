@@ -150,10 +150,15 @@ async function main() {
                 if (!voided) {
                     for (const l of lines) {
                         for (const rec of recipes.filter((x) => x.menuId === l.vs.variation.menuId)) {
-                            await prisma.ingredient.update({
-                                where: { id: rec.ingredientId },
-                                data: { subStock: { decrement: rec.quantity * l.qty } },
-                            }).catch(() => { })
+                            // Rounded in SQL for the same reason the till does
+                            // it: 30ml out of a 700ml bottle is 0.042857... and
+                            // subtracting that 500 times leaves fourteen
+                            // decimals of noise on the count sheet.
+                            await prisma.$executeRaw`
+                                UPDATE "Ingredient"
+                                SET "subStock" = ROUND("subStock" - ${rec.quantity * l.qty}, 3)
+                                WHERE "id" = ${rec.ingredientId}
+                            `.catch(() => { })
                         }
                     }
                 }
@@ -216,7 +221,7 @@ async function main() {
                     fxRateUSD: RATE_USD,
                     discountType, discountValue,
                     isOwnerVip: roll < 0.06 && billTotal > 0,
-                    payLaterCustomerId: isTab ? pick(customers).id : null,
+                    customerId: isTab ? pick(customers).id : null,
                 },
             })
         }
@@ -245,16 +250,33 @@ async function main() {
         }
 
         // Deliveries in, and the occasional loss the shrinkage report exists for.
-        for (let i = 0; i < between(1, 3); i++) {
-            const ing = pick(ingredients)
+        //
+        // These used to write a StockTransaction row and stop, so every delivery
+        // was cosmetic: sales took stock off the shelf for 21 days and nothing
+        // ever put any back, which is how Beer Lao reached -656 bottles. A bar
+        // reorders what has fallen below its par level, so that is what happens
+        // here - the transaction and the stock move together.
+        for (const ing of ingredients) {
+            const current = await prisma.ingredient.findUnique({
+                where: { id: ing.id },
+                select: { subStock: true, minStockSub: true, maxStockSub: true },
+            })
+            if (!current || current.subStock >= current.minStockSub) continue
+
+            const quantity = Math.ceil(current.maxStockSub - current.subStock)
             await prisma.stockTransaction.create({
                 data: {
                     ingredientId: ing.id, type: "DEPOSIT",
-                    quantity: between(24, 120), cost: ing.cost,
+                    quantity, cost: ing.cost,
                     notes: "Delivery", userId: pick(tills).id,
                     createdAt: tradingTime(d),
                 },
             })
+            await prisma.$executeRaw`
+                UPDATE "Ingredient"
+                SET "subStock" = ROUND("subStock" + ${quantity}, 3)
+                WHERE "id" = ${ing.id}
+            `
         }
         if (chance(0.35)) {
             const ing = pick(ingredients)

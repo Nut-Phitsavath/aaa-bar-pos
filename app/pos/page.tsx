@@ -15,7 +15,8 @@ import {
   AlertCircle, Smartphone, Info, MapPin, MonitorPlay, WifiOff, RefreshCw, Smartphone as TabletIcon, PhoneIcon,
   ShoppingBag, Package, ShoppingCart, CandyOff, Droplet, Candy, Coffee,
   X, Tag, Star, User, Trash2, Pause, Check, Loader2,
-  ArrowRight
+  ArrowRight, Beer, Wine, Martini, CupSoda, Utensils,
+  type LucideIcon
 } from "lucide-react"
 import Link from "next/link"
 
@@ -76,6 +77,21 @@ type Customer = {
   phone?: string
 }
 
+// Colour and glyph per category, so a row is identifiable before it is read.
+// This is an information channel, not decoration: staff reach for "a beer" or
+// "a cocktail" long before they read which one, and every tile carrying the
+// same grey box was what made the list scan as a spreadsheet. A real photo,
+// when the owner supplies one, replaces the glyph and keeps the tint.
+const CATEGORY_STYLE: Record<string, { bg: string; fg: string; Icon: LucideIcon }> = {
+  Beer: { bg: "bg-amber-100", fg: "text-amber-700", Icon: Beer },
+  Sets: { bg: "bg-violet-100", fg: "text-violet-700", Icon: Package },
+  Spirits: { bg: "bg-rose-100", fg: "text-rose-700", Icon: Wine },
+  Cocktails: { bg: "bg-sky-100", fg: "text-sky-700", Icon: Martini },
+  Mixers: { bg: "bg-teal-100", fg: "text-teal-700", Icon: CupSoda },
+  Snacks: { bg: "bg-emerald-100", fg: "text-emerald-700", Icon: Utensils },
+}
+const FALLBACK_STYLE = { bg: "bg-slate-100", fg: "text-slate-400", Icon: Package }
+
 // Memoised so a keystroke in an unrelated input -- search, cash, beeper -- does
 // not re-render all ~50 menu cards and their next/image children. POSPage holds
 // 28 pieces of state; without this, any one of them repaints the whole grid.
@@ -85,31 +101,57 @@ const MenuCard = memo(function MenuCard({ item, index, onClick }: {
   index: number
   onClick: (item: MenuItem, e: React.MouseEvent<HTMLDivElement>) => void
 }) {
+  // Every bar item carries exactly one size, so this is the price, not a "from".
+  // Min rather than [0] so a future two-size item degrades to the lower price
+  // instead of whichever row the query happened to return first.
+  const price = Math.min(
+    ...item.variations.flatMap((v) => v.sizes.map((z) => z.price)).filter((n) => n > 0)
+  )
+
+  const style = CATEGORY_STYLE[item.category] ?? FALLBACK_STYLE
+
   return (
     <Card
-      className={`p-4 cursor-pointer hover:shadow-lg transition-shadow bg-amber-50 hover:bg-amber-100 border-amber-200 shadow-sm ${!item.isAvailable ? 'opacity-50 pointer-events-none' : ''}`}
+      className={`p-2 cursor-pointer bg-white border-slate-200 shadow-none hover:bg-amber-50 hover:border-amber-300 transition-colors duration-150 ${!item.isAvailable ? 'opacity-50 pointer-events-none' : ''}`}
       onClick={(e) => onClick(item, e)}
     >
-      <div className="flex flex-col h-full justify-between">
-        <div className="relative w-full aspect-square mb-3 rounded-md overflow-hidden bg-white shadow-inner">
+      {/* A row, not a tile. A full-bleed square image ties cell height to column
+          width, which is what capped the grid at two visible rows; as a fixed
+          thumbnail the photo stays - staff recognise a bottle faster than they
+          read one - while row height follows the type instead.
+
+          Amber is the hover state, not the resting one: a grid where every tile
+          is already the accent colour has nowhere left to go when you touch it,
+          and reads as one flat wall. */}
+      <div className="flex items-center gap-3">
+        <div className={`relative w-16 h-16 shrink-0 rounded-lg overflow-hidden ${style.bg}`}>
           {item.image && item.image !== "/placeholder.svg" ? (
             <Image
               src={item.image}
               alt={item.name}
               fill
               className="object-cover"
-              sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
-              priority={index < 8}
+              sizes="64px"
+              priority={index < 12}
             />
           ) : (
-            <div className="w-full h-full flex items-center justify-center text-slate-300">
-              <Package className="w-12 h-12" />
+            <div className={`w-full h-full flex items-center justify-center ${style.fg}`}>
+              <style.Icon className="w-7 h-7" />
             </div>
           )}
         </div>
-        <div>
-          <h3 className="font-bold text-lg leading-tight text-slate-800">{item.localName || item.name}</h3>
-          <p className="text-sm text-slate-500 font-medium">{item.name}</p>
+        <div className="min-w-0 flex-1">
+          <h3 className="font-bold text-base leading-tight text-slate-800 truncate">
+            {item.localName || item.name}
+          </h3>
+          {item.localName && (
+            <p className="text-xs leading-tight text-slate-500 font-medium truncate mt-0.5">{item.name}</p>
+          )}
+          {Number.isFinite(price) && (
+            <span className="block text-[15px] font-bold text-slate-900 tabular-nums mt-1">
+              {formatTHB(price)}
+            </span>
+          )}
         </div>
       </div>
     </Card>
@@ -1335,8 +1377,15 @@ function POSPageInner() {
         </div>
 
         {/* Menu Grid */}
-        <div className="flex-1 overflow-y-auto p-4">
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+        <div className="flex-1 overflow-y-auto p-3">
+          {/* No breakpoints. This grid sits between a sidebar and the ticket
+              panel, so the window width never described the space it actually
+              had; auto-fill just takes as many 15rem columns as fit, which is
+              four on the till and one on a phone without anyone deciding. */}
+          <div
+            className="grid gap-1.5"
+            style={{ gridTemplateColumns: "repeat(auto-fill, minmax(15rem, 1fr))" }}
+          >
             {filteredItems.map((item, index) => (
               <MenuCard key={item.id} item={item} index={index} onClick={handleClickProduct} />
             ))}
