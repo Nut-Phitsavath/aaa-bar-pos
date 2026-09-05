@@ -101,7 +101,7 @@ export function Sidebar() {
         { name: t.dashboard, href: "/dashboard", icon: LayoutDashboard },
         { name: t.tables, href: "/tables", icon: LayoutGrid },
         { name: t.pos, href: "/pos", icon: ShoppingCart },
-        { name: t.orders, href: "/orders", icon: Receipt },
+        { name: t.bill_history, href: "/orders", icon: Receipt },
         { name: t.menu, href: "/menu", icon: List },
         { name: t.inventory, href: "/inventory", icon: Package },
         { name: t.user_management, href: "/users", icon: Users },

@@ -10,6 +10,10 @@
     "skipLibCheck": true,
     "strict": true,
     "noEmit": true,
+    // Lets a tested lib import another with the .ts specifier node needs when
+    // type-stripping. Safe here: noEmit is on, so nothing is written out, and
+    // the bundler resolves the literal path.
+    "allowImportingTsExtensions": true,
     "esModuleInterop": true,
     "module": "esnext",
     "moduleResolution": "bundler",
