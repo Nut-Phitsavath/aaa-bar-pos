@@ -135,23 +135,35 @@ export function canSwap(
 }
 
 /**
- * What a package still holds after the swaps already made against it.
+ * What a package delivers now: its recipe, less what has been swapped out of
+ * it, plus what has been swapped in.
  *
- * Swaps stack: two Heinekens out this round and one more later must not let a
- * package of two give up three.
+ * Both halves matter. Swaps stack, so two Heinekens out this round and one more
+ * later must not let a package of two give up three. And a drink that arrived
+ * by exchange is on the table exactly like the ones the recipe named - a set
+ * whose Heinekens became Beer Lao holds Beer Lao, and a customer who changes
+ * their mind twice has to be able to trade them. Counting only the recipe left
+ * the second exchange refusing to touch drinks the bar had already served.
  */
 export function remainingContents(
     contents: Component[],
     alreadyRemoved: { menuId: string; quantity: number }[],
+    alreadyAdded: Component[] = [],
 ): Component[] {
-    return contents
-        .map((c) => {
-            const gone = alreadyRemoved
-                .filter((r) => r.menuId === c.menuId)
-                .reduce((sum, r) => sum + r.quantity, 0)
-            return { ...c, quantity: c.quantity - gone }
-        })
-        .filter((c) => c.quantity > 0)
+    const net = contents.map((c) => {
+        const gone = alreadyRemoved
+            .filter((r) => r.menuId === c.menuId)
+            .reduce((sum, r) => sum + r.quantity, 0)
+        return { ...c, quantity: c.quantity - gone }
+    })
+
+    for (const added of alreadyAdded) {
+        const at = net.find((c) => c.menuId === added.menuId)
+        if (at) at.quantity += added.quantity
+        else net.push({ ...added })
+    }
+
+    return net.filter((c) => c.quantity > 0)
 }
 
 export type SwapLine = { direction: string; name: string; quantity: number }

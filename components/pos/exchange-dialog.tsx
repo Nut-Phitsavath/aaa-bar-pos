@@ -50,7 +50,9 @@ export function ExchangeDialog({
     const { t } = useTranslation()
     const [pkg, setPkg] = useState<{ name: string; remaining: Component[]; swaps: PastSwap[] } | null>(null)
     const [menu, setMenu] = useState<MenuItem[]>([])
-    const [out, setOut] = useState<Record<string, number>>({})
+    // How many of each component stay in the package. Counts down from what it
+    // holds; the difference is what is being taken out.
+    const [keep, setKeep] = useState<Record<string, number>>({})
     const [inn, setInn] = useState<Record<string, number>>({})
     const [query, setQuery] = useState("")
     const [busy, setBusy] = useState(false)
@@ -60,7 +62,14 @@ export function ExchangeDialog({
         const res = await fetch(`/api/order-items/${itemId}/swap`)
         if (res.ok) {
             const data = await res.json()
-            setPkg({ name: data.name, remaining: data.remaining ?? [], swaps: data.swaps ?? [] })
+            const remaining: Component[] = data.remaining ?? []
+            setPkg({ name: data.name, remaining, swaps: data.swaps ?? [] })
+            // The left column starts at what the set holds and counts DOWN.
+            // Staff are editing what the package delivers - "two Beer Lao,
+            // make it one" - not composing a list of things to subtract, and
+            // a column of zeroes beside "in package: 5" asked them to do the
+            // arithmetic themselves.
+            setKeep(Object.fromEntries(remaining.map((c) => [c.menuId, c.quantity])))
         }
     }, [itemId])
 
@@ -76,7 +85,7 @@ export function ExchangeDialog({
             const data = await res.json().catch(() => ({}))
             if (!res.ok) { toast.error(errorText(data.error)); return }
             toast.success(t.exchange_reversed)
-            setOut({}); setInn({})
+            setInn({})
             await load()
             onDone()
         } finally { setBusy(false) }
@@ -84,7 +93,7 @@ export function ExchangeDialog({
 
     useEffect(() => {
         if (!itemId) return
-        setOut({}); setInn({}); setQuery("")
+        setInn({}); setQuery("")
         load()
         fetch("/api/menu")
             .then((r) => (r.ok ? r.json() : []))
@@ -113,11 +122,13 @@ export function ExchangeDialog({
             .catch(() => setMenu([]))
     }, [itemId, load])
 
+    /** What is leaving: the gap between what the set holds and what is kept. */
     const outLines = useMemo(
         () => (pkg?.remaining ?? [])
-            .filter((c) => (out[c.menuId] ?? 0) > 0)
-            .map((c) => ({ unitPrice: c.unitPrice, quantity: out[c.menuId] })),
-        [pkg, out],
+            .map((c) => ({ ...c, taken: c.quantity - (keep[c.menuId] ?? c.quantity) }))
+            .filter((c) => c.taken > 0)
+            .map((c) => ({ menuId: c.menuId, unitPrice: c.unitPrice, quantity: c.taken })),
+        [pkg, keep],
     )
     const inLines = useMemo(
         () => menu
@@ -131,11 +142,19 @@ export function ExchangeDialog({
     const charge = chargeFor(outValue, inValue)
     const touched = outLines.length > 0 || inLines.length > 0
 
-    const step = (set: typeof setOut, key: string, delta: number, max?: number) =>
+    const step = (set: typeof setInn, key: string, delta: number, max?: number) =>
         set((prev) => {
             const next = Math.max(0, (prev[key] ?? 0) + delta)
             if (max !== undefined && next > max) return prev
             return { ...prev, [key]: next }
+        })
+
+    /** The left column: never below zero, never above what the set holds. */
+    const stepKeep = (menuId: string, held: number, delta: number) =>
+        setKeep((prev) => {
+            const current = prev[menuId] ?? held
+            const next = Math.min(held, Math.max(0, current + delta))
+            return { ...prev, [menuId]: next }
         })
 
     const submit = async () => {
@@ -146,7 +165,7 @@ export function ExchangeDialog({
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                    removing: Object.entries(out).filter(([, q]) => q > 0).map(([menuId, quantity]) => ({ menuId, quantity })),
+                    removing: outLines.map((l) => ({ menuId: l.menuId, quantity: l.quantity })),
                     adding: Object.entries(inn).filter(([, q]) => q > 0).map(([variationSizeId, quantity]) => ({ variationSizeId, quantity })),
                 }),
             })
@@ -182,36 +201,56 @@ export function ExchangeDialog({
                 </DialogHeader>
 
                 <div className="grid md:grid-cols-2 gap-4">
-                    {/* Out: only what this package still holds. */}
+                    {/* What the set delivers, edited in place. The number is how
+                        many the customer still gets, so taking one out is one
+                        press of minus and reads the way it was asked for. */}
                     <div className="rounded-xl border border-slate-200 overflow-hidden">
                         <p className="px-3 py-2 bg-slate-50 border-b text-xs font-bold uppercase tracking-widest text-slate-500">
-                            {t.exchange_out}
+                            {t.in_package}
                         </p>
                         <div className="max-h-72 overflow-y-auto">
                             {(pkg?.remaining ?? []).length === 0 ? (
                                 <p className="px-3 py-8 text-center text-sm text-slate-500">{t.exchange_nothing_left}</p>
                             ) : (
-                                pkg!.remaining.map((c) => (
+                                pkg!.remaining.map((c) => {
+                                    const kept = keep[c.menuId] ?? c.quantity
+                                    const taken = c.quantity - kept
+                                    return (
                                     <div key={c.menuId} className="flex items-center gap-2 px-3 py-2 border-b border-slate-100 last:border-0">
                                         <div className="min-w-0 flex-1">
                                             <p className="font-bold text-slate-900 truncate">{c.localName || c.name}</p>
+                                            {/* What the set holds, and what it
+                                                would hold after this edit. The
+                                                big number is the new figure, so
+                                                without the original beside it a
+                                                staff member cannot tell whether
+                                                a 1 means "one left" or "one
+                                                taken". */}
                                             <p className="text-xs text-slate-500 tabular-nums">
-                                                {formatTHB(c.unitPrice)} · {t.in_package} {c.quantity}
+                                                {formatTHB(c.unitPrice)} · {t.set_qty} {c.quantity}
+                                                {taken > 0 && (
+                                                    <span className="text-rose-600 font-bold"> → {kept} (−{taken})</span>
+                                                )}
                                             </p>
                                         </div>
                                         <Button variant="outline" size="icon" className="h-9 w-9 shrink-0"
-                                            aria-label={`${t.remove} ${c.name}`}
-                                            onClick={() => step(setOut, c.menuId, -1)}>
+                                            aria-label={`${t.exchange_out} ${c.name}`}
+                                            disabled={kept === 0}
+                                            onClick={() => stepKeep(c.menuId, c.quantity, -1)}>
                                             <Minus className="w-4 h-4" />
                                         </Button>
-                                        <span className="w-6 text-center font-black tabular-nums">{out[c.menuId] ?? 0}</span>
+                                        <span className={`w-6 text-center font-black tabular-nums ${taken > 0 ? "text-rose-600" : "text-slate-900"}`}>
+                                            {kept}
+                                        </span>
                                         <Button variant="outline" size="icon" className="h-9 w-9 shrink-0"
-                                            aria-label={`${t.add} ${c.name}`}
-                                            onClick={() => step(setOut, c.menuId, 1, c.quantity)}>
+                                            aria-label={`${t.put_back} ${c.name}`}
+                                            disabled={kept === c.quantity}
+                                            onClick={() => stepKeep(c.menuId, c.quantity, 1)}>
                                             <Plus className="w-4 h-4" />
                                         </Button>
                                     </div>
-                                ))
+                                    )
+                                })
                             )}
                         </div>
                     </div>

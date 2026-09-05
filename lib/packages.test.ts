@@ -206,3 +206,38 @@ test('a reversed swap does not hide a live one', () => {
     ])
     assert.deepEqual(summary.out, [{ direction: 'OUT', name: 'Heineken', quantity: 1 }])
 })
+
+test('what a swap put in can be swapped out again', () => {
+    // The owner's second thought: a set whose 2 Heineken became 2 Beer Lao now
+    // holds 4 Beer Lao, and the customer who changes their mind again has to be
+    // able to trade them. Counting only the recipe refused to touch drinks the
+    // bar had already carried to the table.
+    const held = remainingContents(
+        PACKAGE,
+        [{ menuId: 'heineken', quantity: 2 }],
+        [{ menuId: 'beerlao', variationSizeId: null, name: 'Beer Lao', unitPrice: 45, quantity: 2 }],
+    )
+    // The set named four Beer Lao and the swap added two more.
+    assert.equal(held.find((c) => c.menuId === 'beerlao')?.quantity, 6)
+    assert.equal(held.some((c) => c.menuId === 'heineken'), false)
+    assert.equal(canSwap(held, [{ menuId: 'beerlao', quantity: 6 }], [{ quantity: 1 }]).ok, true)
+    assert.equal(canSwap(held, [{ menuId: 'beerlao', quantity: 7 }], [{ quantity: 1 }]).ok, false)
+})
+
+test('a drink the recipe never named still joins the package', () => {
+    // Swap a Heineken for a water and the set holds a water, even though no
+    // recipe line ever mentioned one.
+    const held = remainingContents(
+        PACKAGE,
+        [{ menuId: 'heineken', quantity: 1 }],
+        [{ menuId: 'water', variationSizeId: null, name: 'Drinking Water', unitPrice: 20, quantity: 1 }],
+    )
+    assert.equal(held.find((c) => c.menuId === 'water')?.quantity, 1)
+    assert.equal(held.find((c) => c.menuId === 'heineken')?.quantity, 1)
+})
+
+test('reversed swaps leave the contents untouched', () => {
+    // A reversed swap contributes neither an OUT nor an IN: the caller filters
+    // them out, so the package reads exactly as its recipe does.
+    assert.deepEqual(remainingContents(PACKAGE, [], []), PACKAGE)
+})

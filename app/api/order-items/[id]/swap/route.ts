@@ -12,6 +12,40 @@ import { EXCHANGE_CHARGE, recomputeOrderTotal } from '@/lib/swap-charge'
 
 export const dynamic = 'force-dynamic'
 
+/**
+ * What earlier swaps put into this package, as components a later swap can
+ * take back out.
+ *
+ * Priced at today's menu where the item is still sold, falling back to what the
+ * swap recorded: a drink whose price rose since should be valued at what the
+ * bar charges for it now, but a delisted one still has to be tradeable.
+ */
+function addedComponents(
+    swaps: { reversedAt: Date | null; lines: any[] }[],
+    menus: SellableMenu[],
+) {
+    const byMenu = new Map(menus.map((m) => [m.menuId, m]))
+    const added = new Map<string, any>()
+    for (const swap of swaps) {
+        if (swap.reversedAt) continue
+        for (const line of swap.lines) {
+            if (line.direction !== 'IN' || !line.menuId) continue
+            const at = added.get(line.menuId)
+            if (at) { at.quantity += line.quantity; continue }
+            const live = byMenu.get(line.menuId)
+            added.set(line.menuId, {
+                menuId: line.menuId,
+                variationSizeId: live?.variationSizeId ?? line.variationSizeId,
+                name: live?.name ?? line.name,
+                localName: live?.localName ?? null,
+                unitPrice: live?.unitPrice ?? line.unitPrice,
+                quantity: line.quantity,
+            })
+        }
+    }
+    return Array.from(added.values())
+}
+
 /** The recipe rule the order path uses: the menu's base lines plus this size's. */
 async function recipeFor(tx: any, variationSizeId: string) {
     const vs = await tx.variationSize.findUnique({
@@ -46,7 +80,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
         if (!item) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
         const menu = item.variationSize?.variation?.menu
-        const index = componentIndex(await sellableMenus())
+        const menus = await sellableMenus()
+        const index = componentIndex(menus)
         const contents = menu
             ? contentsOf(menu.recipes.map((r) => ({ ingredientId: r.ingredientId, quantity: r.quantity })), index)
                 .map((c) => ({ ...c, quantity: c.quantity * item.quantity }))
@@ -59,7 +94,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
             name: item.name,
             quantity: item.quantity,
             contents,
-            remaining: remainingContents(contents, alreadyRemoved),
+            remaining: remainingContents(contents, alreadyRemoved, addedComponents(item.swaps, menus)),
             swaps: item.swaps,
         })
     } catch (error) {
@@ -127,7 +162,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         const menu = item.variationSize?.variation?.menu
         if (!menu) return NextResponse.json({ error: 'NOT_A_PACKAGE' }, { status: 409 })
 
-        const index = componentIndex(await sellableMenus())
+        const menus = await sellableMenus()
+        const index = componentIndex(menus)
         // A line of two buckets holds twice the contents of one.
         const perPackage = contentsOf(
             menu.recipes.map((r) => ({ ingredientId: r.ingredientId, quantity: r.quantity })),
@@ -139,7 +175,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         const alreadyRemoved = item.swaps.filter((s) => !s.reversedAt).flatMap((s) =>
             s.lines.filter((l) => l.direction === 'OUT' && l.menuId)
                 .map((l) => ({ menuId: l.menuId as string, quantity: l.quantity })))
-        const left = remainingContents(contents, alreadyRemoved)
+        const left = remainingContents(contents, alreadyRemoved, addedComponents(item.swaps, menus))
 
         const check = canSwap(left, removing, adding)
         if (!check.ok) return NextResponse.json({ error: check.reason }, { status: 409 })
