@@ -463,6 +463,21 @@ export async function POST(request: Request) {
                     }
                 }
 
+                // Stamp the lines too, so a counter cancellation lands in the
+                // void audit report alongside a table void (req #24) instead of
+                // being invisible to it. The free-text reason staff typed is
+                // kept as the note; the code is OTHER because this path has no
+                // picklist to choose from.
+                await tx.orderItem.updateMany({
+                    where: { orderId: id, voidedAt: null },
+                    data: {
+                        voidedAt: new Date(),
+                        voidedById: userId,
+                        voidReason: 'OTHER',
+                        voidNote: cancellationReason || null,
+                    },
+                })
+
                 // Mirror of the money-only block above. A SENT order never
                 // earned points and never reached the drawer, so reversing
                 // either here would silently drain a customer's balance or the

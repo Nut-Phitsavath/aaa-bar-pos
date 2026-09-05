@@ -4,8 +4,9 @@ import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { useTranslation } from "@/hooks/use-translation"
 import { Button } from "@/components/ui/button"
-import { Printer, Plus, Minus, Trash2 } from "lucide-react"
+import { Printer, Plus, Minus, Trash2, Ban } from "lucide-react"
 import { formatTHB } from "@/lib/currency"
+import { VoidDialog, type VoidTarget } from "@/components/pos/void-dialog"
 
 export type TicketOrder = {
     id: string
@@ -15,7 +16,11 @@ export type TicketOrder = {
     tableOrderNumber: number | null
     waiter: { id: string; name: string } | null
     user: { id: string; name: string } | null
-    items: { id: string; name: string; localName: string | null; quantity: number; total: number }[]
+    items: {
+        id: string; name: string; localName: string | null; quantity: number; total: number
+        voidedAt?: string | null; voidReason?: string | null; voidNote?: string | null
+        voidedBy?: { name: string } | null
+    }[]
 }
 
 export type TicketBill = {
@@ -60,6 +65,7 @@ export function TicketPanel({
     onRemove,
     onSend,
     onPrint,
+    onVoided,
     busy,
 }: {
     bill: TicketBill
@@ -68,11 +74,14 @@ export function TicketPanel({
     onRemove: (lineId: string) => void
     onSend: () => void
     onPrint: () => void
+    /** Reload the bill after a void: the round is worth less than it was. */
+    onVoided: () => void
     busy?: boolean
 }) {
     const { t } = useTranslation()
     const router = useRouter()
     const [now, setNow] = useState(() => new Date())
+    const [voiding, setVoiding] = useState<VoidTarget | null>(null)
 
     useEffect(() => {
         const tick = setInterval(() => setNow(new Date()), 30000)
@@ -101,28 +110,74 @@ export function TicketPanel({
                                 <span className="font-bold truncate">
                                     {t.round_no} #{order.tableOrderNumber ?? "-"} · {order.user?.name || "—"} · {order.waiter?.name || "—"}
                                 </span>
-                                <span className="tabular-nums shrink-0 text-xs">
-                                    {new Date(order.createdAt).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
+                                <span className="flex items-center gap-2 shrink-0">
+                                    <span className="tabular-nums text-xs">
+                                        {new Date(order.createdAt).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
+                                    </span>
+                                    {/* The duplicate-order case req #5 names: two staff
+                                        key the same table, one whole round has to go. */}
+                                    {!voided && (
+                                        <button
+                                            onClick={() => setVoiding({
+                                                orderId: order.id,
+                                                label: `${t.round_no} #${order.tableOrderNumber ?? "-"}`,
+                                                value: order.total,
+                                            })}
+                                            aria-label={t.void_round}
+                                            className="h-7 px-2 rounded-md text-rose-600 hover:bg-rose-100 transition-colors duration-150"
+                                        >
+                                            <Ban className="w-4 h-4" />
+                                        </button>
+                                    )}
                                 </span>
                             </div>
-                            {order.items.map((item) => (
-                                <div key={item.id} className="flex items-start gap-3 px-4 py-2.5 border-b border-slate-100">
-                                    <span className="w-8 text-lg font-black text-slate-500 tabular-nums shrink-0 leading-tight">
-                                        {item.quantity}
-                                    </span>
-                                    <div className="flex-1 min-w-0">
-                                        <p className="text-base text-slate-900 leading-snug">
-                                            {item.localName || item.name}
-                                        </p>
-                                        <p className={`text-[11px] font-bold tracking-wide mt-0.5 ${voided ? "text-rose-500" : "text-emerald-600"}`}>
-                                            {voided ? t.state_void : t.state_submitted}
-                                        </p>
+                            {order.items.map((item) => {
+                                const lineVoid = Boolean(item.voidedAt)
+                                const struck = voided || lineVoid
+                                return (
+                                    <div key={item.id} className="flex items-start gap-3 px-4 py-2.5 border-b border-slate-100">
+                                        <span className="w-8 text-lg font-black text-slate-500 tabular-nums shrink-0 leading-tight">
+                                            {item.quantity}
+                                        </span>
+                                        <div className="flex-1 min-w-0">
+                                            <p className={`text-base leading-snug ${struck ? "text-slate-400 line-through" : "text-slate-900"}`}>
+                                                {item.localName || item.name}
+                                            </p>
+                                            <p className={`text-[11px] font-bold tracking-wide mt-0.5 ${struck ? "text-rose-500" : "text-emerald-600"}`}>
+                                                {struck ? t.state_void : t.state_submitted}
+                                            </p>
+                                            {/* Who struck it and why, on the ticket itself.
+                                                The manager asking "what happened on table 4"
+                                                should not have to open a report to find out. */}
+                                            {lineVoid && (
+                                                <p className="text-[11px] text-slate-500 mt-0.5 truncate">
+                                                    {item.voidReason ? (t[`void_${item.voidReason.toLowerCase()}` as keyof typeof t] as string ?? item.voidReason) : ""}
+                                                    {item.voidedBy?.name ? ` · ${item.voidedBy.name}` : ""}
+                                                    {item.voidNote ? ` · ${item.voidNote}` : ""}
+                                                </p>
+                                            )}
+                                        </div>
+                                        <span className={`text-base font-semibold tabular-nums shrink-0 ${struck ? "line-through text-slate-400" : "text-slate-800"}`}>
+                                            {formatTHB(item.total)}
+                                        </span>
+                                        {/* One of the five beers came back. */}
+                                        {!struck && (
+                                            <button
+                                                onClick={() => setVoiding({
+                                                    orderId: order.id,
+                                                    itemIds: [item.id],
+                                                    label: `${item.quantity} × ${item.localName || item.name}`,
+                                                    value: item.total,
+                                                })}
+                                                aria-label={t.void_item}
+                                                className="h-8 w-8 grid place-items-center rounded-md text-slate-300 hover:text-rose-600 hover:bg-rose-50 shrink-0 transition-colors duration-150"
+                                            >
+                                                <Ban className="w-4 h-4" />
+                                            </button>
+                                        )}
                                     </div>
-                                    <span className={`text-base font-semibold tabular-nums shrink-0 ${voided ? "line-through text-slate-400" : "text-slate-800"}`}>
-                                        {formatTHB(item.total)}
-                                    </span>
-                                </div>
-                            ))}
+                                )
+                            })}
                         </section>
                     )
                 })}
@@ -223,6 +278,12 @@ export function TicketPanel({
                     )}
                 </div>
             </footer>
+
+            <VoidDialog
+                target={voiding}
+                onClose={() => setVoiding(null)}
+                onVoided={onVoided}
+            />
         </div>
     )
 }

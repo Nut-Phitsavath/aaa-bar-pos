@@ -29,6 +29,10 @@ model User {
   paymentsApproved  Payment[]          @relation("PaymentApprovedBy")
   discountsApproved TableSession[]     @relation("SessionDiscountApprover")
   tabsApproved      TableSession[]     @relation("SessionTabApprover")
+  // Who struck a line, which is the "staff name" column req #24 asks for. It
+  // is deliberately not the same person as `waitedOrders`: the report has to
+  // separate who took the round from who cancelled it.
+  itemsVoided       OrderItem[]        @relation("OrderItemVoidedBy")
 }
 
 model Category {
@@ -385,6 +389,14 @@ model OrderItem {
   /// sugar/shot/cup fields below are the inherited cafe modifiers - harmless
   /// and inert for a bar, since no bar category enables them.
   note            String?
+  /// Voiding is recorded on the line, not the round (req #5). A whole-round
+  /// void strikes every line, so the audit report has one source to read.
+  /// The row is kept rather than deleted: a deleted line is indistinguishable
+  /// from one nobody ever keyed, which is what an audit exists to tell apart.
+  voidedAt        DateTime?
+  voidedById      String?
+  voidReason      String?
+  voidNote        String?
   sugarLevel      String?
   shotType        String?
   cupSize         String?
@@ -393,8 +405,11 @@ model OrderItem {
   // Nullable so menu items can be deleted without wiping historical order lines
   // (name/price snapshots remain on the order item).
   variationSize   VariationSize? @relation(fields: [variationSizeId], references: [id], onDelete: SetNull)
+  voidedBy        User?          @relation("OrderItemVoidedBy", fields: [voidedById], references: [id])
 
   // orderId is looked up once per order on any query that includes items.
   @@index([orderId])
   @@index([variationSizeId])
+  // The void report filters on this across a date range.
+  @@index([voidedAt])
 }

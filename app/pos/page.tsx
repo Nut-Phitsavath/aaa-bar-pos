@@ -1418,6 +1418,7 @@ function POSPageInner() {
           onRemove={(lineId) => setCart((prev) => prev.filter((i) => i.id !== lineId))}
           onSend={sendToTable}
           onPrint={printBill}
+          onVoided={loadSession}
           busy={isProcessing}
         />
       )}

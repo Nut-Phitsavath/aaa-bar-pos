@@ -93,7 +93,11 @@ function ReceiptContent() {
                 // nobody checks which round a drink came from.
                 const merged = new Map<string, any>()
                 for (const o of live) {
-                    for (const i of o.items) {
+                    // A round can survive while one of its lines was struck, so
+                    // filtering cancelled ORDERS is not enough - a voided line
+                    // would otherwise still be printed on, and charged for, a
+                    // bill whose total no longer includes it.
+                    for (const i of o.items.filter((x: any) => !x.voidedAt)) {
                         const unit = i.quantity > 0 ? i.total / i.quantity : 0
                         const key = `${i.name}::${unit}`
                         const at = merged.get(key)
