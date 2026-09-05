@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog"
 import { Plus, Edit, Trash2, Package, ShoppingCart, Minus, Settings, Search, ArrowUpDown, Store, Warehouse } from "lucide-react"
 import { formatTHB } from "@/lib/currency"
+import { formatStock } from "@/lib/stock"
 import { Header } from "@/components/header"
 import { FormattedNumberInput } from "@/components/ui/formatted-number-input"
 import { FormattedTextInput } from "@/components/ui/formatted-text-input"
@@ -604,11 +605,15 @@ export default function InventoryPage() {
                               {item.category?.name || t.no_category || "Uncategorized"}
                             </Badge>
                           </TableCell>
-                          <TableCell className="font-bold text-lg">
-                            {activeTab === "SUB" ? item.subStock : item.mainStock}
+                          {/* Negative is real information - more went out than
+                              was ever booked in - so it is shown rather than
+                              clamped away, but shown in red because it is a
+                              discrepancy to chase, not a stock level. */}
+                          <TableCell className={`font-bold text-lg tabular-nums ${(activeTab === "SUB" ? item.subStock : item.mainStock) < 0 ? "text-rose-600" : ""}`}>
+                            {formatStock(activeTab === "SUB" ? item.subStock : item.mainStock)}
                           </TableCell>
                           <TableCell>{item.unit}</TableCell>
-                          <TableCell>{activeTab === "SUB" ? item.minStockSub : item.minStock}</TableCell>
+                          <TableCell className="tabular-nums">{formatStock(activeTab === "SUB" ? item.minStockSub : item.minStock)}</TableCell>
                           <TableCell>{formatTHB(item.cost)}</TableCell>
                           <TableCell>{formatTHB((activeTab === 'SUB' ? item.subStock : item.mainStock) * item.cost)}</TableCell>
                           <TableCell>

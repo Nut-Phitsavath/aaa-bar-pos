@@ -11,7 +11,8 @@
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
     "db:seed": "node prisma/seedBarData.js",
-    "db:demo": "node prisma/seedDemoHistory.js"
+    "db:demo": "node prisma/seedDemoHistory.js",
+    "check:pourcost": "node prisma/checkPourCost.js"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
