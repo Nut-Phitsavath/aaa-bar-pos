@@ -18,6 +18,7 @@ export type TicketOrder = {
     user: { id: string; name: string } | null
     items: {
         id: string; name: string; localName: string | null; quantity: number; total: number
+        note?: string | null
         voidedAt?: string | null; voidReason?: string | null; voidNote?: string | null
         voidedBy?: { name: string } | null
     }[]
@@ -143,6 +144,14 @@ export function TicketPanel({
                                             <p className={`text-base leading-snug ${struck ? "text-slate-400 line-through" : "text-slate-900"}`}>
                                                 {item.localName || item.name}
                                             </p>
+                                            {/* The note is the whole point of the
+                                                ticket for the bar: louder than the
+                                                status line, not a footnote to it. */}
+                                            {item.note && (
+                                                <p className={`text-sm font-bold mt-0.5 ${struck ? "text-slate-400 line-through" : "text-amber-700"}`}>
+                                                    {item.note}
+                                                </p>
+                                            )}
                                             <p className={`text-[11px] font-bold tracking-wide mt-0.5 ${struck ? "text-rose-500" : "text-emerald-600"}`}>
                                                 {struck ? t.state_void : t.state_submitted}
                                             </p>

@@ -15,7 +15,7 @@ import { Label } from "@/components/ui/label"
 import {
   Search, Plus, Minus, CreditCard, Clock, Printer, HandCoins, CheckCircle,
   AlertCircle, Smartphone, Info, MapPin, MonitorPlay, WifiOff, RefreshCw, Smartphone as TabletIcon, PhoneIcon,
-  ShoppingBag, Package, ShoppingCart, CandyOff, Droplet, Candy, Coffee,
+  ShoppingBag, Package, ShoppingCart, CandyOff, Droplet, Candy, Coffee, StickyNote,
   X, Tag, Star, User, Trash2, Pause, Check, Loader2,
   ArrowRight, Beer, Wine, Martini, CupSoda, Utensils,
   type LucideIcon
@@ -71,6 +71,8 @@ type CartItem = {
   category?: string
   image?: string
   isTakeaway?: boolean
+  /** Free text for the bar (req #4): "no ice", "serve last". */
+  note?: string
 }
 
 type Customer = {
@@ -556,7 +558,8 @@ function POSPageInner() {
             shotType: i.shot,
             variation: i.variation,
             size: i.size,
-            isTakeaway: i.isTakeaway
+            isTakeaway: i.isTakeaway,
+            note: i.note
           })),
           total,
           subtotal,
@@ -603,7 +606,8 @@ function POSPageInner() {
             shotType: i.shot,
             variation: i.variation,
             size: i.size,
-            isTakeaway: i.isTakeaway
+            isTakeaway: i.isTakeaway,
+            note: i.note
           })),
           total,
           subtotal,
@@ -803,7 +807,7 @@ function POSPageInner() {
         const found = all.find((o: any) => o.id === resumeId)
         if (found) {
           setCart(found.items.map((i: any) => {
-            const compositeId = `${i.variationSizeId}-${i.sugarLevel || ''}-${i.shotType || ''}-${i.variation || ''}-${i.isTakeaway || false}`
+            const compositeId = `${i.variationSizeId}-${i.sugarLevel || ''}-${i.shotType || ''}-${i.variation || ''}-${i.isTakeaway || false}-${i.note || ''}`
             return {
               id: compositeId,
               variationSizeId: i.variationSizeId,
@@ -814,7 +818,8 @@ function POSPageInner() {
               shot: i.shotType,
               variation: i.variation,
               size: i.size,
-              isTakeaway: i.isTakeaway
+              isTakeaway: i.isTakeaway,
+              note: i.note || undefined
             }
           }))
           setOrderNumber(found.orderNumber)
@@ -870,7 +875,8 @@ function POSPageInner() {
                 shotType: i.shot,
                 variation: i.variation,
                 size: i.size,
-                isTakeaway: i.isTakeaway
+                isTakeaway: i.isTakeaway,
+                note: i.note
               })),
               total, subtotal, tax,
               paymentMethod,
@@ -1053,12 +1059,14 @@ function POSPageInner() {
     variation: string
     size: string
     isTakeaway: boolean
+    note: string
   }) => {
     const finalPrice = selection.price
 
     setCart((prev) => {
-      // Unique ID based on variationSizeId + customizations
-      const uniqueId = `${selection.variationSizeId}-${selection.sugar}-${selection.shot}-${selection.variation}-${selection.isTakeaway}`
+      // Unique ID based on variationSizeId + customizations. The note is part
+      // of it: two of the same drink, one "no ice", are two lines, not a qty 2.
+      const uniqueId = `${selection.variationSizeId}-${selection.sugar}-${selection.shot}-${selection.variation}-${selection.isTakeaway}-${selection.note}`
 
       // Check existing similar item
       const existing = prev.find((item) => item.id === uniqueId)
@@ -1082,7 +1090,8 @@ function POSPageInner() {
         size: selection.size,
         category: productToCustomize?.category || "Other",
         image: productToCustomize?.image,
-        isTakeaway: selection.isTakeaway
+        isTakeaway: selection.isTakeaway,
+        note: selection.note || undefined
       }]
     })
     setProductToCustomize(null)
@@ -1228,7 +1237,8 @@ function POSPageInner() {
             shotType: i.shot,
             variation: i.variation,
             size: i.size,
-            isTakeaway: i.isTakeaway
+            isTakeaway: i.isTakeaway,
+            note: i.note
           })),
           total,
           subtotal,
@@ -1335,6 +1345,7 @@ function POSPageInner() {
       sugar: i.sugar ?? null,
       shot: i.shot ?? null,
       isTakeaway: i.isTakeaway,
+      note: i.note ?? null,
     })),
     discount: lastOrderInfo.discount ?? 0,
     tax: lastOrderInfo.tax ?? 0,
@@ -1517,6 +1528,11 @@ function POSPageInner() {
                         {item.isTakeaway && (
                           <span className="flex items-center gap-1 text-[10px] bg-blue-50 px-1.5 py-0.5 rounded text-blue-700 border border-blue-100 font-bold">
                             <ShoppingBag className="w-3 h-3" /> {t.takeaway}
+                          </span>
+                        )}
+                        {item.note && (
+                          <span className="flex items-center gap-1 text-[10px] bg-amber-50 px-1.5 py-0.5 rounded text-amber-800 border border-amber-200 font-bold">
+                            <StickyNote className="w-3 h-3 shrink-0" /> {item.note}
                           </span>
                         )}
                       </div>

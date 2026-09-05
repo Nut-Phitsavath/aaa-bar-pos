@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
+import { Input } from "@/components/ui/input"
 import { useState, useEffect } from "react"
 import { createPortal } from "react-dom"
 import { useTranslation } from "@/hooks/use-translation"
@@ -43,6 +44,7 @@ interface CustomizationDialogProps {
         variation: string
         size: string
         isTakeaway: boolean
+        note: string
     }) => void
     menuName: string
     localName?: string
@@ -70,6 +72,10 @@ export function CustomizationDialog({
     const [selectedVariation, setSelectedVariation] = useState<string>("")
     const [selectedSize, setSelectedSize] = useState<string>("")
     const [isTakeaway, setIsTakeaway] = useState(false)
+    // Requirement #4's preparation note. OrderItem has carried the field all
+    // along; nothing ever offered a way to type one, so "no ice" reached the
+    // bar by being shouted across it.
+    const [note, setNote] = useState("")
 
     // Reset defaults when opening
     useEffect(() => {
@@ -85,6 +91,7 @@ export function CustomizationDialog({
             const mSize = defaultVar.sizes.find(s => s.size === "M")
             setSelectedSize(mSize ? mSize.id : defaultVar.sizes[0]?.id || "")
             setIsTakeaway(false)
+            setNote("")
         }
     }, [isOpen, variations])
 
@@ -143,7 +150,8 @@ export function CustomizationDialog({
             shot: effectiveShot,
             variation: selectedVariation,
             size: selectedSizeObj.size,
-            isTakeaway: isTakeaway
+            isTakeaway: isTakeaway,
+            note: note.trim(),
         })
 
         // Flying animation
@@ -330,6 +338,22 @@ export function CustomizationDialog({
                         <Switch
                             checked={isTakeaway}
                             onCheckedChange={setIsTakeaway}
+                        />
+                    </div>
+
+                    {/* Preparation note. Free text on purpose: a bar's requests
+                        are one-offs ("no ice", "serve last", "in a tall glass")
+                        and a fixed list would only ever cover the ones we
+                        thought of. It travels to the bar on the ticket. */}
+                    <div className="space-y-2">
+                        <Label className="text-md" htmlFor="prep-note">{t.prep_note}</Label>
+                        <Input
+                            id="prep-note"
+                            value={note}
+                            onChange={(e) => setNote(e.target.value)}
+                            placeholder={t.prep_note_placeholder}
+                            maxLength={120}
+                            className="h-11 text-md"
                         />
                     </div>
 

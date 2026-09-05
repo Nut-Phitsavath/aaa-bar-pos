@@ -333,7 +333,10 @@ export async function POST(request: Request) {
                     sugarLevel: item.sugarLevel || null,
                     shotType: item.shotType || null,
                     cupSize: finalSize || null,
-                    isTakeaway: item.isTakeaway || false
+                    isTakeaway: item.isTakeaway || false,
+                    // Req #4. Trimmed and capped here as well as in the dialog:
+                    // this route is also the one a second till would post to.
+                    note: (item.note || "").trim().slice(0, 120) || null
                 }
             })
 

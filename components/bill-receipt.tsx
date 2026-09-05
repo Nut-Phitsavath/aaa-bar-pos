@@ -15,6 +15,7 @@ export type ReceiptLine = {
     sugar?: string | null
     shot?: string | null
     isTakeaway?: boolean
+    note?: string | null
 }
 
 export type ReceiptData = {
@@ -172,6 +173,11 @@ export function BillReceipt({ data, settings }: { data: ReceiptData; settings: a
                                 <span className="text-[10px] font-bold text-slate-400 italic uppercase tracking-wider">
                                     {t.takeaway}
                                 </span>
+                            )}
+                            {item.note && (
+                                <div className="text-[10px] font-bold text-slate-500 italic">
+                                    + {item.note}
+                                </div>
                             )}
                         </div>
                     )

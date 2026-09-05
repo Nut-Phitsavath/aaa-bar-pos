@@ -27,9 +27,16 @@ export async function GET(request: Request) {
         const { searchParams } = new URL(request.url)
         const startDate = searchParams.get('startDate')
         const endDate = searchParams.get('endDate')
+        const shiftId = searchParams.get('shiftId')
 
         const where: any = { waiterId: { not: null } }
-        if (startDate || endDate) {
+        // A shift is the unit the requirement asks for, and it is not a date:
+        // this bar's night starts before midnight and ends after it, so "5 Sep"
+        // splits one night's takings across two reports and pays a bonus on
+        // half of it. When a shift is named, it wins over the dates outright.
+        if (shiftId) {
+            where.shiftId = shiftId
+        } else if (startDate || endDate) {
             where.createdAt = {}
             if (startDate) where.createdAt.gte = new Date(startDate)
             if (endDate) where.createdAt.lte = new Date(endDate)
