@@ -20,7 +20,7 @@ type Table = {
     area: string
     seats: number
     displayOrder: number
-    session: { id: string } | null
+    sessions: { id: string }[]
 }
 
 const NEW_AREA = "__new__"
@@ -119,7 +119,7 @@ export default function ManageTablesPage() {
     }
 
     const remove = async (table: Table) => {
-        if (table.session) {
+        if (table.sessions.length > 0) {
             notify.warn(t.table_has_open_session)
             return
         }
@@ -235,7 +235,7 @@ export default function ManageTablesPage() {
                                         </span>
                                         {/* A table with money on it can be renamed but not removed,
                                             and saying so here saves a failed tap. */}
-                                        {table.session && (
+                                        {table.sessions.length > 0 && (
                                             <span className="text-xs font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-0.5">
                                                 {t.occupied}
                                             </span>

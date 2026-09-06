@@ -15,9 +15,12 @@ export async function GET() {
             orderBy: [{ area: 'asc' }, { displayOrder: 'asc' }, { name: 'asc' }],
             include: {
                 sessions: {
+                    // Every open bill, not one of them. Splitting leaves two
+                    // bills on one table (req #2), and `take: 1` meant the
+                    // floor plan showed only the newer one - the other became
+                    // unreachable until the first was settled.
                     where: { status: { not: 'CLOSED' } },
-                    take: 1,
-                    orderBy: { openedAt: 'desc' },
+                    orderBy: { openedAt: 'asc' },
                     include: {
                         customer: { select: { id: true, name: true } },
                         orders: {
@@ -34,11 +37,28 @@ export async function GET() {
         const owedByCustomer = await outstandingByCustomer()
 
         const payload = tables.map((table) => {
-            const session = table.sessions[0]
-            const billable = session
-                ? session.orders.filter((o) =>
+            const sessions = table.sessions.map((session) => {
+                const billable = session.orders.filter((o) =>
                     (BILLABLE_ORDER_STATUSES as readonly string[]).includes(o.status))
-                : []
+
+                return {
+                    id: session.id,
+                    status: session.status,
+                    openedAt: session.openedAt.toISOString(),
+                    orderCount: billable.length,
+                    waiterCount: new Set(billable.map((o) => o.waiterId).filter(Boolean)).size,
+                    // What they will actually pay, discount included.
+                    total: billTotalOf(sessionTotal(session.orders), session.discountType, session.discountValue),
+                    isOwnerVip: session.isOwnerVip,
+                    customer: session.customer
+                        ? {
+                            id: session.customer.id,
+                            name: session.customer.name,
+                            owes: owedByCustomer.get(session.customer.id) ?? 0
+                        }
+                        : null
+                }
+            })
 
             return {
                 id: table.id,
@@ -46,25 +66,11 @@ export async function GET() {
                 area: table.area,
                 seats: table.seats,
                 displayOrder: table.displayOrder,
-                session: session
-                    ? {
-                        id: session.id,
-                        status: session.status,
-                        openedAt: session.openedAt.toISOString(),
-                        orderCount: billable.length,
-                        waiterCount: new Set(billable.map((o) => o.waiterId).filter(Boolean)).size,
-                        // What they will actually pay, discount included.
-                        total: billTotalOf(sessionTotal(session.orders), session.discountType, session.discountValue),
-                        isOwnerVip: session.isOwnerVip,
-                        customer: session.customer
-                            ? {
-                                id: session.customer.id,
-                                name: session.customer.name,
-                                owes: owedByCustomer.get(session.customer.id) ?? 0
-                            }
-                            : null
-                    }
-                    : null
+                sessions,
+                // The oldest bill, which is the party who sat down. Kept so a
+                // table with one bill - almost all of them - reads exactly as
+                // it always did, and only the split case needs the array.
+                session: sessions[0] ?? null
             }
         })
 

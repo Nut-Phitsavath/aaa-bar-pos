@@ -37,6 +37,7 @@ model User {
   sessionsReopened  TableSession[]     @relation("SessionReopenedBy")
   packageSwaps      PackageSwap[]
   packageSwapsReversed PackageSwap[]  @relation("PackageSwapReversedBy")
+  tableEvents       TableSessionEvent[]
 }
 
 model Category {
@@ -332,10 +333,17 @@ model TableSession {
   discountApprovedBy User?     @relation("SessionDiscountApprover", fields: [discountApprovedById], references: [id])
   payLaterApprovedBy User?     @relation("SessionTabApprover", fields: [payLaterApprovedById], references: [id])
   customer           Customer? @relation(fields: [customerId], references: [id])
+  /// Set when this bill was poured into another and closed (req #2). Kept so
+  /// history can say where a ฿0 closed bill's rounds went, rather than leaving
+  /// an empty table session nobody can account for.
+  mergedIntoId       String?
   orders             Order[]
   payments           Payment[]
   /// Package swaps made at this table (req #9: the log lives on the session).
   packageSwaps       PackageSwap[]
+  /// Moves, merges and splits. None of them asks for a manager PIN, so this is
+  /// the record of who rearranged the floor and when.
+  events             TableSessionEvent[]
 
   @@index([customerId])
   // "Does this table already have a bill open?" runs on every table tap.
@@ -506,4 +514,31 @@ model PackageSwapLine {
   swap            PackageSwap @relation(fields: [swapId], references: [id], onDelete: Cascade)
 
   @@index([swapId])
+}
+
+/// A table being moved, merged or split (req #2).
+///
+/// None of the three needs a manager PIN - they happen constantly on a busy
+/// floor and a PIN would be worked around within a week - so this table is the
+/// only record that a bill changed shape. Written before anything moves.
+model TableSessionEvent {
+  id             String   @id @default(uuid())
+  sessionId      String
+  /// MOVE, MERGE or SPLIT.
+  kind           String
+  userId         String?
+  /// Where a MOVE came from and went to, by name: the tables themselves can be
+  /// renamed or retired, and a log that reads "moved to <deleted>" says nothing.
+  fromTable      String?
+  toTable        String?
+  /// The other bill in a MERGE (the one emptied) or a SPLIT (the one created).
+  otherSessionId String?
+  /// How many lines a split carried, so the log reads without a join.
+  lineCount      Int?
+  createdAt      DateTime @default(now())
+  session        TableSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  user           User?        @relation(fields: [userId], references: [id])
+
+  @@index([sessionId])
+  @@index([createdAt])
 }
