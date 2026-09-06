@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getSessionUser } from '@/lib/auth'
 import { isConfirmed } from '@/lib/payments'
-import { canSplit } from '@/lib/table-ops'
+import { canSplit, withSwapCharges } from '@/lib/table-ops'
 import { recomputeOrderTotal } from '@/lib/swap-charge'
 
 export const dynamic = 'force-dynamic'
@@ -58,6 +58,24 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         )
         if (!check.ok) return NextResponse.json({ error: check.reason }, { status: 409 })
 
+        // An exchange upcharge is not a line of its own - it belongs to the
+        // package that earned it, and has to land on the same bill.
+        const swaps = await prisma.packageSwap.findMany({
+            where: { orderItemId: { in: live.map((i) => i.id) }, reversedAt: null },
+            select: { id: true, orderItemId: true, chargeItemId: true },
+        })
+        const lines = withSwapCharges(moving, swaps)
+
+        // Re-checked, because dragging the upcharges along can be what tips the
+        // selection into being the whole bill.
+        const after = canSplit(
+            { id: session.id, status: session.status, paidCount: session.payments.filter(isConfirmed).length },
+            live.map((i) => i.id),
+            lines,
+            openShift?.id ?? null,
+        )
+        if (!after.ok) return NextResponse.json({ error: after.reason }, { status: 409 })
+
         // The waiter and till user of the round the first line came from, so the
         // new bill is attributed rather than orphaned.
         const sourceOrder = session.orders.find((o) => o.items.some((i) => i.id === moving[0]))!
@@ -72,6 +90,19 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
                     // and a slip claiming it opened when the party sat down would
                     // be describing the table, not this guest.
                     openedAt: new Date(),
+                    // The discount comes across with the drinks. A manager
+                    // approved it for these guests tonight, and charging the
+                    // split half at full price bills the party more in total
+                    // than the table was quoted - which is an argument at the
+                    // till, not a policy anyone chose.
+                    discountType: session.discountType,
+                    discountValue: session.discountValue,
+                    discountApprovedById: session.discountApprovedById,
+                    // The owner's VIP mark is about the party, not the bill.
+                    isOwnerVip: session.isOwnerVip,
+                    // The customer tab deliberately does NOT follow: a tab is a
+                    // credit line, and attaching one to a new bill would put a
+                    // regular in debt for drinks nobody said were theirs.
                 },
             })
 
@@ -101,8 +132,16 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
             // The lines themselves move; nothing is re-priced and no stock
             // moves, because the drinks were poured either way.
             await tx.orderItem.updateMany({
-                where: { id: { in: moving } },
+                where: { id: { in: lines } },
                 data: { orderId: order.id },
+            })
+
+            // Exchanges are logged against a session as well as a line, so they
+            // follow their package to the new bill - otherwise the exchange
+            // report names a bill the set is no longer on.
+            await tx.packageSwap.updateMany({
+                where: { orderItemId: { in: lines }, sessionId: id },
+                data: { sessionId: child.id },
             })
 
             // Every round that lost lines is worth less, and the new one is
@@ -119,14 +158,14 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
                     fromTable: session.table.name,
                     toTable: session.table.name,
                     otherSessionId: child.id,
-                    lineCount: moving.length,
+                    lineCount: lines.length,
                 },
             })
 
             return child
         })
 
-        return NextResponse.json({ split: true, sessionId: created.id, lines: moving.length })
+        return NextResponse.json({ split: true, sessionId: created.id, lines: lines.length })
     } catch (error) {
         console.error('[table split] POST failed', error)
         return NextResponse.json({ error: 'Failed to split bill' }, { status: 500 })

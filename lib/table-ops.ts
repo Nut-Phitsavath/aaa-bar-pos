@@ -106,3 +106,29 @@ export function splitSuffix(existingSplits: number): string {
         ? String.fromCharCode(97 + existingSplits)
         : String(existingSplits + 1)
 }
+
+/**
+ * An exchange upcharge travels with the package line it came from.
+ *
+ * "ສ່ວນຕ່າງການແລກປ່ຽນ" is not a line a guest ordered - it is the price
+ * difference on somebody's set, written as its own line so the receipt shows
+ * what was charged and why. Left behind by a split it becomes one guest paying
+ * the difference on another guest's package, which is money on the wrong bill
+ * and no way to read back who owed it.
+ *
+ * So the charge follows its package, and never moves alone however it was
+ * ticked. Returned as ids rather than applied, so the ordinary split guards
+ * still run over the final set.
+ */
+export function withSwapCharges(
+    movingIds: string[],
+    swaps: { orderItemId: string; chargeItemId: string | null }[],
+): string[] {
+    const picked = new Set(movingIds)
+    for (const swap of swaps) {
+        if (!swap.chargeItemId) continue
+        if (picked.has(swap.orderItemId)) picked.add(swap.chargeItemId)
+        else picked.delete(swap.chargeItemId)
+    }
+    return [...picked]
+}

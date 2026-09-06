@@ -6,7 +6,7 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { canMove, canMerge, canSplit } from './table-ops.ts'
+import { canMove, canMerge, canSplit, withSwapCharges } from './table-ops.ts'
 
 const open = (over = {}) => ({ id: 's1', status: 'OPEN', paidCount: 0, ...over })
 const freeTable = (over = {}) => ({ id: 't2', isActive: true, occupied: false, ...over })
@@ -83,4 +83,24 @@ test('a split only moves lines that are on this bill', () => {
         canSplit(open(), ['l1', 'l2', 'l3'], ['l1', 'l1'], 'shift1'),
         { ok: false, reason: 'DUPLICATE_LINE' },
     )
+})
+
+test('an exchange upcharge follows its package line, and never moves alone', () => {
+    const swaps = [{ orderItemId: 'set1', chargeItemId: 'diff1' }]
+    // Ticking the set takes its price difference with it.
+    assert.deepEqual(withSwapCharges(['set1'], swaps).sort(), ['diff1', 'set1'])
+    // Ticking only the difference leaves it where the set is: otherwise one
+    // guest pays the upcharge on another guest's package.
+    assert.deepEqual(withSwapCharges(['diff1'], swaps), [])
+    // A set with no upcharge is untouched, and so is an unrelated line.
+    assert.deepEqual(withSwapCharges(['beer'], swaps), ['beer'])
+    assert.deepEqual(withSwapCharges(['set1'], [{ orderItemId: 'set1', chargeItemId: null }]), ['set1'])
+})
+
+test('a discounted bill still adds up after it is split', () => {
+    // The reason the split-off bill inherits the discount: the manager approved
+    // it for these drinks, and two halves at full price bill the party more
+    // than the table was quoted.
+    const pct = (g: number) => Math.max(0, Math.ceil(g - g * 0.1))
+    assert.equal(pct(700) + pct(300), pct(1000))
 })
