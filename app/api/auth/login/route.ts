@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { createServerClient } from "@supabase/ssr"
 import { cookies } from "next/headers"
 import bcrypt from "bcryptjs"
+import { cookieSecure } from "@/lib/cookie-scope"
 
 export async function POST(request: Request) {
   try {
@@ -31,7 +32,7 @@ export async function POST(request: Request) {
         }),
         {
           httpOnly: true,
-          secure: process.env.NODE_ENV === "production",
+          secure: cookieSecure(request),
           sameSite: "lax",
           maxAge: 60 * 60 * 24 * 7, // 7 days
         },
@@ -91,7 +92,7 @@ export async function POST(request: Request) {
       }),
       {
         httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
+        secure: cookieSecure(request),
         sameSite: "lax",
         maxAge: 60 * 60 * 24 * 7, // 7 days
       },
