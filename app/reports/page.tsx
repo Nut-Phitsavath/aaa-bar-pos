@@ -7,6 +7,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ZReport } from "@/components/reports/z-report"
 import { ServerPerformance } from "@/components/reports/server-performance"
 import { VoidAudit } from "@/components/reports/void-audit"
+import { ExchangeAudit } from "@/components/reports/exchange-audit"
 import {
   Bar, BarChart, ResponsiveContainer, XAxis, YAxis, Tooltip, Legend,
   Line, LineChart, Pie, PieChart, Cell
@@ -300,6 +301,7 @@ export default function ReportsPage() {
             <TabsTrigger value="promotions">{t.promotions_roi}</TabsTrigger>
             <TabsTrigger value="servers">{t.server_staff}</TabsTrigger>
             <TabsTrigger value="voids">{t.void_audit}</TabsTrigger>
+            <TabsTrigger value="exchanges">{t.exchange_log}</TabsTrigger>
             <TabsTrigger value="zreport">{t.z_report}</TabsTrigger>
           </TabsList>
 
@@ -315,6 +317,15 @@ export default function ReportsPage() {
           <TabsContent value="voids">
             {dateRange?.from && dateRange?.to && (
               <VoidAudit
+                startDate={startOfDay(dateRange.from).toISOString()}
+                endDate={endOfDay(dateRange.to).toISOString()}
+              />
+            )}
+          </TabsContent>
+
+          <TabsContent value="exchanges">
+            {dateRange?.from && dateRange?.to && (
+              <ExchangeAudit
                 startDate={startOfDay(dateRange.from).toISOString()}
                 endDate={endOfDay(dateRange.to).toISOString()}
               />

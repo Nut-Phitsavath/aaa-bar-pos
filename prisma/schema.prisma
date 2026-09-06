@@ -36,6 +36,7 @@ model User {
   paymentsVoided    Payment[]          @relation("PaymentVoidedBy")
   sessionsReopened  TableSession[]     @relation("SessionReopenedBy")
   packageSwaps      PackageSwap[]
+  packageSwapsReversed PackageSwap[]  @relation("PackageSwapReversedBy")
 }
 
 model Category {
@@ -471,6 +472,7 @@ model PackageSwap {
   orderItem   OrderItem         @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
   session     TableSession?     @relation(fields: [sessionId], references: [id], onDelete: SetNull)
   user        User?             @relation(fields: [userId], references: [id])
+  reversedBy  User?             @relation("PackageSwapReversedBy", fields: [reversedById], references: [id])
   lines       PackageSwapLine[]
 
   @@index([sessionId])

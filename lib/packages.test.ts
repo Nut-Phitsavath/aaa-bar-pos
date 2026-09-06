@@ -241,3 +241,12 @@ test('reversed swaps leave the contents untouched', () => {
     // them out, so the package reads exactly as its recipe does.
     assert.deepEqual(remainingContents(PACKAGE, [], []), PACKAGE)
 })
+
+test('taking drinks out with nothing in return is refused', () => {
+    // That is an unopened return, not an exchange, and it has its own screen
+    // and its own log at settle.
+    assert.deepEqual(
+        canSwap(PACKAGE, [{ menuId: 'heineken', quantity: 2 }], []),
+        { ok: false, reason: 'REPLACEMENT_REQUIRED' },
+    )
+})

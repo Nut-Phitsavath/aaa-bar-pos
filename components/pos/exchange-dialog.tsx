@@ -141,6 +141,10 @@ export function ExchangeDialog({
     const inValue = valueOf(inLines)
     const charge = chargeFor(outValue, inValue)
     const touched = outLines.length > 0 || inLines.length > 0
+    // An exchange trades, so a replacement is required - the API refuses
+    // otherwise. Gating the button as well means the rule is read off the
+    // screen rather than discovered by pressing something that fails.
+    const ready = inLines.length > 0
 
     const step = (set: typeof setInn, key: string, delta: number, max?: number) =>
         set((prev) => {
@@ -158,7 +162,7 @@ export function ExchangeDialog({
         })
 
     const submit = async () => {
-        if (!itemId || !touched) return
+        if (!itemId || !ready) return
         setBusy(true)
         try {
             const res = await fetch(`/api/order-items/${itemId}/swap`, {
@@ -185,6 +189,7 @@ export function ExchangeDialog({
             : code === "NOT_IN_PACKAGE" ? t.exchange_not_in_package
                 : code === "SESSION_ALREADY_CLOSED" ? t.session_already_closed
                     : code === "NO_OPEN_SHIFT" ? t.no_open_shift_exchange
+                            : code === "REPLACEMENT_REQUIRED" ? t.replacement_required
                         : t.save_failed
 
     const visible = query
@@ -342,7 +347,10 @@ export function ExchangeDialog({
                     <span className="tabular-nums text-slate-600">
                         {t.exchange_in} <strong className="text-slate-900">{formatTHB(inValue)}</strong>
                     </span>
-                    <span className={`ms-auto font-black tabular-nums ${charge > 0 ? "text-amber-700" : "text-emerald-700"}`}>
+                    {touched && !ready && (
+                        <span className="ms-auto text-sm font-bold text-amber-700">{t.replacement_required}</span>
+                    )}
+                    <span className={`${touched && !ready ? "" : "ms-auto "}font-black tabular-nums ${charge > 0 ? "text-amber-700" : "text-emerald-700"}`}>
                         {charge > 0 ? `${t.exchange_charge} ${formatTHB(charge)}` : t.exchange_no_charge}
                     </span>
                 </div>
@@ -352,7 +360,7 @@ export function ExchangeDialog({
                     <Button
                         className="h-12 bg-amber-600 hover:bg-amber-700 font-bold"
                         onClick={submit}
-                        disabled={busy || !touched}
+                        disabled={busy || !ready}
                     >
                         {busy ? t.processing : t.confirm}
                     </Button>

@@ -112,6 +112,13 @@ export function canSwap(
     if (removing.length === 0 && adding.length === 0) {
         return { ok: false, reason: 'NOTHING_TO_SWAP' }
     }
+    // An exchange trades. Taking drinks out of a set and putting nothing back
+    // is a customer handing back what they did not open, which is its own job
+    // with its own log - and letting it happen here too would record the same
+    // event two different ways depending on which screen someone reached for.
+    if (adding.length === 0) {
+        return { ok: false, reason: 'REPLACEMENT_REQUIRED' }
+    }
     for (const line of [...removing, ...adding]) {
         if (!Number.isFinite(line.quantity) || line.quantity <= 0) {
             return { ok: false, reason: 'QUANTITY_MUST_BE_POSITIVE' }
