@@ -22,7 +22,16 @@ export async function GET(request: Request) {
                     orderBy: { displayOrder: 'asc' }
                 }
             },
-            orderBy: { name: 'asc' }
+            // Category order first, then the item's own place inside it: the
+            // till renders its chips from the order menus arrive in, so both
+            // levels of the staff's arrangement come out of this one sort.
+            // Name is the tiebreaker, which is also what everything looked like
+            // before anyone dragged anything.
+            orderBy: [
+                { category: { displayOrder: 'asc' } },
+                { displayOrder: 'asc' },
+                { name: 'asc' },
+            ]
         })
 
         // Transform for frontend compatibility
