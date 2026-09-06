@@ -80,7 +80,8 @@ export function ReturnsDialog({
                 toast.error(
                     data.error === "MORE_THAN_ORDERED" ? t.return_more_than_ordered
                         : data.error === "NOT_ON_THIS_BILL" ? t.return_not_on_bill
-                            : data.error === "NO_OPEN_SHIFT" ? t.no_open_shift_exchange
+                            : data.error === "RETURN_OTHER_SHIFT" ? t.return_other_shift
+                                : data.error === "NO_OPEN_SHIFT" ? t.no_open_shift_exchange
                                 : t.save_failed,
                 )
                 return

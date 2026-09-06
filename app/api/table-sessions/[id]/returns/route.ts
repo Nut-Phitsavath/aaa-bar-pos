@@ -143,6 +143,24 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
             return NextResponse.json({ error: shiftCheck.reason }, { status: 409 })
         }
 
+        // A settled bill still takes returns, but only tonight's. Bottles turn
+        // up when the table is cleared, which is after the customer has paid -
+        // refusing a closed bill outright would leave staff with no way to
+        // record them at all. Last week's bill is a different matter: its
+        // drawer is counted and its stock has been signed off, so the same
+        // rule reopen and refund use applies here.
+        const session = await prisma.tableSession.findUnique({
+            where: { id },
+            select: { status: true, orders: { select: { shiftId: true } } },
+        })
+        if (!session) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+        if (session.status === 'CLOSED') {
+            const billShiftId = session.orders.find((o) => o.shiftId)?.shiftId ?? null
+            if (!billShiftId || billShiftId !== openShift?.id) {
+                return NextResponse.json({ error: 'RETURN_OTHER_SHIFT' }, { status: 409 })
+            }
+        }
+
         const body = await request.json()
         const returning: { menuId: string; quantity: number }[] =
             Array.isArray(body.items) ? body.items : []
