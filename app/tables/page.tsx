@@ -14,21 +14,27 @@ import { formatDuration } from "@/lib/sessions"
 import { canManageTables } from "@/lib/roles"
 import { notify } from "@/components/ui/sonner"
 
+type TableBill = {
+  id: string
+  status: string
+  openedAt: string
+  orderCount: number
+  waiterCount: number
+  total: number
+  customer: { id: string; name: string; owes: number } | null
+}
+
 type TableWithSession = {
   id: string
   name: string
   area: string
   seats: number
   displayOrder: number
-  session: {
-    id: string
-    status: string
-    openedAt: string
-    orderCount: number
-    waiterCount: number
-    total: number
-    customer: { id: string; name: string; owes: number } | null
-  } | null
+  session: TableBill | null
+  /** Every open bill here. A split leaves two on one table (req #2), and the
+   *  card has to reach both — showing only one made the other unreachable
+   *  until the first was settled. */
+  sessions: TableBill[]
 }
 
 const POLL_MS = 5000
@@ -46,6 +52,8 @@ export default function TablesPage() {
   const [waiterId, setWaiterId] = useState("")
   const [serverPrompt, setServerPrompt] = useState(false)
   const [shiftDialogOpen, setShiftDialogOpen] = useState(false)
+  // Which table is being asked "which of these two bills?"
+  const [pickingBill, setPickingBill] = useState<TableWithSession | null>(null)
   // Only a manager or the owner edits the floor, so only they see the way in.
   const [canManage, setCanManage] = useState(false)
 
@@ -111,9 +119,13 @@ export default function TablesPage() {
 
   const visible = area === "ALL" ? tables : tables.filter((tbl) => tbl.area === area)
 
-  const freeCount = tables.filter((tbl) => !tbl.session).length
-  const occupiedCount = tables.filter((tbl) => tbl.session?.status === "OPEN").length
-  const billCount = tables.filter((tbl) => tbl.session?.status === "BILL_REQUESTED").length
+  const freeCount = tables.filter((tbl) => tbl.sessions.length === 0).length
+  // Counted per TABLE, so the three numbers still add up to the floor. A split
+  // table is one table however many bills sit on it, and if either of them has
+  // asked for the bill then the table has - which is what its card says too.
+  const billCount = tables.filter((tbl) => tbl.sessions.some((s) => s.status === "BILL_REQUESTED")).length
+  const occupiedCount = tables.filter((tbl) =>
+    tbl.sessions.length > 0 && !tbl.sessions.some((s) => s.status === "BILL_REQUESTED")).length
 
   const areaLabel = useCallback((value: string) => {
     if (value === "ALL") return t.all_areas
@@ -135,6 +147,12 @@ export default function TablesPage() {
     // as being keyed with nobody to attribute it to.
     if (!waiterId) {
       setServerPrompt(true)
+      return
+    }
+    // A split table carries two bills. Tapping it has to ask which, rather
+    // than silently picking one and leaving the other unreachable.
+    if (table.sessions.length > 1) {
+      setPickingBill(table)
       return
     }
     if (table.session) {
@@ -299,7 +317,12 @@ export default function TablesPage() {
           <div className="grid gap-3 md:gap-4" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))" }}>
             {visible.map((table) => {
               const session = table.session
-              const needsBill = session?.status === "BILL_REQUESTED"
+              // A split table carries two parties. The card is a map of the
+              // room, so it stays one card - but it has to say so, and show
+              // what the table owes in total rather than half of it.
+              const splitCount = table.sessions.length
+              const tableTotal = table.sessions.reduce((sum, x) => sum + x.total, 0)
+              const needsBill = table.sessions.some((x) => x.status === "BILL_REQUESTED")
               const isOpening = opening === table.id
 
               return (
@@ -359,8 +382,13 @@ export default function TablesPage() {
                           </p>
                         )}
                         <p className="text-xl font-bold text-slate-900 leading-none tabular-nums">
-                          {formatTHB(session.total)}
+                          {formatTHB(tableTotal)}
                         </p>
+                        {splitCount > 1 && (
+                          <p className="text-[11px] font-bold text-amber-700 mt-1">
+                            {splitCount} {t.bills_on_table}
+                          </p>
+                        )}
                         <p className="text-xs text-slate-500 mt-1.5 flex items-center gap-1 tabular-nums">
                           <Clock className="w-3.5 h-3.5" aria-hidden />
                           {formatDuration(session.openedAt, now)}
@@ -418,6 +446,38 @@ export default function TablesPage() {
                 className="h-14 rounded-xl border-2 border-slate-300 font-bold text-slate-700 hover:border-amber-400 hover:bg-amber-50 transition-all"
               >
                 {w.name}
+              </button>
+            ))}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Which of the two bills? A split table has two parties sitting at it,
+          and picking one for the staff member would leave the other one
+          unreachable - which is exactly the bug this fixes. Opened by time, so
+          the party who sat down first is listed first. */}
+      <Dialog open={!!pickingBill} onOpenChange={(o) => { if (!o) setPickingBill(null) }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>{pickingBill?.name} · {t.which_bill}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2">
+            {(pickingBill?.sessions ?? []).map((s, i) => (
+              <button
+                key={s.id}
+                onClick={() => { setPickingBill(null); router.push(`/pos?session=${s.id}`) }}
+                className="w-full flex items-center gap-3 px-4 h-16 rounded-xl border-2 border-slate-300 text-start hover:border-amber-400 hover:bg-amber-50 transition-all"
+              >
+                <span className="text-lg font-black text-slate-900">
+                  {pickingBill!.name}-{String.fromCharCode(97 + i)}
+                </span>
+                <span className="text-xs text-slate-500">
+                  {s.orderCount} {t.round_no}
+                  {s.status === "BILL_REQUESTED" && ` · ${t.bill_requested}`}
+                </span>
+                <span className="ms-auto text-lg font-bold tabular-nums text-slate-900">
+                  {formatTHB(s.total)}
+                </span>
               </button>
             ))}
           </div>

@@ -4,11 +4,12 @@ import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { useTranslation } from "@/hooks/use-translation"
 import { Button } from "@/components/ui/button"
-import { Printer, Plus, Minus, Trash2, Ban, Repeat } from "lucide-react"
+import { Printer, Plus, Minus, Trash2, Ban, Repeat, ArrowRightLeft } from "lucide-react"
 import { formatTHB } from "@/lib/currency"
 import { VoidDialog, type VoidTarget } from "@/components/pos/void-dialog"
 import { ExchangeDialog } from "@/components/pos/exchange-dialog"
 import { SwapSummary } from "@/components/pos/swap-summary"
+import { TableOpsDialog } from "@/components/pos/table-ops-dialog"
 
 export type TicketOrder = {
     id: string
@@ -88,6 +89,7 @@ export function TicketPanel({
     const [now, setNow] = useState(() => new Date())
     const [voiding, setVoiding] = useState<VoidTarget | null>(null)
     const [exchanging, setExchanging] = useState<string | null>(null)
+    const [opsOpen, setOpsOpen] = useState(false)
 
     useEffect(() => {
         const tick = setInterval(() => setNow(new Date()), 30000)
@@ -279,7 +281,20 @@ export function TicketPanel({
                     </span>
                 </div>
 
-                <div className="grid grid-cols-2 gap-2 pt-1">
+                <div className="grid grid-cols-3 gap-2 pt-1">
+                    {/* Move, merge and split (req #2). One door for the three,
+                        because they are the same thought - "this bill is not
+                        shaped like the room any more" - and the footer already
+                        carries print and settle. */}
+                    <Button
+                        variant="outline"
+                        className="h-12 border-slate-300"
+                        disabled={busy || rounds.length === 0}
+                        onClick={() => setOpsOpen(true)}
+                    >
+                        <ArrowRightLeft className="w-4 h-4 mr-2" />
+                        {t.table_operations}
+                    </Button>
                     <Button
                         variant="outline"
                         className="h-12 border-slate-300"
@@ -312,6 +327,21 @@ export function TicketPanel({
             <ExchangeDialog
                 itemId={exchanging}
                 onClose={() => setExchanging(null)}
+                onDone={onVoided}
+            />
+
+            <TableOpsDialog
+                sessionId={bill.id}
+                tableName={bill.table.name}
+                lines={rounds.flatMap((o) =>
+                    o.status === "CANCELLED" ? [] : o.items
+                        .filter((i) => !i.voidedAt)
+                        .map((i) => ({
+                            id: i.id, name: i.name, localName: i.localName,
+                            quantity: i.quantity, total: i.total,
+                        })))}
+                open={opsOpen}
+                onClose={() => setOpsOpen(false)}
                 onDone={onVoided}
             />
 
