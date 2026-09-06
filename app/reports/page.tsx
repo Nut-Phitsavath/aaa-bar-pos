@@ -288,10 +288,19 @@ export default function ReportsPage() {
         </div>
 
         <Tabs defaultValue="overview" className="space-y-6">
-          {/* Wraps rather than overflowing: the default TabsList is a fixed
-              height inline-flex, so past about seven triggers the last ones are
-              clipped off the edge with nothing to indicate they exist. */}
-          <TabsList className="bg-muted p-1 rounded-lg flex flex-wrap h-auto justify-start gap-1">
+          {/* Sticky under the 65px page header.
+              Clicking a trigger focuses it, and a focused element that has
+              scrolled out of view gets scrolled back into view by the browser -
+              which is why switching tabs part-way down a long report threw you
+              back to the top. Keeping the bar on screen removes the cause
+              rather than fighting the symptom, and on a report three thousand
+              pixels tall it also means you can change tab without scrolling
+              all the way back up to find the tabs. */}
+          <div className="sticky top-[65px] z-10 bg-background -mx-6 px-6 py-3 border-b">
+            {/* Wraps rather than overflowing: the default TabsList is a fixed
+                height inline-flex, so past about seven triggers the last ones are
+                clipped off the edge with nothing to indicate they exist. */}
+            <TabsList className="bg-muted p-1 rounded-lg flex flex-wrap h-auto justify-start gap-1">
             <TabsTrigger value="overview">{t.overview}</TabsTrigger>
             <TabsTrigger value="products">{t.product_performance}</TabsTrigger>
             <TabsTrigger value="customers">{t.customers}</TabsTrigger>
@@ -303,7 +312,8 @@ export default function ReportsPage() {
             <TabsTrigger value="voids">{t.void_audit}</TabsTrigger>
             <TabsTrigger value="exchanges">{t.exchange_log}</TabsTrigger>
             <TabsTrigger value="zreport">{t.z_report}</TabsTrigger>
-          </TabsList>
+            </TabsList>
+          </div>
 
           <TabsContent value="servers">
             {dateRange?.from && dateRange?.to && (
