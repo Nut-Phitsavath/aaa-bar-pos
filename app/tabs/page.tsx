@@ -58,6 +58,13 @@ export default function TabsPage() {
 
     useEffect(() => { load() }, [load])
 
+    /** The single worst debt on the floor, which is the number that decides
+     *  who gets phoned tonight. */
+    const worstAge = tabs.reduce(
+        (worst, tab) => Math.max(worst, ...tab.bills.map((b) => ageDays(b.closedAt))),
+        0,
+    )
+
     return (
         <div className="min-h-screen bg-slate-50">
             <Header title={t.tabs}>
@@ -73,12 +80,16 @@ export default function TabsPage() {
                 )}
             </Header>
 
-            <div className="p-4 md:p-6 max-w-3xl mx-auto space-y-3">
+            {/* A ledger, not a stack of cards down the middle of a wide screen.
+                Collection is a scanning job - who owes, how much, how long -
+                so every debtor stays on one screen rather than one per fold. */}
+            <div className="p-4 md:p-6 max-w-[1600px]">
                 {loading ? (
-                    <>
-                        <div className="h-28 rounded-xl bg-white border border-slate-200 animate-pulse" />
-                        <div className="h-28 rounded-xl bg-white border border-slate-200 animate-pulse" />
-                    </>
+                    <div className="grid gap-4 lg:grid-cols-2 2xl:grid-cols-3">
+                        <div className="h-44 rounded-xl bg-white border border-slate-200 animate-pulse" />
+                        <div className="h-44 rounded-xl bg-white border border-slate-200 animate-pulse" />
+                        <div className="h-44 rounded-xl bg-white border border-slate-200 animate-pulse" />
+                    </div>
                 ) : tabs.length === 0 ? (
                     <div className="text-center py-20">
                         <div className="w-12 h-12 rounded-full bg-slate-100 grid place-items-center mx-auto mb-3">
@@ -87,68 +98,113 @@ export default function TabsPage() {
                         <p className="text-slate-900 font-semibold">{t.no_tabs}</p>
                     </div>
                 ) : (
-                    tabs.map((tab) => (
-                        <Card key={tab.customer.id} className="p-4">
-                            <div className="flex items-start justify-between gap-3">
-                                <div className="min-w-0">
-                                    <p className="font-bold text-slate-900 truncate">{tab.customer.name}</p>
-                                    {tab.customer.phone && (
-                                        <p className="text-sm text-slate-500 flex items-center gap-1.5 mt-0.5">
-                                            <Phone className="w-3.5 h-3.5" />
-                                            {tab.customer.phone}
-                                        </p>
-                                    )}
-                                </div>
-                                <div className="text-right shrink-0">
-                                    <p className="text-2xl font-black text-amber-700 tabular-nums leading-none">
-                                        {formatTHB(tab.outstanding)}
-                                    </p>
-                                    <p className="text-xs text-slate-400 mt-1">
-                                        {tab.bills.length} {t.bill}
-                                    </p>
-                                </div>
+                    <>
+                        {/* The three numbers a manager actually opens this
+                            screen for. "Longest owing" was buried in a sub-row
+                            before, which is the wrong place for the figure that
+                            decides who gets phoned tonight. */}
+                        <dl className="w-fit max-w-full flex flex-wrap divide-x divide-slate-200 rounded-xl border border-slate-200 bg-white mb-4">
+                            <div className="px-5 py-4">
+                                <dt className="text-[10px] font-bold uppercase tracking-widest text-slate-400">{t.outstanding}</dt>
+                                <dd className="text-2xl font-black text-amber-700 tabular-nums leading-none mt-1.5">{formatTHB(total)}</dd>
                             </div>
-
-                            {/* One payment against the customer, spread oldest
-                                first. Cash arrives as a lump - "here's ten
-                                thousand toward it" - not as a decision about
-                                which night to clear. */}
-                            <Button
-                                className="w-full h-12 mt-3 bg-amber-600 hover:bg-amber-700 text-white"
-                                onClick={() => { setPaying(tab); setAmount(String(tab.outstanding)) }}
-                            >
-                                <Banknote className="w-4 h-4 mr-2" />
-                                {t.take_payment}
-                            </Button>
-
-                            {/* Or clear one night on its own, which is what a
-                                customer settling a single disputed bill wants. */}
-                            <div className="mt-3 pt-3 border-t space-y-2">
-                                {tab.bills.map((b) => (
-                                    <div key={b.id} className="flex items-center gap-3 text-sm">
-                                        <span className="font-semibold text-slate-700 shrink-0">{b.table}</span>
-                                        <span className="text-slate-400 tabular-nums">{day(b.closedAt)}</span>
-                                        {ageDays(b.closedAt) >= 7 && (
-                                            <span className={`text-xs font-bold tabular-nums shrink-0 ${ageDays(b.closedAt) >= 21 ? "text-rose-600" : "text-amber-600"}`}>
-                                                {ageDays(b.closedAt)}d
-                                            </span>
-                                        )}
-                                        <span className="ms-auto tabular-nums text-slate-900">
-                                            {formatTHB(b.balance)}
-                                        </span>
-                                        <Button
-                                            size="sm"
-                                            className="h-9 bg-amber-600 hover:bg-amber-700 text-white shrink-0"
-                                            onClick={() => router.push(`/pos/settle?session=${b.id}`)}
-                                        >
-                                            <CreditCard className="w-3.5 h-3.5 sm:mr-1.5" />
-                                            <span className="hidden sm:inline">{t.settle_tab}</span>
-                                        </Button>
-                                    </div>
-                                ))}
+                            <div className="px-5 py-4">
+                                <dt className="text-[10px] font-bold uppercase tracking-widest text-slate-400">{t.customers}</dt>
+                                <dd className="text-2xl font-black text-slate-900 tabular-nums leading-none mt-1.5">{tabs.length}</dd>
                             </div>
-                        </Card>
-                    ))
+                            <div className="px-5 py-4">
+                                <dt className="text-[10px] font-bold uppercase tracking-widest text-slate-400">{t.oldest_debt}</dt>
+                                <dd className={`text-2xl font-black tabular-nums leading-none mt-1.5 ${worstAge >= 21 ? "text-rose-600" : worstAge >= 7 ? "text-amber-600" : "text-slate-900"}`}>
+                                    {worstAge}d
+                                </dd>
+                            </div>
+                        </dl>
+
+                        <div className="grid gap-4 lg:grid-cols-2 2xl:grid-cols-3 items-start">
+                            {tabs.map((tab) => {
+                                const oldest = Math.max(0, ...tab.bills.map((b) => ageDays(b.closedAt)))
+                                return (
+                                    <Card key={tab.customer.id} className="p-0 gap-0 overflow-hidden">
+                                        <div className="flex items-start gap-3 px-4 py-3 border-b border-slate-200 bg-slate-50">
+                                            <div className="min-w-0 flex-1">
+                                                <p className="font-bold text-slate-900 truncate">{tab.customer.name}</p>
+                                                <p className="text-xs text-slate-500 flex items-center gap-3 mt-1">
+                                                    {tab.customer.phone && (
+                                                        <span className="inline-flex items-center gap-1 tabular-nums">
+                                                            <Phone className="w-3 h-3" aria-hidden />
+                                                            {tab.customer.phone}
+                                                        </span>
+                                                    )}
+                                                    <span className="tabular-nums">{tab.bills.length} {t.bill}</span>
+                                                    {oldest >= 7 && (
+                                                        <span className={`font-bold tabular-nums ${oldest >= 21 ? "text-rose-600" : "text-amber-600"}`}>
+                                                            {oldest}d
+                                                        </span>
+                                                    )}
+                                                </p>
+                                            </div>
+                                            <p className="text-xl font-black text-amber-700 tabular-nums leading-none shrink-0">
+                                                {formatTHB(tab.outstanding)}
+                                            </p>
+                                        </div>
+
+                                        {/* Clear one night on its own, which is what a
+                                            customer settling a single disputed bill wants.
+                                            Secondary styling on purpose: when every row
+                                            carried a filled amber button, nothing on the
+                                            screen looked more important than anything else. */}
+                                        <div className="divide-y divide-slate-100">
+                                            {tab.bills.map((b) => (
+                                                <div key={b.id} className="flex items-center gap-3 px-4 py-2 text-sm">
+                                                    <span className="font-semibold text-slate-700 shrink-0 w-14 truncate">{b.table}</span>
+                                                    <span className="text-slate-400 tabular-nums text-xs shrink-0">{day(b.closedAt)}</span>
+                                                    {ageDays(b.closedAt) >= 7 && (
+                                                        <span className={`text-xs font-bold tabular-nums shrink-0 ${ageDays(b.closedAt) >= 21 ? "text-rose-600" : "text-amber-600"}`}>
+                                                            {ageDays(b.closedAt)}d
+                                                        </span>
+                                                    )}
+                                                    <span className="ms-auto tabular-nums font-semibold text-slate-900">
+                                                        {formatTHB(b.balance)}
+                                                    </span>
+                                                    {/* Icon only, at every width. The label repeated
+                                                        down a card of five bills was five copies of
+                                                        the same word, and it was the thing that got
+                                                        clipped the moment two cards shared a tablet.
+                                                        The name each row needs is the table it is
+                                                        for, and that is what the aria-label says. */}
+                                                    <Button
+                                                        size="sm"
+                                                        variant="outline"
+                                                        className="h-9 w-10 p-0 shrink-0 text-slate-500 hover:text-amber-700 hover:border-amber-300 hover:bg-amber-50"
+                                                        aria-label={`${t.settle_tab} · ${b.table}`}
+                                                        title={`${t.settle_tab} · ${b.table}`}
+                                                        onClick={() => router.push(`/pos/settle?session=${b.id}`)}
+                                                    >
+                                                        <CreditCard className="w-4 h-4" />
+                                                    </Button>
+                                                </div>
+                                            ))}
+                                        </div>
+
+                                        {/* One payment against the customer, spread oldest
+                                            first. Cash arrives as a lump - "here's ten
+                                            thousand toward it" - not as a decision about
+                                            which night to clear. The only filled button on
+                                            the card, because it is the one that takes money. */}
+                                        <div className="px-4 py-3 border-t border-slate-100">
+                                            <Button
+                                                className="w-full h-11 bg-amber-600 hover:bg-amber-700 text-white font-bold"
+                                                onClick={() => { setPaying(tab); setAmount(String(tab.outstanding)) }}
+                                            >
+                                                <Banknote className="w-4 h-4 mr-2" />
+                                                {t.take_payment}
+                                            </Button>
+                                        </div>
+                                    </Card>
+                                )
+                            })}
+                        </div>
+                    </>
                 )}
             </div>
 

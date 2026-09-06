@@ -8,7 +8,8 @@ import { Label } from "@/components/ui/label"
 import { Card } from "@/components/ui/card"
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { ArrowLeft, ArrowDown, ArrowUp, Pencil, Plus, Trash2, Users } from "lucide-react"
+import { Reorder, useDragControls } from "motion/react"
+import { ArrowLeft, GripVertical, Pencil, Plus, Trash2, Users } from "lucide-react"
 import { useTranslation } from "@/hooks/use-translation"
 import { notify } from "@/components/ui/sonner"
 import { useConfirm } from "@/components/confirm-provider"
@@ -140,29 +141,44 @@ export default function ManageTablesPage() {
         }
     }
 
-    /** Swap two tables' positions within their area. */
-    const move = async (table: Table, delta: number) => {
-        const inArea = tables.filter((x) => x.area === table.area)
-        const index = inArea.findIndex((x) => x.id === table.id)
-        const other = inArea[index + delta]
-        if (!other) return
-        // Optimistic: the arrows are tapped in bursts and a round trip between
-        // each one makes the list feel stuck.
-        setTables((prev) => prev.map((x) =>
-            x.id === table.id ? { ...x, displayOrder: other.displayOrder }
-                : x.id === other.id ? { ...x, displayOrder: table.displayOrder } : x
-        ))
-        await Promise.all([
-            fetch(`/api/tables/${table.id}`, {
-                method: "PUT", headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ displayOrder: other.displayOrder }),
-            }),
-            fetch(`/api/tables/${other.id}`, {
-                method: "PUT", headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ displayOrder: table.displayOrder }),
-            }),
-        ])
-        load()
+    /**
+     * Dropped somewhere new.
+     *
+     * Replaces a pair of arrow buttons: moving a table from the bottom of the
+     * room to the top was eleven taps, and staff already learned this grip on
+     * the menu page. Order is per area, so a drag only ever renumbers the
+     * column it happened in.
+     *
+     * Written on drop rather than behind a Save button - the arrangement IS
+     * the state, and only the tables whose position actually changed are sent.
+     */
+    const reorder = async (area: string, next: Table[]) => {
+        const renumbered = next.map((x, i) => ({ ...x, displayOrder: i }))
+        // Optimistic, so the row stays where it was let go instead of snapping
+        // back while the writes are in flight.
+        //
+        // Each slot this area already occupies takes the next table in the new
+        // order. Appending the area to the end instead would have reordered
+        // the AREAS - they are derived from this array - and the columns would
+        // jump sideways every time a table moved inside one of them.
+        setTables((prev) => {
+            const queue = [...renumbered]
+            return prev.map((x) => (x.area === area ? queue.shift()! : x))
+        })
+        const changed = renumbered.filter((x) =>
+            tables.find((old) => old.id === x.id)?.displayOrder !== x.displayOrder)
+        if (changed.length === 0) return
+        setSaving(true)
+        try {
+            await Promise.all(changed.map((x) =>
+                fetch(`/api/tables/${x.id}`, {
+                    method: "PUT", headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ displayOrder: x.displayOrder }),
+                })))
+        } finally {
+            setSaving(false)
+            load()
+        }
     }
 
     if (allowed === false) {
@@ -204,81 +220,62 @@ export default function ManageTablesPage() {
                 </div>
             </header>
 
-            <main className="p-4 md:p-6 space-y-6 max-w-4xl">
+            {/* Areas side by side rather than stacked. A bar's floor is three
+                short lists, not one long one - on any screen wider than a
+                tablet the old single column meant scrolling past the indoor
+                tables to reach the VIP rooms that were the reason you came. */}
+            <main className="p-4 md:p-6 max-w-[1600px]">
                 {!loaded ? (
-                    <>
-                        <div className="h-40 rounded-xl bg-slate-100 animate-pulse" />
-                        <div className="h-40 rounded-xl bg-slate-100 animate-pulse" />
-                    </>
+                    <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+                        <div className="h-64 rounded-xl bg-slate-100 animate-pulse" />
+                        <div className="h-64 rounded-xl bg-slate-100 animate-pulse" />
+                        <div className="h-64 rounded-xl bg-slate-100 animate-pulse" />
+                    </div>
                 ) : tables.length === 0 ? (
                     <Card className="p-10 text-center text-slate-500">{t.no_tables_yet}</Card>
                 ) : (
-                    areas.map((area) => {
-                        const inArea = tables.filter((x) => x.area === area)
-                        return (
-                            <Card key={area} className="overflow-hidden p-0 gap-0">
-                                <div className="flex items-center gap-3 px-4 py-3 border-b border-slate-200 bg-slate-50">
-                                    <h2 className="font-bold text-slate-900">
-                                        {areaLabel(area)}{" "}
-                                        <span className="text-slate-400 tabular-nums font-semibold">{inArea.length}</span>
-                                    </h2>
-                                </div>
-                                {inArea.map((table, i) => (
-                                    <div
-                                        key={table.id}
-                                        className="flex items-center gap-3 px-4 py-3 border-b border-slate-100 last:border-0 transition-colors duration-150 hover:bg-amber-50/40"
-                                    >
-                                        <span className="text-lg font-black text-slate-900 min-w-16">{table.name}</span>
-                                        <span className="text-sm text-slate-500 inline-flex items-center gap-1.5">
-                                            <Users className="w-4 h-4" />
-                                            {table.seats} {t.seats}
-                                        </span>
-                                        {/* A table with money on it can be renamed but not removed,
-                                            and saying so here saves a failed tap. */}
-                                        {table.sessions.length > 0 && (
-                                            <span className="text-xs font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-0.5">
-                                                {t.occupied}
+                    <>
+                        <p className="flex items-center gap-2 text-sm text-slate-500 mb-4">
+                            <GripVertical className="w-4 h-4 text-slate-400 shrink-0" aria-hidden />
+                            {t.reorder_hint}
+                        </p>
+                        <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3 items-start">
+                            {areas.map((area) => {
+                                const inArea = tables.filter((x) => x.area === area)
+                                const seats = inArea.reduce((sum, x) => sum + x.seats, 0)
+                                return (
+                                    <Card key={area} className="overflow-hidden p-0 gap-0">
+                                        <div className="flex items-baseline gap-2 px-4 py-3 border-b border-slate-200 bg-slate-50">
+                                            <h2 className="font-bold text-slate-900">{areaLabel(area)}</h2>
+                                            <span className="text-slate-400 tabular-nums font-semibold">{inArea.length}</span>
+                                            <span className="ms-auto text-xs text-slate-400 tabular-nums inline-flex items-center gap-1">
+                                                <Users className="w-3.5 h-3.5" aria-hidden />
+                                                {seats}
                                             </span>
-                                        )}
-
-                                        <div className="ms-auto flex items-center gap-1 shrink-0">
-                                            <Button
-                                                variant="ghost" size="icon" className="h-10 w-10"
-                                                aria-label={t.move_up}
-                                                disabled={i === 0}
-                                                onClick={() => move(table, -1)}
-                                            >
-                                                <ArrowUp className="w-4 h-4" />
-                                            </Button>
-                                            <Button
-                                                variant="ghost" size="icon" className="h-10 w-10"
-                                                aria-label={t.move_down}
-                                                disabled={i === inArea.length - 1}
-                                                onClick={() => move(table, 1)}
-                                            >
-                                                <ArrowDown className="w-4 h-4" />
-                                            </Button>
-                                            <Button
-                                                variant="outline" size="sm" className="h-10"
-                                                onClick={() => openEdit(table)}
-                                            >
-                                                <Pencil className="w-4 h-4 mr-2" />
-                                                {t.edit}
-                                            </Button>
-                                            <Button
-                                                variant="ghost" size="icon"
-                                                className="h-10 w-10 text-slate-400 hover:text-rose-600 hover:bg-rose-50"
-                                                aria-label={t.remove_table}
-                                                onClick={() => remove(table)}
-                                            >
-                                                <Trash2 className="w-4 h-4" />
-                                            </Button>
                                         </div>
-                                    </div>
-                                ))}
-                            </Card>
-                        )
-                    })
+                                        <Reorder.Group
+                                            axis="y"
+                                            values={inArea}
+                                            onReorder={(next) => reorder(area, next as Table[])}
+                                        >
+                                            {inArea.map((table) => (
+                                                <TableRow
+                                                    key={table.id}
+                                                    table={table}
+                                                    seatsLabel={t.seats}
+                                                    occupiedLabel={t.occupied}
+                                                    editLabel={t.edit}
+                                                    removeLabel={t.remove_table}
+                                                    onEdit={() => openEdit(table)}
+                                                    onRemove={() => remove(table)}
+                                                />
+                                            ))}
+                                        </Reorder.Group>
+                                    </Card>
+                                )
+                            })}
+                        </div>
+                    </>
                 )}
             </main>
 
@@ -346,5 +343,84 @@ export default function ManageTablesPage() {
                 </DialogContent>
             </Dialog>
         </div>
+    )
+}
+
+/**
+ * One table in its area's column.
+ *
+ * dragListener is off and the gesture starts at the handle, matching the menu
+ * page: a stray swipe scrolls the list instead of pulling a table out of the
+ * room. The edit and delete controls sit behind the handle in the tab order so
+ * a keyboard still reaches them.
+ */
+function TableRow({
+    table,
+    seatsLabel,
+    occupiedLabel,
+    editLabel,
+    removeLabel,
+    onEdit,
+    onRemove,
+}: {
+    table: Table
+    seatsLabel: string
+    occupiedLabel: string
+    editLabel: string
+    removeLabel: string
+    onEdit: () => void
+    onRemove: () => void
+}) {
+    const controls = useDragControls()
+
+    return (
+        <Reorder.Item
+            value={table}
+            dragListener={false}
+            dragControls={controls}
+            whileDrag={{ scale: 1.02, boxShadow: "0 12px 24px rgb(15 23 42 / 0.18)", zIndex: 10 }}
+            transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
+            className="flex items-center gap-2 px-2 py-2 border-b border-slate-100 last:border-0 bg-white transition-colors duration-150 hover:bg-amber-50/40"
+        >
+            <button
+                onPointerDown={(e) => controls.start(e)}
+                aria-label={table.name}
+                className="h-11 w-9 grid place-items-center rounded-lg text-slate-300 hover:text-slate-700 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 touch-none cursor-grab active:cursor-grabbing shrink-0"
+            >
+                <GripVertical className="w-5 h-5" />
+            </button>
+
+            <div className="min-w-0 flex-1">
+                <p className="font-black text-slate-900 leading-tight truncate">{table.name}</p>
+                <p className="text-xs text-slate-500 tabular-nums">
+                    {table.seats} {seatsLabel}
+                </p>
+            </div>
+
+            {/* A table with money on it can be renamed but not removed, and
+                saying so here saves a failed tap. */}
+            {table.sessions.length > 0 && (
+                <span className="text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5 shrink-0">
+                    {occupiedLabel}
+                </span>
+            )}
+
+            <Button
+                variant="ghost" size="icon"
+                className="h-10 w-10 text-slate-400 hover:text-slate-900 shrink-0"
+                aria-label={editLabel}
+                onClick={onEdit}
+            >
+                <Pencil className="w-4 h-4" />
+            </Button>
+            <Button
+                variant="ghost" size="icon"
+                className="h-10 w-10 text-slate-300 hover:text-rose-600 hover:bg-rose-50 shrink-0"
+                aria-label={removeLabel}
+                onClick={onRemove}
+            >
+                <Trash2 className="w-4 h-4" />
+            </Button>
+        </Reorder.Item>
     )
 }
