@@ -44,9 +44,16 @@ model Category {
   name          String
   hasSugarLevel Boolean  @default(false)
   hasShotType   Boolean  @default(false)
+  /// Where this chip sits on the till (0 = first). Neither categories nor menu
+  /// items had any order at all: the till showed whatever came back from an
+  /// alphabetical query, so the drinks that sell most sat wherever the alphabet
+  /// happened to leave them.
+  displayOrder  Int      @default(0)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
   menus         Menu[]
+
+  @@index([displayOrder])
 }
 
 model Menu {
@@ -54,6 +61,8 @@ model Menu {
   name        String
   description String?
   isAvailable Boolean         @default(true)
+  /// Where this sits inside its category on the till (0 = first).
+  displayOrder Int            @default(0)
   image       String?         @default("/placeholder.svg")
   categoryId  String
   createdAt   DateTime        @default(now())
@@ -62,6 +71,8 @@ model Menu {
   category    Category        @relation(fields: [categoryId], references: [id])
   variations  MenuVariation[]
   recipes     Recipe[]
+
+  @@index([categoryId, displayOrder])
 }
 
 model MenuVariation {

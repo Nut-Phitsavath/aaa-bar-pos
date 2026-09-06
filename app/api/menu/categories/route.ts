@@ -4,7 +4,8 @@ import { prisma } from '@/lib/prisma'
 export async function GET() {
     try {
         const categories = await prisma.category.findMany({
-            orderBy: { name: 'asc' }
+            // Staff order, then name for anything that has never been moved.
+            orderBy: [{ displayOrder: 'asc' }, { name: 'asc' }]
         })
         return NextResponse.json(categories)
     } catch (error) {

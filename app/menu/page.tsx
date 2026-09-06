@@ -11,12 +11,14 @@ import { Header } from "@/components/header"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Switch } from "@/components/ui/switch"
-import { Plus, Edit, Trash2, Search, ImageIcon, X, Check, Minus } from "lucide-react"
+import { Plus, Edit, Trash2, Search, ImageIcon, X, Check, Minus, GripVertical } from "lucide-react"
 import Link from "next/link"
 import Image from "next/image"
 import { useTranslation } from "@/hooks/use-translation"
 import { notify } from "@/components/ui/sonner"
 import { useConfirm } from "@/components/confirm-provider"
+import { ReorderPanel } from "@/components/menu/reorder-panel"
+import { useLongPress } from "@/hooks/use-long-press"
 import { PriceInput } from "@/components/ui/PriceInput"
 
 // --- Types ---
@@ -61,6 +63,10 @@ export default function MenuPage() {
   const [editingItem, setEditingItem] = useState<MenuItem | null>(null)
   const [menuItems, setMenuItems] = useState<MenuItem[]>([])
   const [categories, setCategories] = useState<{ id: string, name: string, hasSugarLevel: boolean, hasShotType: boolean }[]>([])
+  const [reordering, setReordering] = useState(false)
+  // Press and hold anywhere on the list to rearrange it. There is a button too:
+  // a gesture nobody is told about is a feature nobody finds.
+  const longPress = useLongPress(() => setReordering(true))
   const [isLoading, setIsLoading] = useState(false)
   const [isCategoryDialogOpen, setIsCategoryDialogOpen] = useState(false)
   const [newCategoryName, setNewCategoryName] = useState("")
@@ -798,13 +804,49 @@ export default function MenuPage() {
               {cat.name}
             </Button>
           ))}
+          {/* The discoverable half of the gesture, and last in the row so it
+              cannot be mistaken for a category. ms-auto only pushes it away
+              from what precedes it, so this has to come after the chips - put
+              before them it sat between "All" and Beer, reading as one of them. */}
+          {!reordering && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setReordering(true)}
+              className="h-11 px-4 rounded-full ms-auto border-slate-300 text-slate-600"
+            >
+              <GripVertical className="w-4 h-4 mr-1.5" />
+              {t.reorder}
+            </Button>
+          )}
         </div>
 
-        {/* Menu Items Grid */}
+        {/* Rearranging replaces the grid rather than sitting beside it: two
+            ways to look at the same list, both live, is how someone drags a
+            card in one and wonders why the other did not move. */}
+        {reordering ? (
+          <ReorderPanel
+            categories={categories.map((c) => ({ id: c.id, name: c.name }))}
+            items={filteredItems.map((i) => ({
+              id: i.id,
+              name: i.name,
+              localName: i.localName,
+              price: i.variations?.[0]?.sizes?.[0]?.price,
+              category: i.category,
+            }))}
+            activeCategory={activeCategory === "All" ? null : activeCategory}
+            onDone={() => setReordering(false)}
+            onSaved={() => { fetchMenuItems(); fetchCategories() }}
+          />
+        ) : (
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-4">
           {filteredItems.map((item) => (
             <Card
               key={item.id}
+              // Press and hold to rearrange. The card has no tap action of its
+              // own - edit and delete are their own buttons - so a long press
+              // costs nothing and is the gesture people already try.
+              {...longPress}
               className="flex flex-col group overflow-hidden border-2 border-slate-100 hover:border-amber-200 transition-all duration-300 shadow-sm hover:shadow-xl bg-white"
             >
               {/* Image Container */}
@@ -893,6 +935,7 @@ export default function MenuPage() {
             </Card>
           ))}
         </div>
+        )}
       </div>
     </div >
   )
