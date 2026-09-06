@@ -58,6 +58,10 @@ const INGREDIENTS = [
     // built from vodka because neither bottle existed on the shelf.
     { cat: "Spirits", name: "White Rum (bottle)", unit: "bottle", cost: 480, min: 3, max: 24 },
     { cat: "Spirits", name: "Gin (bottle)", unit: "bottle", cost: 520, min: 3, max: 24 },
+    // Sold both by the bottle and inside the VIP set, which is what makes it
+    // swappable: a package component can only be priced and put back on the
+    // shelf if the menu also sells exactly one of it.
+    { cat: "Spirits", name: "Wine (bottle)", unit: "bottle", cost: 220, min: 6, max: 60 },
 
     { cat: "Mixers", name: "Soda water (bottle)", unit: "bottle", cost: 10, min: 48, max: 480 },
     // Tonic is not soda. A gin tonic poured from the soda crate is a different
@@ -103,9 +107,14 @@ const MENU = [
     { cat: "Sets", name: "Chivas 12 Set", lao: "ຊຸດຊີວາສ 12", price: 3500, recipe: { "Chivas 12 (bottle)": 1, "Soda water (bottle)": 4, "Ice (kg)": 4 } },
     { cat: "Sets", name: "Johnnie Black Set", lao: "ຊຸດຈອນນີ້ດຳ", price: 3200, recipe: { "Johnnie Walker Black (bottle)": 1, "Soda water (bottle)": 4, "Ice (kg)": 4 } },
     { cat: "Sets", name: "Hongthong Set", lao: "ຊຸດຫົງທອງ", price: 900, recipe: { "Hongthong (bottle)": 1, "Soda water (bottle)": 4, "Ice (kg)": 4 } },
+    // The owner's own example, and the one to test an exchange against: its
+    // contents are worth 610 on the menu and it sells for 550, so a customer
+    // who trades down leaves that margin with the bar.
+    { cat: "Sets", name: "VIP Set", lao: "ຊຸດ VIP", price: 850, recipe: { "Wine (bottle)": 1, "Beer Lao (bottle)": 2, "Heineken (bottle)": 2, "Ice (kg)": 2 } },
 
     { cat: "Spirits", name: "Whisky (glass)", lao: "ວິສກີ້ (ຈອກ)", price: 70, recipe: { "Hongthong (bottle)": SINGLE, "Ice (kg)": 0.15 } },
     { cat: "Spirits", name: "Vodka (glass)", lao: "ວອດກ້າ (ຈອກ)", price: 90, recipe: { "Vodka (bottle)": SINGLE, "Ice (kg)": 0.15 } },
+    { cat: "Spirits", name: "Wine (bottle)", lao: "ເຫຼົ້າແວງ (ຂວດ)", price: 750, recipe: { "Wine (bottle)": 1 } },
 
     { cat: "Cocktails", name: "Mojito", lao: "ໂມຈິໂຕ້", price: 150, recipe: { "White Rum (bottle)": COCKTAIL, "Lime": 1, "Mint": 0.15, "Sugar syrup (litre)": 0.02, "Soda water (bottle)": 1, "Ice (kg)": 0.2 } },
     { cat: "Cocktails", name: "Gin Tonic", lao: "ຈິນໂທນິກ", price: 160, recipe: { "Gin (bottle)": COCKTAIL, "Tonic water (bottle)": 1, "Lime": 0.25, "Ice (kg)": 0.2 } },

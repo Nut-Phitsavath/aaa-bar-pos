@@ -9,8 +9,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Input } from "@/components/ui/input"
 import { ManagerApproval } from "@/components/manager-approval"
 import { ReceiptDialog } from "@/components/receipt-dialog"
+import { ReturnsDialog } from "@/components/pos/returns-dialog"
 import { QRCodeSVG } from "qrcode.react"
-import { Banknote, QrCode, Gift, Clock3, Printer, Percent, ArrowLeft, Check } from "lucide-react"
+import { Banknote, QrCode, Gift, Clock3, Printer, Percent, ArrowLeft, Check, PackageOpen } from "lucide-react"
 import { formatTHB, formatLAK, thbToLak } from "@/lib/currency"
 import { toast } from "sonner"
 
@@ -22,7 +23,7 @@ type SettleOrder = {
     tableOrderNumber: number | null
     waiter: { id: string; name: string } | null
     user: { id: string; name: string } | null
-    items: { id: string; name: string; localName: string | null; quantity: number; total: number }[]
+    items: { id: string; name: string; localName: string | null; quantity: number; total: number; voidedAt: string | null }[]
 }
 
 type SettleBill = {
@@ -68,6 +69,7 @@ function SettleScreen() {
     // customer scans it, and only written as a tender once staff confirm.
     const [transferAmount, setTransferAmount] = useState<number | null>(null)
     const [transferQrUrl, setTransferQrUrl] = useState<string | null>(null)
+    const [returningOpen, setReturningOpen] = useState(false)
     const [receiptSrc, setReceiptSrc] = useState<string | null>(null)
     // A settled bill returns to the floor plan - but only once the slip has
     // been dealt with. Navigating straight away would unmount the dialog under
@@ -348,7 +350,13 @@ function SettleScreen() {
                                     </span>
                                 </div>
                                 <ul className="pb-2 ps-11 pe-3 space-y-0.5">
-                                    {order.items.map((i) => (
+                                    {/* Struck lines are gone from the round total
+                                        already, so listing them at full price beside
+                                        a smaller total invites the question the
+                                        screen cannot answer. The printed bill drops
+                                        them for the same reason; history and the
+                                        void report are where they are kept. */}
+                                    {order.items.filter((i) => !i.voidedAt).map((i) => (
                                         <li key={i.id} className="flex justify-between gap-3 text-base text-slate-700">
                                             <span className="min-w-0 truncate">
                                                 <span className="tabular-nums font-bold text-slate-400 me-2">{i.quantity}</span>
@@ -479,7 +487,7 @@ function SettleScreen() {
                     </button>
                 </div>
 
-                <div className="h-16 grid grid-cols-2 gap-px shrink-0">
+                <div className="h-16 grid grid-cols-3 gap-px shrink-0">
                     <button
                         onClick={() => { setDiscountInput(""); setDiscountOpen(true) }}
                         disabled={busy}
@@ -487,6 +495,18 @@ function SettleScreen() {
                     >
                         <Percent className="w-4 h-4" />
                         {t.apply_discount}
+                    </button>
+                    {/* Req #10. Here because this is where staff are standing
+                        when the table is cleared - the bottles are in front of
+                        them and the bill is on the screen. It changes stock,
+                        never the total. */}
+                    <button
+                        onClick={() => setReturningOpen(true)}
+                        disabled={busy}
+                        className={`${side} flex items-center justify-center gap-2 disabled:opacity-40`}
+                    >
+                        <PackageOpen className="w-4 h-4" />
+                        {t.return_unopened}
                     </button>
                     <button
                         onClick={printBill}
@@ -585,6 +605,13 @@ function SettleScreen() {
             {/* The shop's own QR. Unlike BCEL there is nothing to poll, so the
                 staff member is the confirmation - which is why the amount is
                 the loudest thing here: it is what they are agreeing arrived. */}
+            <ReturnsDialog
+                sessionId={bill.id}
+                open={returningOpen}
+                onClose={() => setReturningOpen(false)}
+                onDone={load}
+            />
+
             <Dialog open={transferAmount !== null} onOpenChange={(o) => { if (!o) closeTransfer() }}>
                 <DialogContent className="max-w-sm">
                     <DialogHeader><DialogTitle>{t.pay_transfer}</DialogTitle></DialogHeader>

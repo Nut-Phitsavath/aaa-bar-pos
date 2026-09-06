@@ -8,6 +8,7 @@ import { Printer, ArrowLeft } from "lucide-react"
 import { BillReceipt, type ReceiptData } from "@/components/bill-receipt"
 import { useTranslation } from "@/hooks/use-translation"
 import { APP_NAME } from "@/lib/shop"
+import { summariseSwaps } from "@/lib/packages"
 
 /** One set of print rules, whether the slip is a page or inside the dialog. */
 const PRINT_CSS = `
@@ -112,10 +113,19 @@ function ReceiptContent() {
                         const unit = i.quantity > 0 ? i.total / i.quantity : 0
                         // The note is part of the key: "no ice" is why one of
                         // the two is different, so merging them would lose it.
-                        const key = `${i.name}::${unit}::${i.note ?? ""}`
+                        // So is the exchange: two identical sets, one of which
+                        // had its Heinekens swapped for water, are two lines.
+                        const swap = summariseSwaps(i.swaps ?? [])
+                        const swapKey = [...swap.out, ...swap.in]
+                            .map((l) => `${l.direction}${l.name}${l.quantity}`).join("|")
+                        const key = `${i.name}::${unit}::${i.note ?? ""}::${swapKey}`
                         const at = merged.get(key)
                         if (at) { at.quantity += i.quantity; at.total += i.total }
-                        else merged.set(key, { name: i.name, quantity: i.quantity, total: i.total, note: i.note ?? null })
+                        else merged.set(key, {
+                            name: i.name, quantity: i.quantity, total: i.total,
+                            note: i.note ?? null,
+                            swapOut: swap.out, swapIn: swap.in,
+                        })
                     }
                 }
 

@@ -54,7 +54,10 @@ export async function GET(request: Request) {
                         waiter: { select: { id: true, name: true } },
                         user: { select: { name: true } },
                         items: {
-                            include: { voidedBy: { select: { name: true } } },
+                            include: {
+                                voidedBy: { select: { name: true } },
+                                swaps: { include: { lines: true } },
+                            },
                         },
                     },
                 },
@@ -68,7 +71,7 @@ export async function GET(request: Request) {
             take,
             include: {
                 user: { select: { name: true } },
-                items: { include: { voidedBy: { select: { name: true } } } },
+                items: { include: { voidedBy: { select: { name: true } }, swaps: { include: { lines: true } } } },
             },
         })
 
@@ -81,6 +84,9 @@ export async function GET(request: Request) {
             voidReason: i.voidReason,
             voidNote: i.voidNote,
             voidedBy: i.voidedBy?.name ?? null,
+            // What a package actually delivered, so history reads the same as
+            // the ticket and the printed slip did on the night (req #9).
+            swaps: i.swaps ?? [],
         })
 
         const tableBills = sessions.map((s) => {

@@ -15,9 +15,11 @@ import { ManagerApproval } from "@/components/manager-approval"
 import { toast } from "sonner"
 import {
     ChevronRight, Clock, Receipt as ReceiptIcon, Users, Ban, Search,
-    Calendar as CalendarIcon,
+    Calendar as CalendarIcon, PackageOpen,
 } from "lucide-react"
 import { formatTHB } from "@/lib/currency"
+import { SwapSummary } from "@/components/pos/swap-summary"
+import { ReturnsDialog } from "@/components/pos/returns-dialog"
 import { formatDuration } from "@/lib/sessions"
 
 type Line = {
@@ -26,6 +28,7 @@ type Line = {
     quantity: number
     total: number
     voidedAt: string | null
+    swaps?: { lines: { direction: string; name: string; quantity: number }[] }[]
     voidReason: string | null
     voidNote: string | null
     voidedBy: string | null
@@ -91,6 +94,7 @@ export default function BillsPage() {
     const [query, setQuery] = useState("")
     const [expanded, setExpanded] = useState<string | null>(null)
     const [receiptSrc, setReceiptSrc] = useState<string | null>(null)
+    const [returningBill, setReturningBill] = useState<string | null>(null)
     // A range, not a day: "this week" and "the weekend" are questions a manager
     // asks as often as "last night". Opens on today, so the common case is one
     // tap and the range is there when it is wanted. Same picker the reports
@@ -454,7 +458,8 @@ export default function BillsPage() {
                                                         {r.items.map((i) => {
                                                             const struck = Boolean(i.voidedAt) || r.status === "CANCELLED"
                                                             return (
-                                                                <div key={i.id} className="flex items-baseline gap-3 text-sm">
+                                                              <div key={i.id}>
+                                                                <div className="flex items-baseline gap-3 text-sm">
                                                                     <span className="w-6 tabular-nums text-slate-500 shrink-0">
                                                                         {i.quantity}
                                                                     </span>
@@ -471,6 +476,12 @@ export default function BillsPage() {
                                                                         {formatTHB(i.total)}
                                                                     </span>
                                                                 </div>
+                                                                {/* The same two lines the ticket and
+                                                                    the printed slip showed (req #9). */}
+                                                                <div className="ps-9">
+                                                                    <SwapSummary swaps={i.swaps} struck={struck} />
+                                                                </div>
+                                                              </div>
                                                             )
                                                         })}
                                                     </div>
@@ -529,6 +540,21 @@ export default function BillsPage() {
                                                         {t.reopen_bill}
                                                     </Button>
                                                 )}
+                                                {/* The unopened bottles turn up when the table is
+                                                    cleared, which is after the customer has paid -
+                                                    so the count needs a home on a settled bill too,
+                                                    not only on the settle screen. Same shift only,
+                                                    which the server enforces. */}
+                                                {b.kind === "TABLE" && (
+                                                    <Button
+                                                        variant="outline"
+                                                        className="h-10"
+                                                        onClick={() => setReturningBill(b.id)}
+                                                    >
+                                                        <PackageOpen className="w-4 h-4 mr-2" />
+                                                        {t.return_unopened}
+                                                    </Button>
+                                                )}
                                                 <Button
                                                     variant="outline"
                                                     className="ms-auto h-10"
@@ -552,6 +578,13 @@ export default function BillsPage() {
                     </div>
                 )}
             </div>
+
+            <ReturnsDialog
+                sessionId={returningBill ?? ""}
+                open={Boolean(returningBill)}
+                onClose={() => setReturningBill(null)}
+                onDone={load}
+            />
 
             <ReceiptDialog src={receiptSrc} onClose={() => setReceiptSrc(null)} />
 
