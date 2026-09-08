@@ -10,7 +10,10 @@ import { Badge } from "@/components/ui/badge"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog"
 import { Plus, Edit, Trash2, Package, ShoppingCart, Minus, Settings, Search, ArrowUpDown, Store, Warehouse, Printer } from "lucide-react"
 import { formatTHB } from "@/lib/currency"
-import { formatStock } from "@/lib/stock"
+import { formatStock, formatDual } from "@/lib/stock"
+import { UnitFields } from "@/components/inventory/unit-fields"
+import { canEditUnits } from "@/lib/ingredient-form"
+import type { MeasureType } from "@/lib/units"
 import { Header } from "@/components/header"
 import { FormattedNumberInput } from "@/components/ui/formatted-number-input"
 import { FormattedTextInput } from "@/components/ui/formatted-text-input"
@@ -34,6 +37,10 @@ type Ingredient = {
   id: string
   name: string
   unit: string
+  measureType: MeasureType
+  baseUnit: string
+  purchaseUnit: string
+  purchaseMultiplier: number
   mainStock: number
   subStock: number
   minStock: number
@@ -85,6 +92,9 @@ export default function InventoryPage() {
   const [formData, setFormData] = useState({
     name: "",
     unit: "kg",
+    measureType: "EACH",
+    purchaseUnit: "",
+    purchaseMultiplier: "1",
     mainStock: "",
     minStock: "",
     maxStock: "",
@@ -94,10 +104,33 @@ export default function InventoryPage() {
     categoryId: ""
   })
 
+  // Whether this user may still change the conversion on the item being
+  // edited. Uses the same function the route enforces with - re-implementing
+  // the role list here is how a form and its endpoint start disagreeing.
+  const [role, setRole] = useState("")
+  const [unitsLocked, setUnitsLocked] = useState(false)
+
   useEffect(() => {
     fetchInventory()
     fetchCategories()
+    fetch('/api/auth/me')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => setRole(d?.user?.role ?? d?.role ?? ""))
+      .catch(() => setRole(""))
   }, [])
+
+  useEffect(() => {
+    if (!editingItem) { setUnitsLocked(false); return }
+    // A movement row, not a non-zero balance: an ingredient received and fully
+    // consumed is back at zero and must stay locked.
+    fetch(`/api/stock-transactions?ingredientId=${editingItem.id}&limit=1`)
+      .then((r) => (r.ok ? r.json() : []))
+      .then((rows) => {
+        const hasMovements = Array.isArray(rows) ? rows.length > 0 : (rows?.transactions?.length ?? 0) > 0
+        setUnitsLocked(!canEditUnits({ hasMovements, role }).ok)
+      })
+      .catch(() => setUnitsLocked(false))
+  }, [editingItem, role])
 
   const fetchCategories = async () => {
     try {
@@ -125,7 +158,12 @@ export default function InventoryPage() {
       // Convert string values to numbers for API
       const payload = {
         name: formData.name,
-        unit: formData.unit,
+        // The legacy column keeps showing something sensible on screens that
+        // still read it; nothing computes from it any more.
+        unit: formData.purchaseUnit || formData.unit,
+        measureType: formData.measureType,
+        purchaseUnit: formData.purchaseUnit,
+        purchaseMultiplier: parseFloat(formData.purchaseMultiplier) || 1,
         mainStock: parseFloat(formData.mainStock) || 0,
         minStock: parseFloat(formData.minStock) || 0,
         maxStock: parseFloat(formData.maxStock) || 0,
@@ -165,6 +203,9 @@ export default function InventoryPage() {
     setFormData({
       name: item.name,
       unit: item.unit,
+      measureType: item.measureType || "EACH",
+      purchaseUnit: item.purchaseUnit || item.unit,
+      purchaseMultiplier: (item.purchaseMultiplier ?? 1).toString(),
       mainStock: item.mainStock.toString(),
       minStock: item.minStock.toString(),
       maxStock: item.maxStock.toString(),
@@ -228,6 +269,9 @@ export default function InventoryPage() {
     setFormData({
       name: "",
       unit: "kg",
+      measureType: "EACH",
+      purchaseUnit: "",
+      purchaseMultiplier: "1",
       mainStock: "",
       minStock: "",
       maxStock: "",
@@ -483,20 +527,26 @@ export default function InventoryPage() {
                           ))}
                         </select>
                       </div>
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                          <Label>{t.unit}</Label>
-                          <FormattedTextInput
-                            placeholder="e.g. kg, L, pcs"
-                            value={formData.unit}
-                            onChange={val => setFormData({ ...formData, unit: val })}
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label>{t.initial_warehouse_stock}</Label>
-                          <FormattedNumberInput value={formData.mainStock} onChange={val => setFormData({ ...formData, mainStock: val })} />
-                          <p className="text-xs text-muted-foreground">{t.shop_stock_starts_zero}</p>
-                        </div>
+                      <UnitFields
+                        locked={unitsLocked}
+                        value={{
+                          name: formData.name,
+                          measureType: formData.measureType as MeasureType,
+                          purchaseUnit: formData.purchaseUnit,
+                          purchaseMultiplier: formData.purchaseMultiplier,
+                          cost: formData.cost,
+                        }}
+                        onChange={(next) => setFormData({
+                          ...formData,
+                          measureType: next.measureType,
+                          purchaseUnit: next.purchaseUnit,
+                          purchaseMultiplier: next.purchaseMultiplier,
+                        })}
+                      />
+                      <div className="space-y-2">
+                        <Label>{t.initial_warehouse_stock}</Label>
+                        <FormattedNumberInput value={formData.mainStock} onChange={val => setFormData({ ...formData, mainStock: val })} />
+                        <p className="text-xs text-muted-foreground">{t.shop_stock_starts_zero}</p>
                       </div>
                       <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-2 p-3 bg-slate-50 rounded-lg">
@@ -622,7 +672,13 @@ export default function InventoryPage() {
                               clamped away, but shown in red because it is a
                               discrepancy to chase, not a stock level. */}
                           <TableCell className={`font-bold text-lg tabular-nums ${(activeTab === "SUB" ? item.subStock : item.mainStock) < 0 ? "text-rose-600" : ""}`}>
-                            {formatStock(activeTab === "SUB" ? item.subStock : item.mainStock)}
+                            {/* "3 bottles + 250 ml", not "907.2". Staff think
+                                in bottles even when the shelf is counted in ml. */}
+                            {formatDual(activeTab === "SUB" ? item.subStock : item.mainStock, {
+                              measureType: item.measureType,
+                              purchaseUnit: item.purchaseUnit || item.unit,
+                              multiplier: item.purchaseMultiplier,
+                            })}
                           </TableCell>
                           <TableCell>{item.unit}</TableCell>
                           <TableCell className="tabular-nums">{formatStock(activeTab === "SUB" ? item.minStockSub : item.minStock)}</TableCell>

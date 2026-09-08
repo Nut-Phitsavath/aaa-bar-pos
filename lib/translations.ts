@@ -790,6 +790,16 @@ export const translations = {
         rate_lak_label: "1 THB = ? LAK",
         rate_usd_label: "1 USD = ? THB",
         show_usd_label: "Also show the USD equivalent on bills",
+        // --- Ingredient units (base-unit model) ---
+        measure_type: "How is it measured?",
+        measure_weight: "Weight",
+        measure_volume: "Volume",
+        measure_each: "Whole units",
+        measure_type_help: "Decides how stock is counted. Cannot be changed once stock has moved.",
+        purchase_unit_label: "How do you buy it?",
+        purchase_unit_placeholder: "bottle, case, kg",
+        purchase_multiplier_label: "One contains",
+        units_locked: "Locked — this ingredient already has stock movements",
         // --- Table sessions (bar floor plan) ---
         tables: "Tables",
         table: "Table",
@@ -1771,6 +1781,16 @@ export const translations = {
         rate_lak_label: "1 ບາດ = ? ກີບ",
         rate_usd_label: "1 ໂດລາ = ? ບາດ",
         show_usd_label: "ສະແດງມູນຄ່າເປັນໂດລາໃນບິນ",
+        // --- Ingredient units (base-unit model) ---
+        measure_type: "ວັດແທກແນວໃດ?",
+        measure_weight: "ນ້ຳໜັກ",
+        measure_volume: "ປະລິມາດ",
+        measure_each: "ຫົວໜ່ວຍ",
+        measure_type_help: "ກຳນົດວິທີນັບສະຕັອກ. ປ່ຽນບໍ່ໄດ້ຫຼັງຈາກສະຕັອກເຄື່ອນໄຫວແລ້ວ.",
+        purchase_unit_label: "ຊື້ເປັນຫົວໜ່ວຍໃດ?",
+        purchase_unit_placeholder: "ຂວດ, ແກັດ, ກິໂລ",
+        purchase_multiplier_label: "ໜຶ່ງຫົວໜ່ວຍມີ",
+        units_locked: "ລັອກແລ້ວ — ວັດຖຸດິບນີ້ມີການເຄື່ອນໄຫວສະຕັອກແລ້ວ",
         // --- Table sessions (bar floor plan) ---
         tables: "ໂຕະ",
         table: "ໂຕະ",
