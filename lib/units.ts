@@ -112,3 +112,78 @@ export function formatDual(
     if (rest === 0) return plural(sign * whole, purchaseUnit)
     return `${plural(sign * whole, purchaseUnit)} + ${rest} ${baseUnit}`
 }
+
+export type ConversionInput = {
+    name: string
+    measureType: MeasureType
+    purchaseUnit: string
+    purchaseMultiplier: number
+    cost: number
+}
+
+export type ConversionEcho = {
+    valid: boolean
+    reason?: 'MULTIPLIER_MUST_BE_POSITIVE' | 'PURCHASE_UNIT_REQUIRED'
+    /** Plain language, for a person to check against what they meant. */
+    sentence: string
+    /** What one base unit costs, derived and never stored. */
+    costPerBase: number | null
+}
+
+/**
+ * The guardrail on the one field that can silently corrupt every future number.
+ *
+ * A multiplier is not a value anyone can sanity-check on its own - 700 and 7
+ * look equally plausible in a box. Read back as "450/bottle = 0.64 per ml"
+ * versus "= 64.29 per ml", the mistake is obvious to anyone who has ever bought
+ * a bottle. That is the whole design: make the wrong entry look wrong at the
+ * moment it is made, because after the first delivery it is invisible.
+ *
+ * Pure, so the guardrail is tested rather than merely rendered.
+ */
+export function describeConversion(input: ConversionInput): ConversionEcho {
+    const { name, measureType, purchaseUnit, purchaseMultiplier, cost } = input
+    const unit = (purchaseUnit ?? '').trim()
+    const baseUnit = BASE_UNIT[measureType]
+    const label = name?.trim() || 'This item'
+
+    if (!unit) {
+        return { valid: false, reason: 'PURCHASE_UNIT_REQUIRED', sentence: '', costPerBase: null }
+    }
+    if (!Number.isFinite(purchaseMultiplier) || purchaseMultiplier <= 0) {
+        return { valid: false, reason: 'MULTIPLIER_MUST_BE_POSITIVE', sentence: '', costPerBase: null }
+    }
+
+    const safeCost = Number.isFinite(cost) && cost > 0 ? cost : 0
+    const raw = safeCost / purchaseMultiplier
+    // Two places is right for money, but a gram of ice costs 0.003 and
+    // rounding that to "0" reads as free - on exactly the bulk items where a
+    // wrong multiplier is easiest to type. Keep enough places to stay a number.
+    const places = raw > 0 && raw < 0.01 ? 4 : 2
+    const factor = 10 ** places
+    const costPerBase = Math.round(raw * factor) / factor
+
+    // An EACH item buys and counts in the same thing, so a "1 bottle = 1 each"
+    // clause would be noise pretending to be information.
+    const conversion = measureType === 'EACH' ? '' : ` (${purchaseMultiplier} ${baseUnit})`
+
+    const counted = measureType === 'EACH'
+        ? `Stock is counted in whole ${unit}s.`
+        : `Stock is counted in ${baseUnit}.`
+
+    // When a purchase unit IS the base unit, cost-per-purchase and
+    // cost-per-base are the same number, and "18/bottle = 18 per bottle" is
+    // the sentence saying it twice. The conversion clause is the whole point
+    // of the echo, so it only appears where there is a conversion.
+    const priced = safeCost === 0
+        ? ''
+        : measureType === 'EACH' || purchaseMultiplier === 1
+            ? ` ${safeCost} per ${unit}.`
+            : ` ${safeCost}/${unit} = ${costPerBase} per ${baseUnit}.`
+
+    return {
+        valid: true,
+        sentence: `You buy ${label} by the ${unit}${conversion}. ${counted}${priced}`,
+        costPerBase,
+    }
+}
