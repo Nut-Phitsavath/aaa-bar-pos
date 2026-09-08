@@ -816,6 +816,10 @@ export const translations = {
         shrinkage: "Shrinkage",
         overage: "Overage",
         no_counts_yet: "No counts in this range. Print the audit sheet from Inventory, count the shelf, and enter what you find.",
+        rename: "Rename",
+        category_name_taken: "That name is already used by another category",
+        rename_hint: "Tap a name to rename it",
+        no_categories_yet: "No categories yet. Add one above to group your stock.",
         // --- Table sessions (bar floor plan) ---
         tables: "Tables",
         table: "Table",
@@ -1823,6 +1827,10 @@ export const translations = {
         shrinkage: "ສະຕັອກຂາດ",
         overage: "ສະຕັອກເກີນ",
         no_counts_yet: "ບໍ່ມີການນັບໃນຊ່ວງນີ້. ພິມໃບກວດສະຕັອກຈາກສາງ, ນັບເຄື່ອງ, ແລ້ວປ້ອນຜົນ.",
+        rename: "ປ່ຽນຊື່",
+        category_name_taken: "ຊື່ນີ້ຖືກໃຊ້ໂດຍໝວດໝູ່ອື່ນແລ້ວ",
+        rename_hint: "ແຕະທີ່ຊື່ເພື່ອປ່ຽນ",
+        no_categories_yet: "ຍັງບໍ່ມີໝວດໝູ່. ເພີ່ມຢູ່ຂ້າງເທິງເພື່ອຈັດກຸ່ມສະຕັອກ.",
         // --- Table sessions (bar floor plan) ---
         tables: "ໂຕະ",
         table: "ໂຕະ",

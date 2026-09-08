@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog"
-import { Plus, Edit, Trash2, Package, ShoppingCart, Minus, Settings, Search, ArrowUpDown, Store, Warehouse, Printer } from "lucide-react"
+import { Plus, Edit, Trash2, Package, ShoppingCart, Minus, Settings, Search, ArrowUpDown, Store, Warehouse, Printer, Pencil } from "lucide-react"
 import { formatTHB } from "@/lib/currency"
 import { formatStock } from "@/lib/stock"
 import { formatStockOf, toBase } from "@/lib/units"
@@ -73,6 +73,10 @@ export default function InventoryPage() {
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [isCatDialogOpen, setIsCatDialogOpen] = useState(false)
   const [newCatName, setNewCatName] = useState("")
+  // Which category row is currently being renamed in place, and the draft.
+  const [renamingId, setRenamingId] = useState<string | null>(null)
+  const [renameValue, setRenameValue] = useState("")
+  const [renameSaving, setRenameSaving] = useState(false)
   const [editingItem, setEditingItem] = useState<Ingredient | null>(null)
   const [activeTab, setActiveTab] = useState<"SUB" | "MAIN">("SUB")
   const [isTransferOpen, setIsTransferOpen] = useState(false)
@@ -138,6 +142,62 @@ export default function InventoryPage() {
       const res = await fetch('/api/inventory-categories')
       if (res.ok) setCategories(await res.json())
     } catch (e) { console.error(e) }
+  }
+
+  const handleAddCategory = async () => {
+    const name = newCatName.trim()
+    if (!name) return
+    try {
+      const res = await fetch('/api/inventory-categories', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name })
+      })
+      if (res.ok) {
+        notify.success(t.saved_success, { description: name })
+        setNewCatName("")
+        fetchCategories()
+      } else {
+        const err = (await res.json()).error
+        notify.error(err === "CATEGORY_NAME_TAKEN" ? t.category_name_taken : err || t.save_failed)
+      }
+    } catch (e) {
+      console.error(e)
+      notify.error(t.save_failed)
+    }
+  }
+
+  /**
+   * Rename a category from the row it lives on.
+   *
+   * On failure the row stays in edit mode with the text intact: a duplicate
+   * name is a thing to correct, and closing the editor would make the person
+   * start again from a name they can no longer see.
+   */
+  const handleRenameCategory = async (id: string) => {
+    const name = renameValue.trim()
+    if (!name) return
+    setRenameSaving(true)
+    try {
+      const res = await fetch(`/api/inventory-categories/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name })
+      })
+      if (res.ok) {
+        notify.success(t.saved_success, { description: name })
+        setRenamingId(null)
+        fetchCategories()
+      } else {
+        const err = (await res.json()).error
+        notify.error(err === "CATEGORY_NAME_TAKEN" ? t.category_name_taken : err || t.save_failed)
+      }
+    } catch (e) {
+      console.error(e)
+      notify.error(t.save_failed)
+    } finally {
+      setRenameSaving(false)
+    }
   }
 
   const fetchInventory = async () => {
@@ -407,7 +467,15 @@ export default function InventoryPage() {
                 {t.print_count_sheet}
               </Button>
 
-              <Dialog open={isCatDialogOpen} onOpenChange={setIsCatDialogOpen}>
+              <Dialog
+                open={isCatDialogOpen}
+                onOpenChange={(open) => {
+                  setIsCatDialogOpen(open)
+                  // Closing mid-rename must not leave a half-typed draft
+                  // waiting to reappear the next time it opens.
+                  if (!open) { setRenamingId(null); setRenameValue(""); setNewCatName("") }
+                }}
+              >
                 <DialogTrigger asChild>
                   <Button variant="outline" className="border-amber-200 text-amber-700 hover:bg-amber-50">
                     <Settings className="w-4 h-4 mr-2" />
@@ -420,82 +488,112 @@ export default function InventoryPage() {
                   </DialogHeader>
                   <div className="space-y-4 py-4">
                     <div className="flex gap-2">
-                      <Input 
-                        placeholder={t.new_category_name || "New category name"} 
+                      <Input
+                        placeholder={t.new_category_name || "New category name"}
                         value={newCatName}
                         onChange={e => setNewCatName(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === "Enter" && newCatName.trim()) handleAddCategory() }}
+                        className="h-11 rounded-xl"
                       />
-                      <Button onClick={async () => {
-                        if(!newCatName) return;
-                        const res = await fetch('/api/inventory-categories', {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({ name: newCatName })
-                        });
-                        if (res.ok) {
-                          notify.success(t.saved_success, { description: newCatName });
-                          setNewCatName("");
-                          fetchCategories();
-                        } else {
-                          notify.error((await res.json()).error || t.save_failed);
-                        }
-                      }}>
+                      {/* Amber, like every other primary action in the app. It
+                          was the default dark button, which reads as a
+                          different kind of control than it is. */}
+                      <Button
+                        className="h-11 px-5 rounded-xl bg-amber-600 hover:bg-amber-700 font-bold shrink-0"
+                        disabled={!newCatName.trim()}
+                        onClick={handleAddCategory}
+                      >
                         {t.add || "Add"}
                       </Button>
                     </div>
-                    <div className="border rounded-md max-h-[300px] overflow-y-auto">
-                      <Table>
-                        <TableBody>
-                          {categories.map(cat => (
-                            <TableRow key={cat.id}>
-                              <TableCell className="font-medium">
-                                {cat.name}
-                              </TableCell>
-                              <TableCell className="text-right text-muted-foreground text-xs">
-                                {cat._count?.ingredients || 0} {t.items || "items"}
-                              </TableCell>
-                              <TableCell className="text-right flex gap-1 justify-end">
-                                <Button 
-                                  variant="ghost" 
-                                  size="icon" 
-                                  className="h-11 w-11 text-slate-400 hover:text-amber-600"
-                                  onClick={async () => {
-                                    const newName = prompt("Rename to:", cat.name);
-                                    if(newName && newName !== cat.name) {
-                                      const res = await fetch(`/api/inventory-categories/${cat.id}`, {
-                                        method: 'PUT',
-                                        headers: { 'Content-Type': 'application/json' },
-                                        body: JSON.stringify({ name: newName })
-                                      });
-                                      if (res.ok) { notify.success(t.saved_success, { description: newName }); fetchCategories(); }
-                                      else notify.error((await res.json()).error || t.save_failed);
-                                    }
+                    {/* A list, not a table - there are no columns to compare,
+                        and Table without a header is a heavier component than
+                        the content deserves. */}
+                    <div className="rounded-2xl border border-slate-200 divide-y divide-slate-100 max-h-[320px] overflow-y-auto">
+                      {categories.length === 0 && (
+                        <p className="px-4 py-10 text-center text-sm text-slate-400">{t.no_categories_yet}</p>
+                      )}
+                      {categories.map(cat => {
+                        const editing = renamingId === cat.id
+                        const dirty = renameValue.trim() && renameValue.trim() !== cat.name
+                        return (
+                          <div key={cat.id} className="flex items-center gap-2 px-3 py-2">
+                            {editing ? (
+                              /* Renamed in place. A browser prompt() cannot be
+                                 styled, cannot be translated, and drops the
+                                 person out of the app to a grey OS box. */
+                              <>
+                                <Input
+                                  autoFocus
+                                  value={renameValue}
+                                  disabled={renameSaving}
+                                  onChange={(e) => setRenameValue(e.target.value)}
+                                  onFocus={(e) => e.currentTarget.select()}
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter" && dirty) handleRenameCategory(cat.id)
+                                    if (e.key === "Escape") setRenamingId(null)
                                   }}
+                                  className="h-11 flex-1 rounded-xl border-amber-500 focus:ring-4 focus:ring-amber-500/10"
+                                />
+                                <Button
+                                  size="sm"
+                                  className="h-11 px-4 rounded-xl bg-amber-600 hover:bg-amber-700 font-bold"
+                                  disabled={!dirty || renameSaving}
+                                  onClick={() => handleRenameCategory(cat.id)}
                                 >
-                                  <ArrowUpDown className="h-4 w-4 rotate-90" />
+                                  {renameSaving ? t.saving : t.save}
                                 </Button>
-                                <Button 
-                                  variant="ghost" 
-                                  size="icon" 
-                                  className="h-11 w-11 text-slate-400 hover:text-red-600"
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-11 px-3 rounded-xl text-slate-500"
+                                  disabled={renameSaving}
+                                  onClick={() => setRenamingId(null)}
+                                >
+                                  {t.cancel}
+                                </Button>
+                              </>
+                            ) : (
+                              <>
+                                {/* The name IS the affordance, so there is no
+                                    second icon to decipher. The pencil stays
+                                    visible rather than appearing on hover -
+                                    this is a touch till and hover does not
+                                    exist there. */}
+                                <button
+                                  type="button"
+                                  title={t.rename}
+                                  onClick={() => { setRenamingId(cat.id); setRenameValue(cat.name) }}
+                                  className="group flex-1 flex items-center gap-2 text-left rounded-xl px-2 py-2 -mx-2 hover:bg-amber-50/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/40 transition-colors duration-150"
+                                >
+                                  <span className="font-semibold text-slate-900">{cat.name}</span>
+                                  <Pencil className="w-3.5 h-3.5 text-slate-300 group-hover:text-amber-600 transition-colors duration-150" />
+                                </button>
+                                <span className="text-xs text-slate-400 tabular-nums shrink-0">
+                                  {cat._count?.ingredients || 0} {t.items || "items"}
+                                </span>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  title={t.delete}
+                                  className="h-11 w-11 shrink-0 text-slate-300 hover:text-rose-600 hover:bg-rose-50"
                                   onClick={async () => {
                                     if (await confirm({ title: t.delete_category_confirm, description: `${cat.name} — ${t.delete_category_desc}`, confirmLabel: t.delete, destructive: true })) {
-                                      const res = await fetch(`/api/inventory-categories/${cat.id}`, {
-                                        method: 'DELETE'
-                                      });
-                                      if (res.ok) { notify.success(t.deleted_success); fetchCategories(); }
-                                      else notify.error((await res.json()).error || t.delete_failed);
+                                      const res = await fetch(`/api/inventory-categories/${cat.id}`, { method: 'DELETE' })
+                                      if (res.ok) { notify.success(t.deleted_success); fetchCategories() }
+                                      else notify.error((await res.json()).error || t.delete_failed)
                                     }
                                   }}
                                 >
                                   <Trash2 className="h-4 w-4" />
                                 </Button>
-                              </TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
+                              </>
+                            )}
+                          </div>
+                        )
+                      })}
                     </div>
+                    <p className="text-xs text-slate-400">{t.rename_hint}</p>
                   </div>
                 </DialogContent>
               </Dialog>
