@@ -162,7 +162,18 @@ export default function RecipesPage() {
     const fetchProducts = async () => {
         try {
             const res = await fetch('/api/menu')
-            if (res.ok) setProducts(await res.json())
+            if (!res.ok) return
+            const list: Product[] = await res.json()
+            setProducts(list)
+
+            // Arrived from the "No recipe" flag on the menu screen. Landing on
+            // the list and making someone find the item again would waste the
+            // one thing the flag was for.
+            const wanted = new URLSearchParams(window.location.search).get('product')
+            if (wanted) {
+                const match = list.find((p) => p.id === wanted)
+                if (match) setSelectedProduct(match)
+            }
         } catch (e) { console.error(e) }
     }
 

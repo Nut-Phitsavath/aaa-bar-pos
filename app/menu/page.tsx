@@ -11,7 +11,7 @@ import { Header } from "@/components/header"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Switch } from "@/components/ui/switch"
-import { Plus, Edit, Trash2, Search, ImageIcon, X, Check, Minus, GripVertical } from "lucide-react"
+import { Plus, Edit, Trash2, Search, ImageIcon, X, Check, Minus, GripVertical, ClipboardList } from "lucide-react"
 import Link from "next/link"
 import Image from "next/image"
 import { useTranslation } from "@/hooks/use-translation"
@@ -189,6 +189,17 @@ export default function MenuPage() {
         item.localName?.toLowerCase().includes(searchQuery.toLowerCase()))
     )
   }, [menuItems, searchQuery, activeCategory])
+
+  /**
+   * How many items sell but deduct no stock.
+   *
+   * Counted across the whole menu, not the current filter: the work does not
+   * stop existing because you are looking at one category.
+   */
+  const missingRecipes = useMemo(
+    () => menuItems.filter((m) => m._count?.recipes === 0).length,
+    [menuItems]
+  )
 
   const handleEdit = (item: MenuItem) => {
     setEditingItem(item)
@@ -376,11 +387,10 @@ export default function MenuPage() {
     <div className="min-h-screen bg-background pb-20">
       {/* Header */}
 
-      <Header title={t.menu_management}>
-        <Link href="/menu/recipes">
-          <Button variant="outline" size="lg" className="text-md">{t.recipes}</Button>
-        </Link>
-      </Header>
+      {/* Recipes moved out of the header and into the action row below. Beside
+          the title it read as a subtitle; nobody looks there for something to
+          do, and it is the way in to linking stock to what you sell. */}
+      <Header title={t.menu_management} />
 
       <div className="p-6 space-y-6">
         {/* Search and Add */}
@@ -394,6 +404,27 @@ export default function MenuPage() {
               className="pl-10"
             />
           </div>
+          {/* Sits with the other things you can do, and says whether there is
+              anything to do: an item that sells but deducts no stock is
+              invisible until stocktake, so the count is the whole point of
+              putting this here rather than a plain link. */}
+          <Link href="/menu/recipes" className="shrink-0">
+            <Button
+              variant="outline"
+              className={missingRecipes > 0
+                ? "border-amber-500 text-amber-700 bg-amber-50/60 hover:bg-amber-100 font-bold"
+                : "text-slate-600 hover:bg-slate-50"}
+            >
+              <ClipboardList className="w-4 h-4 mr-2" />
+              {t.recipes}
+              {missingRecipes > 0 && (
+                <span className="ms-2 min-w-5 h-5 px-1.5 grid place-items-center rounded-full bg-amber-600 text-white text-[11px] font-black tabular-nums">
+                  {missingRecipes}
+                </span>
+              )}
+            </Button>
+          </Link>
+
           <Dialog open={isCategoryDialogOpen} onOpenChange={setIsCategoryDialogOpen}>
             <DialogTrigger asChild>
               <Button variant="outline" className="border-amber-600 text-amber-600 hover:bg-amber-50">
@@ -919,15 +950,20 @@ export default function MenuPage() {
                     </Badge>
                     {/* Sells but moves no stock - invisible until stocktake.
                         Flagged rather than blocked: a corkage fee or a service
-                        charge legitimately has no recipe. */}
+                        charge legitimately has no recipe.
+
+                        The flag is also the way to fix it: it opens this item's
+                        recipe directly, rather than telling someone there is a
+                        problem and leaving them to find the screen. */}
                     {item._count?.recipes === 0 && (
-                      <Badge
-                        variant="outline"
+                      <Link
+                        href={`/menu/recipes?product=${item.id}`}
                         title={t.no_recipe_help}
-                        className="text-[9px] font-bold bg-amber-50 border-amber-200 text-amber-700 uppercase"
+                        onPointerDown={(e) => e.stopPropagation()}
+                        className="text-[9px] font-bold bg-amber-50 border border-amber-200 text-amber-700 uppercase rounded-md px-1.5 py-0.5 hover:bg-amber-100 hover:border-amber-400 transition-colors duration-150"
                       >
                         {t.no_recipe}
-                      </Badge>
+                      </Link>
                     )}
                   </div>
                   <div className="flex -space-x-1">
