@@ -884,7 +884,10 @@ export default function MenuPage() {
                   />
                 </div>
 
-                <DialogFooter>
+                {/* Real distance and a rule before the commit row. "Add an
+                    ingredient" and "save and close" were a thumb-width apart on
+                    the same vertical axis. */}
+                <DialogFooter className="mt-8 pt-5 border-t border-slate-200">
                   <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
                     {t.cancel}
                   </Button>

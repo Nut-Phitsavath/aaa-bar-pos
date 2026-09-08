@@ -106,8 +106,13 @@ export function RecipeEditor({
                 <span className="text-xs text-slate-400">{t.recipe_section_hint}</span>
             </div>
 
-            {lines.length > 0 ? (
-                <div className="rounded-2xl border border-slate-200 divide-y divide-slate-100">
+            {/* Rows and the control that adds them live in one bordered card,
+                so "add" reads as part of the recipe rather than as a button
+                floating just above the dialog's Save - which is a different
+                kind of action entirely and sat one thumb-width away. */}
+            <div className="rounded-2xl border border-slate-200 overflow-hidden">
+                {lines.length > 0 ? (
+                    <div className="divide-y divide-slate-100">
                     {lines.map(({ row, ing }) => (
                         <div key={row.ingredientId} className="flex items-center gap-3 px-3 py-2">
                             <span className="flex-1 font-semibold text-slate-900 truncate">{ing.name}</span>
@@ -129,19 +134,19 @@ export function RecipeEditor({
                             </Button>
                         </div>
                     ))}
-                </div>
-            ) : (
-                <div className="rounded-2xl border-2 border-dashed border-slate-200 px-4 py-6 flex items-center gap-3 text-slate-400">
-                    <Package className="w-5 h-5 shrink-0" />
-                    <p className="text-sm">{t.no_recipe_yet}</p>
-                </div>
-            )}
+                    </div>
+                ) : (
+                    <div className="px-4 py-6 flex items-center gap-3 text-slate-400 border-b border-slate-100">
+                        <Package className="w-5 h-5 shrink-0" />
+                        <p className="text-sm">{t.no_recipe_yet}</p>
+                    </div>
+                )}
 
             {/* Inline, not a nested dialog: this already lives inside the menu
                 item dialog, and a modal on a modal is where a touch till loses
                 people. A plain select is the right control for two dozen
                 ingredients. */}
-            <div className="flex gap-2">
+            <div className="flex gap-2 p-2 bg-slate-50/70">
                 <select
                     value={pickId}
                     onChange={(e) => setPickId(e.target.value)}
@@ -168,15 +173,20 @@ export function RecipeEditor({
                         {picked?.baseUnit ?? ""}
                     </span>
                 </div>
+                {/* Deliberately NOT amber. Amber is this dialog's commit
+                    colour, and Save sits directly below - two amber buttons a
+                    thumb-width apart, one of which closes the dialog, is a
+                    misclick waiting to happen on a till. */}
                 <Button
                     type="button"
                     variant="outline"
-                    className="h-11 px-4 rounded-xl border-amber-500 text-amber-700 hover:bg-amber-50 font-bold shrink-0"
+                    className="h-11 px-4 rounded-xl border-slate-300 text-slate-600 hover:bg-white hover:text-slate-900 font-bold shrink-0"
                     disabled={!pickId || !(parseFloat(pickQty) > 0)}
                     onClick={add}
                 >
                     <Plus className="w-4 h-4 mr-1" /> {t.add}
                 </Button>
+                </div>
             </div>
 
             {/* The number the price should be set against. Without it a price is
