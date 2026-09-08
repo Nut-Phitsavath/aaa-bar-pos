@@ -33,6 +33,7 @@ type Product = {
     name: string
     categoryName: string
     variations: Variation[]
+    _count?: { recipes: number }
 }
 
 type Ingredient = {
@@ -265,10 +266,18 @@ export default function RecipesPage() {
         } catch (e) { console.error(e); notify.error(t.delete_failed) }
     }
 
-    const filteredProducts = products.filter(p =>
-        p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        p.categoryName?.toLowerCase().includes(searchQuery.toLowerCase())
-    )
+    const filteredProducts = products
+        .filter(p =>
+            p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            p.categoryName?.toLowerCase().includes(searchQuery.toLowerCase())
+        )
+        // Items that deduct nothing sort first: they are what somebody opened
+        // this screen to fix, and hunting for them defeats the flag.
+        .sort((a, b) => {
+            const an = (a._count?.recipes ?? 1) === 0 ? 0 : 1
+            const bn = (b._count?.recipes ?? 1) === 0 ? 0 : 1
+            return an - bn || a.name.localeCompare(b.name)
+        })
 
     // Helper to find scope name
     const getScopeName = (vSizeId: string | null) => {
@@ -509,7 +518,20 @@ export default function RecipesPage() {
                                     </div>
                                     <div className="overflow-hidden">
                                         <p className={`font-bold truncate ${selectedProduct?.id === product.id ? 'text-slate-900' : 'text-slate-600'}`}>{product.name}</p>
-                                        <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">{product.categoryName}</p>
+                                        <div className="flex items-center gap-1.5">
+                                            <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">{product.categoryName}</p>
+                                            {/* Sellable and invisible until stocktake. Flagged
+                                                rather than blocked: a corkage fee legitimately
+                                                has no recipe. */}
+                                            {product._count?.recipes === 0 && (
+                                                <span
+                                                    title={t.no_recipe_help}
+                                                    className="text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200"
+                                                >
+                                                    {t.no_recipe}
+                                                </span>
+                                            )}
+                                        </div>
                                     </div>
                                 </div>
                             </button>

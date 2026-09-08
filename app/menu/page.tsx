@@ -48,6 +48,8 @@ type MenuItem = {
   isAvailable: boolean
   image?: string
   variations: VariationItem[]
+  /** How many recipe rows this item has. Zero means it deducts no stock. */
+  _count?: { recipes: number }
 }
 
 const DEFAULT_SIZES = [
@@ -911,9 +913,23 @@ export default function MenuPage() {
                 </div>
 
                 <div className="flex items-center justify-between mt-1">
-                  <Badge variant="outline" className="text-[9px] font-bold bg-slate-50 border-slate-200 text-slate-500 uppercase">
-                    {item.category}
-                  </Badge>
+                  <div className="flex items-center gap-1">
+                    <Badge variant="outline" className="text-[9px] font-bold bg-slate-50 border-slate-200 text-slate-500 uppercase">
+                      {item.category}
+                    </Badge>
+                    {/* Sells but moves no stock - invisible until stocktake.
+                        Flagged rather than blocked: a corkage fee or a service
+                        charge legitimately has no recipe. */}
+                    {item._count?.recipes === 0 && (
+                      <Badge
+                        variant="outline"
+                        title={t.no_recipe_help}
+                        className="text-[9px] font-bold bg-amber-50 border-amber-200 text-amber-700 uppercase"
+                      >
+                        {t.no_recipe}
+                      </Badge>
+                    )}
+                  </div>
                   <div className="flex -space-x-1">
                     {item.variations?.filter(v => v.isEnabled).slice(0, 3).map((v, i) => (
                       <div 

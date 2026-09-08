@@ -11,6 +11,9 @@ export async function GET(request: Request) {
             where: availableOnly ? { isAvailable: true } : {},
             include: {
                 category: true,
+                // So a screen can say when an item sells but deducts no stock,
+                // without pulling every recipe row to find out.
+                _count: { select: { recipes: true } },
                 variations: {
                     where: availableOnly ? { isEnabled: true } : {},
                     include: {
@@ -47,6 +50,10 @@ export async function GET(request: Request) {
             categoryId: menu.categoryId,
             hasSugarLevel: menu.category?.hasSugarLevel ?? false,
             hasShotType: menu.category?.hasShotType ?? false,
+            // Zero means this item sells but deducts no stock. The response is
+            // flattened rather than passed through, so this has to be carried
+            // explicitly or the screens never see it.
+            _count: menu._count,
             variations: menu.variations.map(variation => ({
                 id: variation.id,
                 type: variation.type,
