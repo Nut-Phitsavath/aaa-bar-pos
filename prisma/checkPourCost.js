@@ -61,7 +61,15 @@ async function main() {
             continue
         }
 
-        const cost = menu.recipes.reduce((sum, r) => sum + r.quantity * r.ingredient.cost, 0)
+        // Recipe.quantity is in base units since the base-units migration, and
+        // ingredient.cost is still per purchase unit - which is what the
+        // invoice says. Without the divisor a single whisky prices at 700
+        // times its worth. Mirrors recipeCost() in lib/pour-cost.ts; keep the
+        // two in step.
+        const cost = menu.recipes.reduce((sum, r) => {
+            const m = r.ingredient.purchaseMultiplier || 1
+            return sum + r.quantity * (r.ingredient.cost / m)
+        }, 0)
         const pct = (cost / price) * 100
         const band = BANDS[menu.category?.name] ?? [0, 100]
 

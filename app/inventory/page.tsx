@@ -8,9 +8,13 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog"
-import { Plus, Edit, Trash2, Package, ShoppingCart, Minus, Settings, Search, ArrowUpDown, Store, Warehouse, Printer } from "lucide-react"
+import { Plus, Edit, Trash2, Package, ShoppingCart, Minus, Settings, Search, ArrowUpDown, Store, Warehouse, Printer, Pencil } from "lucide-react"
 import { formatTHB } from "@/lib/currency"
 import { formatStock } from "@/lib/stock"
+import { formatStockOf, toBase, fromBase } from "@/lib/units"
+import { UnitFields } from "@/components/inventory/unit-fields"
+import { canEditUnits } from "@/lib/ingredient-form"
+import type { MeasureType } from "@/lib/units"
 import { Header } from "@/components/header"
 import { FormattedNumberInput } from "@/components/ui/formatted-number-input"
 import { FormattedTextInput } from "@/components/ui/formatted-text-input"
@@ -34,6 +38,10 @@ type Ingredient = {
   id: string
   name: string
   unit: string
+  measureType: MeasureType
+  baseUnit: string
+  purchaseUnit: string
+  purchaseMultiplier: number
   mainStock: number
   subStock: number
   minStock: number
@@ -65,6 +73,10 @@ export default function InventoryPage() {
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [isCatDialogOpen, setIsCatDialogOpen] = useState(false)
   const [newCatName, setNewCatName] = useState("")
+  // Which category row is currently being renamed in place, and the draft.
+  const [renamingId, setRenamingId] = useState<string | null>(null)
+  const [renameValue, setRenameValue] = useState("")
+  const [renameSaving, setRenameSaving] = useState(false)
   const [editingItem, setEditingItem] = useState<Ingredient | null>(null)
   const [activeTab, setActiveTab] = useState<"SUB" | "MAIN">("SUB")
   const [isTransferOpen, setIsTransferOpen] = useState(false)
@@ -85,6 +97,9 @@ export default function InventoryPage() {
   const [formData, setFormData] = useState({
     name: "",
     unit: "kg",
+    measureType: "EACH",
+    purchaseUnit: "",
+    purchaseMultiplier: "1",
     mainStock: "",
     minStock: "",
     maxStock: "",
@@ -94,16 +109,129 @@ export default function InventoryPage() {
     categoryId: ""
   })
 
+  // Whether this user may still change the conversion on the item being
+  // edited. Uses the same function the route enforces with - re-implementing
+  // the role list here is how a form and its endpoint start disagreeing.
+  const [role, setRole] = useState("")
+  const [unitsLocked, setUnitsLocked] = useState(false)
+
   useEffect(() => {
     fetchInventory()
     fetchCategories()
+    fetch('/api/auth/me')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => setRole(d?.user?.role ?? d?.role ?? ""))
+      .catch(() => setRole(""))
   }, [])
+
+  useEffect(() => {
+    if (!editingItem) { setUnitsLocked(false); return }
+    // A movement row, not a non-zero balance: an ingredient received and fully
+    // consumed is back at zero and must stay locked.
+    fetch(`/api/stock-transactions?ingredientId=${editingItem.id}&limit=1`)
+      .then((r) => (r.ok ? r.json() : []))
+      .then((rows) => {
+        const hasMovements = Array.isArray(rows) ? rows.length > 0 : (rows?.transactions?.length ?? 0) > 0
+        setUnitsLocked(!canEditUnits({ hasMovements, role }).ok)
+      })
+      .catch(() => setUnitsLocked(false))
+  }, [editingItem, role])
 
   const fetchCategories = async () => {
     try {
       const res = await fetch('/api/inventory-categories')
       if (res.ok) setCategories(await res.json())
     } catch (e) { console.error(e) }
+  }
+
+  /**
+   * A stock or par figure, typed in the unit the person actually holds.
+   *
+   * These are stored in base units, and were being sent raw - so a par of
+   * "6 bottles" on a 700ml spirit saved as 6 millilitres, silently, with
+   * nothing on screen saying which unit the box wanted. Same fault the deposit
+   * and transfer dialogs had; this is the last place it lived.
+   *
+   * The placeholder is a plausible figure in that unit, so an empty box shows
+   * the shape of the answer instead of nothing at all.
+   *
+   * Deliberately a function that returns JSX rather than a component rendered
+   * as <StockField/>: a component defined inside another component is a new
+   * type on every render, so React would remount the input and it would lose
+   * focus after every keystroke.
+   */
+  const stockField = (
+    field: "mainStock" | "minStock" | "maxStock" | "minStockSub" | "maxStockSub",
+    placeholder: string,
+  ) => (
+    <div className="relative">
+      <FormattedNumberInput
+        allowDecimals
+        className="pr-20 tabular-nums"
+        placeholder={placeholder}
+        value={formData[field]}
+        onChange={(val: string) => setFormData({ ...formData, [field]: val })}
+      />
+      <span className="absolute right-4 top-1/2 -translate-y-1/2 text-[10px] font-black uppercase tracking-widest text-slate-300 pointer-events-none">
+        {formData.purchaseUnit || ""}
+      </span>
+    </div>
+  )
+
+  const handleAddCategory = async () => {
+    const name = newCatName.trim()
+    if (!name) return
+    try {
+      const res = await fetch('/api/inventory-categories', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name })
+      })
+      if (res.ok) {
+        notify.success(t.saved_success, { description: name })
+        setNewCatName("")
+        fetchCategories()
+      } else {
+        const err = (await res.json()).error
+        notify.error(err === "CATEGORY_NAME_TAKEN" ? t.category_name_taken : err || t.save_failed)
+      }
+    } catch (e) {
+      console.error(e)
+      notify.error(t.save_failed)
+    }
+  }
+
+  /**
+   * Rename a category from the row it lives on.
+   *
+   * On failure the row stays in edit mode with the text intact: a duplicate
+   * name is a thing to correct, and closing the editor would make the person
+   * start again from a name they can no longer see.
+   */
+  const handleRenameCategory = async (id: string) => {
+    const name = renameValue.trim()
+    if (!name) return
+    setRenameSaving(true)
+    try {
+      const res = await fetch(`/api/inventory-categories/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name })
+      })
+      if (res.ok) {
+        notify.success(t.saved_success, { description: name })
+        setRenamingId(null)
+        fetchCategories()
+      } else {
+        const err = (await res.json()).error
+        notify.error(err === "CATEGORY_NAME_TAKEN" ? t.category_name_taken : err || t.save_failed)
+      }
+    } catch (e) {
+      console.error(e)
+      notify.error(t.save_failed)
+    } finally {
+      setRenameSaving(false)
+    }
   }
 
   const fetchInventory = async () => {
@@ -122,15 +250,27 @@ export default function InventoryPage() {
       const url = editingItem ? `/api/inventory/${editingItem.id}` : '/api/inventory'
       const method = editingItem ? 'PUT' : 'POST'
 
+      // The multiplier as it stands on the form: if it was just changed, the
+      // par figures the person typed are in the NEW unit, which is what they
+      // meant by typing them there.
+      const multiplier = parseFloat(formData.purchaseMultiplier) || 1
+
       // Convert string values to numbers for API
       const payload = {
         name: formData.name,
-        unit: formData.unit,
-        mainStock: parseFloat(formData.mainStock) || 0,
-        minStock: parseFloat(formData.minStock) || 0,
-        maxStock: parseFloat(formData.maxStock) || 0,
-        minStockSub: parseFloat(formData.minStockSub) || 0,
-        maxStockSub: parseFloat(formData.maxStockSub) || 0,
+        // The legacy column keeps showing something sensible on screens that
+        // still read it; nothing computes from it any more.
+        unit: formData.purchaseUnit || formData.unit,
+        measureType: formData.measureType,
+        purchaseUnit: formData.purchaseUnit,
+        purchaseMultiplier: parseFloat(formData.purchaseMultiplier) || 1,
+        // Typed in purchase units - what a person counts - and stored in base
+        // units like every other quantity in the system.
+        mainStock: toBase(parseFloat(formData.mainStock) || 0, multiplier),
+        minStock: toBase(parseFloat(formData.minStock) || 0, multiplier),
+        maxStock: toBase(parseFloat(formData.maxStock) || 0, multiplier),
+        minStockSub: toBase(parseFloat(formData.minStockSub) || 0, multiplier),
+        maxStockSub: toBase(parseFloat(formData.maxStockSub) || 0, multiplier),
         cost: parseFloat(formData.cost) || 0,
         categoryId: formData.categoryId || null
       }
@@ -165,11 +305,16 @@ export default function InventoryPage() {
     setFormData({
       name: item.name,
       unit: item.unit,
-      mainStock: item.mainStock.toString(),
-      minStock: item.minStock.toString(),
-      maxStock: item.maxStock.toString(),
-      minStockSub: item.minStockSub.toString(),
-      maxStockSub: item.maxStockSub.toString(),
+      measureType: item.measureType || "EACH",
+      purchaseUnit: item.purchaseUnit || item.unit,
+      purchaseMultiplier: (item.purchaseMultiplier ?? 1).toString(),
+      // Shown back in the unit it was typed in. Stored base units would put
+      // "4200" in a box labelled bottles.
+      mainStock: fromBase(item.mainStock, item.purchaseMultiplier ?? 1).toString(),
+      minStock: fromBase(item.minStock, item.purchaseMultiplier ?? 1).toString(),
+      maxStock: fromBase(item.maxStock, item.purchaseMultiplier ?? 1).toString(),
+      minStockSub: fromBase(item.minStockSub, item.purchaseMultiplier ?? 1).toString(),
+      maxStockSub: fromBase(item.maxStockSub, item.purchaseMultiplier ?? 1).toString(),
       cost: item.cost.toString(),
       categoryId: item.categoryId || ""
     })
@@ -186,14 +331,16 @@ export default function InventoryPage() {
         body: JSON.stringify({
           ingredientId: transferItem.id,
           type: 'TRANSFER',
-          quantity: parseFloat(transferQty),
+          // Typed in purchase units, moved in base units - staff carry bottles
+          // from the store room, not millilitres.
+          quantity: toBase(parseFloat(transferQty), transferItem.purchaseMultiplier),
           fromStore: 'MAIN',
           toStore: 'SUB'
         })
       })
 
       if (res.ok) {
-        notify.success(t.transfer_success, { description: `${transferQty} ${transferItem.unit} — ${transferItem.name} → ${t.to_shop}` })
+        notify.success(t.transfer_success, { description: `${transferQty} ${transferItem.purchaseUnit} — ${transferItem.name} → ${t.to_shop}` })
         setIsTransferOpen(false)
         setTransferQty("")
         fetchInventory()
@@ -228,6 +375,9 @@ export default function InventoryPage() {
     setFormData({
       name: "",
       unit: "kg",
+      measureType: "EACH",
+      purchaseUnit: "",
+      purchaseMultiplier: "1",
       mainStock: "",
       minStock: "",
       maxStock: "",
@@ -360,7 +510,15 @@ export default function InventoryPage() {
                 {t.print_count_sheet}
               </Button>
 
-              <Dialog open={isCatDialogOpen} onOpenChange={setIsCatDialogOpen}>
+              <Dialog
+                open={isCatDialogOpen}
+                onOpenChange={(open) => {
+                  setIsCatDialogOpen(open)
+                  // Closing mid-rename must not leave a half-typed draft
+                  // waiting to reappear the next time it opens.
+                  if (!open) { setRenamingId(null); setRenameValue(""); setNewCatName("") }
+                }}
+              >
                 <DialogTrigger asChild>
                   <Button variant="outline" className="border-amber-200 text-amber-700 hover:bg-amber-50">
                     <Settings className="w-4 h-4 mr-2" />
@@ -373,82 +531,112 @@ export default function InventoryPage() {
                   </DialogHeader>
                   <div className="space-y-4 py-4">
                     <div className="flex gap-2">
-                      <Input 
-                        placeholder={t.new_category_name || "New category name"} 
+                      <Input
+                        placeholder={t.new_category_name || "New category name"}
                         value={newCatName}
                         onChange={e => setNewCatName(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === "Enter" && newCatName.trim()) handleAddCategory() }}
+                        className="h-11 rounded-xl"
                       />
-                      <Button onClick={async () => {
-                        if(!newCatName) return;
-                        const res = await fetch('/api/inventory-categories', {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({ name: newCatName })
-                        });
-                        if (res.ok) {
-                          notify.success(t.saved_success, { description: newCatName });
-                          setNewCatName("");
-                          fetchCategories();
-                        } else {
-                          notify.error((await res.json()).error || t.save_failed);
-                        }
-                      }}>
+                      {/* Amber, like every other primary action in the app. It
+                          was the default dark button, which reads as a
+                          different kind of control than it is. */}
+                      <Button
+                        className="h-11 px-5 rounded-xl bg-amber-600 hover:bg-amber-700 font-bold shrink-0"
+                        disabled={!newCatName.trim()}
+                        onClick={handleAddCategory}
+                      >
                         {t.add || "Add"}
                       </Button>
                     </div>
-                    <div className="border rounded-md max-h-[300px] overflow-y-auto">
-                      <Table>
-                        <TableBody>
-                          {categories.map(cat => (
-                            <TableRow key={cat.id}>
-                              <TableCell className="font-medium">
-                                {cat.name}
-                              </TableCell>
-                              <TableCell className="text-right text-muted-foreground text-xs">
-                                {cat._count?.ingredients || 0} {t.items || "items"}
-                              </TableCell>
-                              <TableCell className="text-right flex gap-1 justify-end">
-                                <Button 
-                                  variant="ghost" 
-                                  size="icon" 
-                                  className="h-11 w-11 text-slate-400 hover:text-amber-600"
-                                  onClick={async () => {
-                                    const newName = prompt("Rename to:", cat.name);
-                                    if(newName && newName !== cat.name) {
-                                      const res = await fetch(`/api/inventory-categories/${cat.id}`, {
-                                        method: 'PUT',
-                                        headers: { 'Content-Type': 'application/json' },
-                                        body: JSON.stringify({ name: newName })
-                                      });
-                                      if (res.ok) { notify.success(t.saved_success, { description: newName }); fetchCategories(); }
-                                      else notify.error((await res.json()).error || t.save_failed);
-                                    }
+                    {/* A list, not a table - there are no columns to compare,
+                        and Table without a header is a heavier component than
+                        the content deserves. */}
+                    <div className="rounded-2xl border border-slate-200 divide-y divide-slate-100 max-h-[320px] overflow-y-auto">
+                      {categories.length === 0 && (
+                        <p className="px-4 py-10 text-center text-sm text-slate-400">{t.no_categories_yet}</p>
+                      )}
+                      {categories.map(cat => {
+                        const editing = renamingId === cat.id
+                        const dirty = renameValue.trim() && renameValue.trim() !== cat.name
+                        return (
+                          <div key={cat.id} className="flex items-center gap-2 px-3 py-2">
+                            {editing ? (
+                              /* Renamed in place. A browser prompt() cannot be
+                                 styled, cannot be translated, and drops the
+                                 person out of the app to a grey OS box. */
+                              <>
+                                <Input
+                                  autoFocus
+                                  value={renameValue}
+                                  disabled={renameSaving}
+                                  onChange={(e) => setRenameValue(e.target.value)}
+                                  onFocus={(e) => e.currentTarget.select()}
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter" && dirty) handleRenameCategory(cat.id)
+                                    if (e.key === "Escape") setRenamingId(null)
                                   }}
+                                  className="h-11 flex-1 rounded-xl border-amber-500 focus:ring-4 focus:ring-amber-500/10"
+                                />
+                                <Button
+                                  size="sm"
+                                  className="h-11 px-4 rounded-xl bg-amber-600 hover:bg-amber-700 font-bold"
+                                  disabled={!dirty || renameSaving}
+                                  onClick={() => handleRenameCategory(cat.id)}
                                 >
-                                  <ArrowUpDown className="h-4 w-4 rotate-90" />
+                                  {renameSaving ? t.saving : t.save}
                                 </Button>
-                                <Button 
-                                  variant="ghost" 
-                                  size="icon" 
-                                  className="h-11 w-11 text-slate-400 hover:text-red-600"
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-11 px-3 rounded-xl text-slate-500"
+                                  disabled={renameSaving}
+                                  onClick={() => setRenamingId(null)}
+                                >
+                                  {t.cancel}
+                                </Button>
+                              </>
+                            ) : (
+                              <>
+                                {/* The name IS the affordance, so there is no
+                                    second icon to decipher. The pencil stays
+                                    visible rather than appearing on hover -
+                                    this is a touch till and hover does not
+                                    exist there. */}
+                                <button
+                                  type="button"
+                                  title={t.rename}
+                                  onClick={() => { setRenamingId(cat.id); setRenameValue(cat.name) }}
+                                  className="group flex-1 flex items-center gap-2 text-left rounded-xl px-2 py-2 -mx-2 hover:bg-amber-50/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/40 transition-colors duration-150"
+                                >
+                                  <span className="font-semibold text-slate-900">{cat.name}</span>
+                                  <Pencil className="w-3.5 h-3.5 text-slate-300 group-hover:text-amber-600 transition-colors duration-150" />
+                                </button>
+                                <span className="text-xs text-slate-400 tabular-nums shrink-0">
+                                  {cat._count?.ingredients || 0} {t.items || "items"}
+                                </span>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  title={t.delete}
+                                  className="h-11 w-11 shrink-0 text-slate-300 hover:text-rose-600 hover:bg-rose-50"
                                   onClick={async () => {
                                     if (await confirm({ title: t.delete_category_confirm, description: `${cat.name} — ${t.delete_category_desc}`, confirmLabel: t.delete, destructive: true })) {
-                                      const res = await fetch(`/api/inventory-categories/${cat.id}`, {
-                                        method: 'DELETE'
-                                      });
-                                      if (res.ok) { notify.success(t.deleted_success); fetchCategories(); }
-                                      else notify.error((await res.json()).error || t.delete_failed);
+                                      const res = await fetch(`/api/inventory-categories/${cat.id}`, { method: 'DELETE' })
+                                      if (res.ok) { notify.success(t.deleted_success); fetchCategories() }
+                                      else notify.error((await res.json()).error || t.delete_failed)
                                     }
                                   }}
                                 >
                                   <Trash2 className="h-4 w-4" />
                                 </Button>
-                              </TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
+                              </>
+                            )}
+                          </div>
+                        )
+                      })}
                     </div>
+                    <p className="text-xs text-slate-400">{t.rename_hint}</p>
                   </div>
                 </DialogContent>
               </Dialog>
@@ -483,42 +671,48 @@ export default function InventoryPage() {
                           ))}
                         </select>
                       </div>
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                          <Label>{t.unit}</Label>
-                          <FormattedTextInput
-                            placeholder="e.g. kg, L, pcs"
-                            value={formData.unit}
-                            onChange={val => setFormData({ ...formData, unit: val })}
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label>{t.initial_warehouse_stock}</Label>
-                          <FormattedNumberInput value={formData.mainStock} onChange={val => setFormData({ ...formData, mainStock: val })} />
-                          <p className="text-xs text-muted-foreground">{t.shop_stock_starts_zero}</p>
-                        </div>
+                      <UnitFields
+                        locked={unitsLocked}
+                        value={{
+                          name: formData.name,
+                          measureType: formData.measureType as MeasureType,
+                          purchaseUnit: formData.purchaseUnit,
+                          purchaseMultiplier: formData.purchaseMultiplier,
+                          cost: formData.cost,
+                        }}
+                        onChange={(next) => setFormData({
+                          ...formData,
+                          measureType: next.measureType,
+                          purchaseUnit: next.purchaseUnit,
+                          purchaseMultiplier: next.purchaseMultiplier,
+                        })}
+                      />
+                      <div className="space-y-2">
+                        <Label>{t.initial_warehouse_stock}</Label>
+                        {stockField("mainStock", "12")}
+                        <p className="text-xs text-muted-foreground">{t.shop_stock_starts_zero}</p>
                       </div>
-                      <div className="grid grid-cols-2 gap-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div className="space-y-2 p-3 bg-slate-50 rounded-lg">
-                          <Label className="text-amber-800 font-bold">🏭 Warehouse Limits</Label>
+                          <Label className="text-amber-800 font-bold">🏭 {t.warehouse_limits}</Label>
                           <div className="space-y-2 mt-2">
                             <Label>{t.min_stock}</Label>
-                            <FormattedNumberInput value={formData.minStock} onChange={val => setFormData({ ...formData, minStock: val })} />
+                            {stockField("minStock", "6")}
                           </div>
                           <div className="space-y-2">
                             <Label>{t.max_stock}</Label>
-                            <FormattedNumberInput value={formData.maxStock} onChange={val => setFormData({ ...formData, maxStock: val })} />
+                            {stockField("maxStock", "60")}
                           </div>
                         </div>
                         <div className="space-y-2 p-3 bg-amber-50 rounded-lg">
-                          <Label className="text-amber-800 font-bold">🏪 Shop Limits</Label>
+                          <Label className="text-amber-800 font-bold">🏪 {t.shop_limits}</Label>
                           <div className="space-y-2 mt-2">
                             <Label>{t.min_stock}</Label>
-                            <FormattedNumberInput value={formData.minStockSub} onChange={val => setFormData({ ...formData, minStockSub: val })} />
+                            {stockField("minStockSub", "2")}
                           </div>
                           <div className="space-y-2">
                             <Label>{t.max_stock}</Label>
-                            <FormattedNumberInput value={formData.maxStockSub} onChange={val => setFormData({ ...formData, maxStockSub: val })} />
+                            {stockField("maxStockSub", "12")}
                           </div>
                         </div>
                       </div>
@@ -622,7 +816,9 @@ export default function InventoryPage() {
                               clamped away, but shown in red because it is a
                               discrepancy to chase, not a stock level. */}
                           <TableCell className={`font-bold text-lg tabular-nums ${(activeTab === "SUB" ? item.subStock : item.mainStock) < 0 ? "text-rose-600" : ""}`}>
-                            {formatStock(activeTab === "SUB" ? item.subStock : item.mainStock)}
+                            {/* "3 bottles + 250 ml", not "907.2". Staff think
+                                in bottles even when the shelf is counted in ml. */}
+                            {formatStockOf(activeTab === "SUB" ? item.subStock : item.mainStock, item)}
                           </TableCell>
                           <TableCell>{item.unit}</TableCell>
                           <TableCell className="tabular-nums">{formatStock(activeTab === "SUB" ? item.minStockSub : item.minStock)}</TableCell>
@@ -712,15 +908,25 @@ export default function InventoryPage() {
                   Move stock from Warehouse to Shop for daily operations
                 </p>
                 <div className="space-y-2">
-                  <Label>{t.available_in_warehouse} {transferItem?.mainStock} {transferItem?.unit}</Label>
-                  <Label>{t.quantity_to_transfer}</Label>
-                  <Input
-                    type="number"
-                    placeholder={t.enter_quantity}
-                    value={transferQty}
-                    onChange={e => setTransferQty(e.target.value)}
-                    max={transferItem?.mainStock}
-                  />
+                  <Label>
+                    {t.available_in_warehouse}{" "}
+                    <span className="tabular-nums">
+                      {transferItem ? formatStockOf(transferItem.mainStock, transferItem) : ""}
+                    </span>
+                  </Label>
+                  <Label>{t.quantity_to_transfer} ({transferItem?.purchaseUnit})</Label>
+                  <div className="relative">
+                    <Input
+                      type="number"
+                      className="pr-20 tabular-nums"
+                      placeholder={t.enter_quantity}
+                      value={transferQty}
+                      onChange={e => setTransferQty(e.target.value)}
+                    />
+                    <span className="absolute right-4 top-1/2 -translate-y-1/2 font-black text-slate-300 pointer-events-none uppercase text-xs tracking-widest">
+                      {transferItem?.purchaseUnit}
+                    </span>
+                  </div>
                 </div>
               </div>
               <DialogFooter>
@@ -728,7 +934,7 @@ export default function InventoryPage() {
                 <Button
                   className="bg-amber-600 hover:bg-amber-700"
                   onClick={handleTransfer}
-                  disabled={!transferQty || parseFloat(transferQty) <= 0 || parseFloat(transferQty) > (transferItem?.mainStock || 0)}
+                  disabled={!transferQty || parseFloat(transferQty) <= 0 || toBase(parseFloat(transferQty), transferItem?.purchaseMultiplier ?? 1) > (transferItem?.mainStock || 0)}
                 >
                   Transfer to Shop
                 </Button>

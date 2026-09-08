@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { getSessionUser } from '@/lib/auth'
 
 export async function GET(request: Request) {
     try {
@@ -28,39 +29,55 @@ export async function POST(request: Request) {
 
         const difference = actualStock - theoreticalStock
 
-        const stockCount = await prisma.stockCount.create({
-            data: {
-                ingredientId,
-                theoreticalStock,
-                actualStock,
-                difference,
-                notes
-            }
-        })
+        // All three writes together, or none of them. Previously the count and
+        // the adjustment row were written first and the stock update ran on its
+        // own - so when it failed, the ledger was left claiming an adjustment
+        // that never reached the shelf, which is the one thing a stock ledger
+        // must never say.
+        // Who counted. A variance report whose "counted by" column is always a
+        // dash cannot answer the question a manager actually has, which is not
+        // "how much is missing" but "who was holding the clipboard".
+        const user = await getSessionUser()
 
-        // Optionally update the ingredient's warehouse stock to match actual count
-        // For now, we'll just record it. If the user wants to adjust stock, they can do a separate adjustment.
-        // OR we can automatically create an adjustment transaction if there is a difference.
-
-        if (difference !== 0) {
-            await prisma.stockTransaction.create({
+        const stockCount = await prisma.$transaction(async (tx) => {
+            const count = await tx.stockCount.create({
                 data: {
                     ingredientId,
-                    type: 'SHOP_ADJUST',
-                    quantity: difference,
-                    reason: `Stock Audit Adjustment: ${notes || 'No notes'}`,
-                    notes: `Theoretical: ${theoreticalStock}, Actual: ${actualStock}`
+                    theoreticalStock,
+                    actualStock,
+                    notes,
+                    difference,
+                    userId: user?.id ?? null
                 }
             })
 
-            // Update ingredient stock
-            await prisma.ingredient.update({
-                where: { id: ingredientId },
-                data: {
-                    shopStock: { increment: difference }
-                }
-            })
-        }
+            if (difference !== 0) {
+                await tx.stockTransaction.create({
+                    data: {
+                        ingredientId,
+                        type: 'SHOP_ADJUST',
+                        quantity: difference,
+                        toStore: 'SUB',
+                        userId: user?.id ?? null,
+                        reason: `Stock Audit Adjustment: ${notes || 'No notes'}`,
+                        notes: `Theoretical: ${theoreticalStock}, Actual: ${actualStock}`
+                    }
+                })
+
+                // subStock is the shop shelf. `shopStock` is not a field on
+                // Ingredient and never has been, so this threw on every count
+                // that found a discrepancy - which is the only kind anyone
+                // submits, and the whole point of counting.
+                await tx.ingredient.update({
+                    where: { id: ingredientId },
+                    data: {
+                        subStock: { increment: difference }
+                    }
+                })
+            }
+
+            return count
+        })
 
         return NextResponse.json(stockCount)
     } catch (error) {

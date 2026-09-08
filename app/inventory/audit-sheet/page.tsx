@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Printer, ArrowLeft } from "lucide-react"
 import { useTranslation } from "@/hooks/use-translation"
 import { APP_NAME } from "@/lib/shop"
-import { formatStock } from "@/lib/stock"
+import { formatStockOf, type MeasureType } from "@/lib/units"
 
 /**
  * The stock count sheet (requirement #22).
@@ -44,6 +44,9 @@ type Row = {
     name: string
     unit: string
     subStock: number
+    measureType: MeasureType
+    purchaseUnit: string
+    purchaseMultiplier: number
     category?: { name: string } | null
 }
 
@@ -139,8 +142,14 @@ export default function AuditSheetPage() {
                                     {items.map((r) => (
                                         <tr key={r.id} className="border-b border-slate-200">
                                             <td className="py-2 font-semibold">{r.name}</td>
-                                            <td className="py-2 text-slate-500">{r.unit}</td>
-                                            <td className="py-2 text-right tabular-nums">{formatStock(r.subStock)}</td>
+                                            <td className="py-2 text-slate-500">{r.purchaseUnit}</td>
+                                            {/* "3 bottles + 250 ml", not "3.357". Somebody is
+                                                standing at the fridge with a pen, and a
+                                                repeating decimal is not a number they can
+                                                check against a shelf. */}
+                                            <td className="py-2 text-right tabular-nums">
+                                                {formatStockOf(r.subStock, r)}
+                                            </td>
                                             {/* Ruled boxes, wide enough to write in with a pen. */}
                                             <td className="py-2">
                                                 <div className="h-6 border-b border-slate-400 ms-3" />

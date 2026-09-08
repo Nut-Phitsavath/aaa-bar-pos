@@ -12,6 +12,7 @@
     "db:push": "prisma db push",
     "db:seed": "node prisma/seedBarData.js",
     "db:demo": "node prisma/seedDemoHistory.js",
+    "db:migrate-units": "node prisma/migrateToBaseUnits.js",
     "check:pourcost": "node prisma/checkPourCost.js"
   },
   "dependencies": {

@@ -250,3 +250,32 @@ test('taking drinks out with nothing in return is refused', () => {
         { ok: false, reason: 'REPLACEMENT_REQUIRED' },
     )
 })
+
+test('an EACH ingredient at quantity 1 is exchangeable', () => {
+    const menus: SellableMenu[] = [
+        { menuId: 'm-heineken', variationSizeId: 'v', name: 'Heineken', unitPrice: 60,
+          recipe: [{ ingredientId: 'i-heineken', quantity: 1, measureType: 'EACH' }] },
+    ]
+    assert.equal(componentIndex(menus).get('i-heineken')?.name, 'Heineken')
+})
+
+test('a WEIGHT ingredient is never exchangeable, whatever its quantity', () => {
+    // Ice at 1000g would have passed the old "quantity === 1" proxy the moment
+    // somebody defined a 1kg ice bag. The rule now says what it means: you can
+    // hand back a bottle, not a gram of ice.
+    const menus: SellableMenu[] = [
+        { menuId: 'm-ice', variationSizeId: 'v', name: 'Ice 1kg', unitPrice: 20,
+          recipe: [{ ingredientId: 'i-ice', quantity: 1, measureType: 'WEIGHT' }] },
+    ]
+    assert.equal(componentIndex(menus).get('i-ice'), undefined)
+})
+
+test('a VOLUME ingredient is never exchangeable either', () => {
+    // A spirit measured in ml: after migration a Chivas Set holds 700ml, not
+    // "1 bottle", and nobody trades away the bottle that IS the package.
+    const menus: SellableMenu[] = [
+        { menuId: 'm-chivas', variationSizeId: 'v', name: 'Chivas shot', unitPrice: 200,
+          recipe: [{ ingredientId: 'i-chivas', quantity: 1, measureType: 'VOLUME' }] },
+    ]
+    assert.equal(componentIndex(menus).get('i-chivas'), undefined)
+})

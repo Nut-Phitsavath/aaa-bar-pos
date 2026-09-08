@@ -70,6 +70,9 @@ export async function GET(request: Request) {
     try {
         const { searchParams } = new URL(request.url)
         const ingredientId = searchParams.get('ingredientId')
+        // The ingredient form only needs to know whether ANY row exists, and
+        // pulling seventy of them to answer a boolean is waste on a till.
+        const limit = Number(searchParams.get('limit'))
 
         const where: any = {}
         if (ingredientId) where.ingredientId = ingredientId
@@ -79,7 +82,8 @@ export async function GET(request: Request) {
             include: {
                 ingredient: { select: { name: true, unit: true } }
             },
-            orderBy: { createdAt: 'desc' }
+            orderBy: { createdAt: 'desc' },
+            ...(Number.isFinite(limit) && limit > 0 ? { take: limit } : {})
         })
 
         return NextResponse.json(transactions)

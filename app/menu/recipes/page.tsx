@@ -7,7 +7,11 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog"
-import { Plus, Search, Trash2, ChevronRight, Package, Coffee } from "lucide-react"
+import { Plus, Search, Trash2, ChevronRight, ChevronLeft, Package, Coffee } from "lucide-react"
+import { FormattedTextInput } from "@/components/ui/formatted-text-input"
+import { FormattedNumberInput } from "@/components/ui/formatted-number-input"
+import { UnitFields } from "@/components/inventory/unit-fields"
+import type { MeasureType } from "@/lib/units"
 import Link from "next/link"
 import { formatTHB } from "@/lib/currency"
 
@@ -29,12 +33,14 @@ type Product = {
     name: string
     categoryName: string
     variations: Variation[]
+    _count?: { recipes: number }
 }
 
 type Ingredient = {
     id: string
     name: string
     unit: string
+    baseUnit: string
     categoryId?: string | null
     category?: { name: string }
 }
@@ -42,6 +48,18 @@ type Ingredient = {
 type Category = {
     id: string
     name: string
+}
+
+/** What GET /api/recipes/:id/cost returns. */
+type CostLine = { name: string; quantity: number; baseUnit: string; cost: number }
+type CostInfo = {
+    cost: number
+    price: number
+    margin: number
+    pourCostPct: number
+    band: [number, number]
+    verdict: "BELOW_COST" | "HIGH" | "OK" | "LOW"
+    lines: CostLine[]
 }
 
 type RecipeItem = {
@@ -74,6 +92,21 @@ export default function RecipesPage() {
     const [isAddIngredientOpen, setIsAddIngredientOpen] = useState(false)
     const [isLoading, setIsLoading] = useState(false)
     const [activeTab, setActiveTab] = useState("base")
+    const [costInfo, setCostInfo] = useState<CostInfo | null>(null)
+    const [costLoading, setCostLoading] = useState(false)
+
+    /** A blank ingredient, seeded with whatever was typed into the search. */
+    const emptyDraft = (name = "") => ({
+        name,
+        categoryId: "",
+        measureType: "EACH" as MeasureType,
+        purchaseUnit: "",
+        purchaseMultiplier: "1",
+        cost: "",
+    })
+    const [creatingIngredient, setCreatingIngredient] = useState(false)
+    const [draft, setDraft] = useState(emptyDraft())
+    const [savingIngredient, setSavingIngredient] = useState(false)
     const [categories, setCategories] = useState<Category[]>([])
     const [ingredientSearch, setIngredientSearch] = useState("")
     const [selectedCatId, setSelectedCatId] = useState("ALL")
@@ -109,10 +142,39 @@ export default function RecipesPage() {
         }
     }, [selectedProduct])
 
+    /**
+     * What this serving costs, against what it sells for.
+     *
+     * Refetched after every recipe edit rather than computed here, so the
+     * footer and the rows above it can never disagree - and so a change to an
+     * ingredient's cost shows up without anyone reloading the page.
+     */
+    useEffect(() => {
+        if (!selectedProduct) { setCostInfo(null); return }
+        setCostLoading(true)
+        const qs = activeTab !== "base" ? `?variationSizeId=${activeTab}` : ""
+        fetch(`/api/recipes/${selectedProduct.id}/cost${qs}`)
+            .then((r) => (r.ok ? r.json() : null))
+            .then(setCostInfo)
+            .catch(() => setCostInfo(null))
+            .finally(() => setCostLoading(false))
+    }, [selectedProduct, activeTab, recipe])
+
     const fetchProducts = async () => {
         try {
             const res = await fetch('/api/menu')
-            if (res.ok) setProducts(await res.json())
+            if (!res.ok) return
+            const list: Product[] = await res.json()
+            setProducts(list)
+
+            // Arrived from the "No recipe" flag on the menu screen. Landing on
+            // the list and making someone find the item again would waste the
+            // one thing the flag was for.
+            const wanted = new URLSearchParams(window.location.search).get('product')
+            if (wanted) {
+                const match = list.find((p) => p.id === wanted)
+                if (match) setSelectedProduct(match)
+            }
         } catch (e) { console.error(e) }
     }
 
@@ -121,6 +183,45 @@ export default function RecipesPage() {
             const res = await fetch('/api/inventory')
             if (res.ok) setIngredients(await res.json())
         } catch (e) { console.error(e) }
+    }
+
+    /**
+     * Create the missing ingredient and drop it straight into the recipe.
+     *
+     * The whole point of being here rather than on the inventory page: the
+     * manager came to build a recipe, found one ingredient did not exist, and
+     * should not have to leave, create it, come back and find their place.
+     */
+    const handleCreateAndAdd = async () => {
+        setSavingIngredient(true)
+        try {
+            const res = await fetch('/api/inventory', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    ...draft,
+                    unit: draft.purchaseUnit,
+                    purchaseMultiplier: parseFloat(draft.purchaseMultiplier) || 1,
+                    cost: parseFloat(draft.cost) || 0,
+                    categoryId: draft.categoryId || null,
+                    mainStock: 0, minStock: 0, maxStock: 0, minStockSub: 0, maxStockSub: 0,
+                }),
+            })
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({}))
+                notify.error(err.error || "Failed to create ingredient")
+                return
+            }
+            const created = await res.json()
+            setIngredients((prev) => [...prev, created])
+            setNewRecipeItem((prev) => ({ ...prev, ingredientId: created.id }))
+            setCreatingIngredient(false)
+        } catch (e) {
+            console.error(e)
+            notify.error("Failed to create ingredient")
+        } finally {
+            setSavingIngredient(false)
+        }
     }
 
     const fetchRecipe = async (productId: string) => {
@@ -177,10 +278,18 @@ export default function RecipesPage() {
         } catch (e) { console.error(e); notify.error(t.delete_failed) }
     }
 
-    const filteredProducts = products.filter(p =>
-        p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        p.categoryName?.toLowerCase().includes(searchQuery.toLowerCase())
-    )
+    const filteredProducts = products
+        .filter(p =>
+            p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            p.categoryName?.toLowerCase().includes(searchQuery.toLowerCase())
+        )
+        // Items that deduct nothing sort first: they are what somebody opened
+        // this screen to fix, and hunting for them defeats the flag.
+        .sort((a, b) => {
+            const an = (a._count?.recipes ?? 1) === 0 ? 0 : 1
+            const bn = (b._count?.recipes ?? 1) === 0 ? 0 : 1
+            return an - bn || a.name.localeCompare(b.name)
+        })
 
     // Helper to find scope name
     const getScopeName = (vSizeId: string | null) => {
@@ -270,7 +379,15 @@ export default function RecipesPage() {
                             <div className="flex items-center gap-6">
                                 <div className="text-right">
                                     <p className="text-xs text-muted-foreground">{t.quantity_used}</p>
-                                    <p className="font-bold text-lg text-slate-900">{item.quantity} {item.unit}</p>
+                                    <p className="font-bold text-lg text-slate-900 tabular-nums">{item.quantity} {item.unit}</p>
+                                    {/* Where the money actually goes. A total
+                                        alone has to be taken on trust. */}
+                                    {(() => {
+                                        const line = costInfo?.lines.find((l) => l.name === item.ingredientName)
+                                        return line ? (
+                                            <p className="text-xs text-slate-400 tabular-nums">{formatTHB(line.cost)}</p>
+                                        ) : null
+                                    })()}
                                 </div>
                                 <Button
                                     variant="ghost"
@@ -305,6 +422,49 @@ export default function RecipesPage() {
                             })()}
                         </div>
                     )}
+
+                    {/* What it costs against what it sells for. Without this a
+                        recipe that loses money looks identical to one that does
+                        not, and the bar finds out at stocktake. It is also
+                        where a wrong multiplier finally shows itself: gin
+                        entered as 7ml per bottle reads as a 1,500% loss. */}
+                    {costLoading ? (
+                        <div className="h-11 rounded-xl bg-slate-100 animate-pulse" aria-hidden />
+                    ) : costInfo && costInfo.lines.length > 0 ? (
+                        <div className="flex items-center gap-4 flex-wrap px-4 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-sm">
+                            <span className="text-slate-600">
+                                {t.recipe_cost}{" "}
+                                <strong className="text-slate-900 tabular-nums">{formatTHB(costInfo.cost)}</strong>
+                            </span>
+                            <span className="text-slate-300" aria-hidden>·</span>
+                            <span className="text-slate-600">
+                                {t.recipe_margin}{" "}
+                                <strong className="text-slate-900 tabular-nums">{formatTHB(costInfo.margin)}</strong>
+                            </span>
+                            {/* Rose loses money, emerald is in band, amber is a
+                                question in either direction - out of band high
+                                and out of band low are both worth a look, but
+                                neither is a failure. */}
+                            <span
+                                className={`ms-auto font-bold tabular-nums px-2.5 py-1 rounded-lg ${
+                                    costInfo.verdict === "BELOW_COST"
+                                        ? "bg-rose-50 text-rose-700"
+                                        : costInfo.verdict === "OK"
+                                            ? "bg-emerald-50 text-emerald-700"
+                                            : "bg-amber-50 text-amber-700"
+                                }`}
+                            >
+                                {t.pour_cost} {costInfo.pourCostPct}%
+                                <span className="font-semibold opacity-70">
+                                    {" · "}
+                                    {costInfo.verdict === "BELOW_COST" ? t.verdict_below_cost
+                                        : costInfo.verdict === "HIGH" ? t.verdict_high
+                                            : costInfo.verdict === "LOW" ? t.verdict_low
+                                                : t.verdict_ok}
+                                </span>
+                            </span>
+                        </div>
+                    ) : null}
                 </div>
             ) : (
                 <div className="py-12 border-2 border-dashed rounded-xl flex flex-col items-center justify-center text-center bg-slate-50/50">
@@ -370,7 +530,20 @@ export default function RecipesPage() {
                                     </div>
                                     <div className="overflow-hidden">
                                         <p className={`font-bold truncate ${selectedProduct?.id === product.id ? 'text-slate-900' : 'text-slate-600'}`}>{product.name}</p>
-                                        <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">{product.categoryName}</p>
+                                        <div className="flex items-center gap-1.5">
+                                            <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">{product.categoryName}</p>
+                                            {/* Sellable and invisible until stocktake. Flagged
+                                                rather than blocked: a corkage fee legitimately
+                                                has no recipe. */}
+                                            {product._count?.recipes === 0 && (
+                                                <span
+                                                    title={t.no_recipe_help}
+                                                    className="text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200"
+                                                >
+                                                    {t.no_recipe}
+                                                </span>
+                                            )}
+                                        </div>
                                     </div>
                                 </div>
                             </button>
@@ -446,6 +619,78 @@ export default function RecipesPage() {
                                         </div>
                                     </DialogHeader>
                                     
+                                    {/* The create form replaces the dialog's body rather than
+                                        opening a second dialog on top of it. Modal-on-modal is
+                                        where a touch till loses people; this is one surface that
+                                        changes what it is showing, with a way back. */}
+                                    {creatingIngredient ? (
+                                    <div className="p-8 space-y-6 bg-white">
+                                        <button
+                                            type="button"
+                                            onClick={() => setCreatingIngredient(false)}
+                                            className="flex items-center gap-2 text-sm font-bold text-slate-400 hover:text-slate-900 transition-colors"
+                                        >
+                                            <ChevronLeft className="w-4 h-4" /> {t.back_to_search}
+                                        </button>
+
+                                        <div className="space-y-2">
+                                            <Label className="text-xs font-black text-slate-400 uppercase tracking-widest">{t.name}</Label>
+                                            <FormattedTextInput
+                                                value={draft.name}
+                                                onChange={(v: string) => setDraft({ ...draft, name: v })}
+                                            />
+                                        </div>
+
+                                        <div className="space-y-2">
+                                            <Label className="text-xs font-black text-slate-400 uppercase tracking-widest">{t.category}</Label>
+                                            <select
+                                                className="w-full h-14 rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm font-bold text-slate-600 focus:ring-4 focus:ring-amber-500/10 focus:border-amber-500"
+                                                value={draft.categoryId}
+                                                onChange={(e) => setDraft({ ...draft, categoryId: e.target.value })}
+                                            >
+                                                <option value="">—</option>
+                                                {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                                            </select>
+                                        </div>
+
+                                        {/* The same block the inventory page uses, so both places
+                                            that create an ingredient teach one thing. */}
+                                        <UnitFields
+                                            value={{
+                                                name: draft.name,
+                                                measureType: draft.measureType,
+                                                purchaseUnit: draft.purchaseUnit,
+                                                purchaseMultiplier: draft.purchaseMultiplier,
+                                                cost: draft.cost,
+                                            }}
+                                            onChange={(next) => setDraft({
+                                                ...draft,
+                                                measureType: next.measureType,
+                                                purchaseUnit: next.purchaseUnit,
+                                                purchaseMultiplier: next.purchaseMultiplier,
+                                            })}
+                                        />
+
+                                        <div className="space-y-2">
+                                            <Label className="text-xs font-black text-slate-400 uppercase tracking-widest">
+                                                {t.cost_per_unit} {draft.purchaseUnit ? `/ ${draft.purchaseUnit}` : ""}
+                                            </Label>
+                                            <FormattedNumberInput
+                                                allowDecimals
+                                                value={draft.cost}
+                                                onChange={(v: string) => setDraft({ ...draft, cost: v })}
+                                            />
+                                        </div>
+
+                                        <Button
+                                            className="w-full h-16 rounded-2xl bg-amber-600 hover:bg-amber-700 text-white font-black text-lg shadow-xl shadow-amber-600/20 transition-all active:scale-95"
+                                            disabled={!draft.name || !draft.purchaseUnit || savingIngredient}
+                                            onClick={handleCreateAndAdd}
+                                        >
+                                            {savingIngredient ? t.processing : t.create_and_add}
+                                        </Button>
+                                    </div>
+                                    ) : (
                                     <div className="p-0 bg-white">
                                         {/* Search and Category Filter */}
                                         <div className="p-8 pb-4 space-y-4">
@@ -493,7 +738,7 @@ export default function RecipesPage() {
                                                             </div>
                                                             <div className="overflow-hidden flex-1">
                                                                 <p className="font-black truncate text-sm leading-tight uppercase tracking-tight">{ing.name}</p>
-                                                                <p className={`text-[10px] uppercase font-black tracking-widest mt-0.5 ${newRecipeItem.ingredientId === ing.id ? 'text-amber-200' : 'text-slate-400'}`}>{ing.unit}</p>
+                                                                <p className={`text-[10px] uppercase font-black tracking-widest mt-0.5 ${newRecipeItem.ingredientId === ing.id ? 'text-amber-200' : 'text-slate-400'}`}>{ing.baseUnit}</p>
                                                             </div>
                                                         </button>
                                                     ))
@@ -504,6 +749,16 @@ export default function RecipesPage() {
                                                         <p className="text-slate-400 font-bold">{t.no_ingredients_found || "No matching ingredients"}</p>
                                                     </div>
                                                 )}
+                                                {/* Always visible, not only on an empty search:
+                                                    it has to be findable before someone gives up
+                                                    and goes hunting for the inventory page. */}
+                                                <button
+                                                    type="button"
+                                                    onClick={() => { setDraft(emptyDraft(ingredientSearch)); setCreatingIngredient(true) }}
+                                                    className="col-span-2 h-14 rounded-2xl border-2 border-dashed border-slate-200 text-slate-500 font-bold hover:border-amber-500 hover:text-amber-700 hover:bg-amber-50/50 transition-colors flex items-center justify-center gap-2"
+                                                >
+                                                    <Plus className="w-4 h-4" /> {t.new_ingredient}
+                                                </button>
                                             </div>
                                         </div>
 
@@ -524,8 +779,11 @@ export default function RecipesPage() {
                                                             value={newRecipeItem.quantity || ''}
                                                             onChange={e => setNewRecipeItem({ ...newRecipeItem, quantity: parseFloat(e.target.value) || 0 })}
                                                         />
+                                                        {/* A recipe quantity is in BASE units. Labelling
+                                                            it with the purchase unit invited someone to
+                                                            type 1 meaning a bottle and get 1 millilitre. */}
                                                         <span className="absolute right-6 top-1/2 -translate-y-1/2 font-black text-slate-300 pointer-events-none group-focus-within:text-amber-600 uppercase text-sm tracking-widest">
-                                                            {ingredients.find(i => i.id === newRecipeItem.ingredientId)?.unit || '-'}
+                                                            {ingredients.find(i => i.id === newRecipeItem.ingredientId)?.baseUnit || '-'}
                                                         </span>
                                                     </div>
                                                 </div>
@@ -549,6 +807,7 @@ export default function RecipesPage() {
                                             </DialogFooter>
                                         </div>
                                     </div>
+                                    )}
                                 </DialogContent>
                             </Dialog>
                         </div>

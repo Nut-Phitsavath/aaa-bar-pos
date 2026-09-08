@@ -9,16 +9,16 @@ import { FormattedNumberInput } from "@/components/ui/formatted-number-input"
 import { ShoppingCart } from "lucide-react"
 import { useTranslation } from "@/hooks/use-translation"
 import { notify } from "@/components/ui/sonner"
+import { formatStockOf, toBase, type UnitBearing } from "@/lib/units"
 
 interface DepositDialogProps {
     open: boolean
     onOpenChange: (open: boolean) => void
-    ingredient: {
+    ingredient: (UnitBearing & {
         id: string
         name: string
-        unit: string
         mainStock: number
-    } | null
+    }) | null
     onSuccess: () => void
 }
 
@@ -42,14 +42,17 @@ export function DepositDialog({ open, onOpenChange, ingredient, onSuccess }: Dep
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     ingredientId: ingredient.id,
-                    quantity: parseFloat(quantity),
+                    // Typed in purchase units, stored in base units. Without
+                    // this a delivery of 12 bottles booked in 12 millilitres.
+                    quantity: toBase(parseFloat(quantity), ingredient.purchaseMultiplier),
+                    // Cost stays per purchase unit - it is what the invoice says.
                     cost: cost ? parseFloat(cost) : undefined,
                     notes: notes || undefined
                 })
             })
 
             if (res.ok) {
-                notify.success(t.deposited_successfully, { description: `${quantity} ${ingredient.unit} — ${ingredient.name}` })
+                notify.success(t.deposited_successfully, { description: `${quantity} ${ingredient.purchaseUnit} — ${ingredient.name}` })
                 handleClose()
                 onSuccess()
             } else {
@@ -86,24 +89,38 @@ export function DepositDialog({ open, onOpenChange, ingredient, onSuccess }: Dep
                 <div className="space-y-4">
                     <div className="p-3 bg-blue-50 rounded-lg border border-blue-100">
                         <p className="text-sm text-muted-foreground">{t.current_warehouse_stock}</p>
-                        <p className="text-2xl font-bold text-blue-700">{ingredient.mainStock} {ingredient.unit}</p>
-                    </div>
-
-                    <div className="space-y-2">
-                        <Label>{t.quantity_to_deposit} *</Label>
-                        <FormattedNumberInput
-                            value={quantity}
-                            onChange={setQuantity}
-                            allowDecimals={true}
-                            placeholder={t.enter_quantity}
-                        />
-                        <p className="text-xs text-muted-foreground">
-                            {t.new_stock_will_be} {ingredient.mainStock + (parseFloat(quantity) || 0)} {ingredient.unit}
+                        <p className="text-2xl font-bold text-blue-700 tabular-nums">
+                            {formatStockOf(ingredient.mainStock, ingredient)}
                         </p>
                     </div>
 
                     <div className="space-y-2">
-                        <Label>{t.cost_per_unit_optional}</Label>
+                        {/* Counted in whatever the delivery note says, because
+                            that is what the person holding it is reading from. */}
+                        <Label>{t.quantity_to_deposit} ({ingredient.purchaseUnit}) *</Label>
+                        <div className="relative">
+                            <FormattedNumberInput
+                                value={quantity}
+                                onChange={setQuantity}
+                                allowDecimals={true}
+                                className="pr-20 tabular-nums"
+                                placeholder={t.enter_quantity}
+                            />
+                            <span className="absolute right-4 top-1/2 -translate-y-1/2 font-black text-slate-300 pointer-events-none uppercase text-xs tracking-widest">
+                                {ingredient.purchaseUnit}
+                            </span>
+                        </div>
+                        <p className="text-xs text-muted-foreground tabular-nums">
+                            {t.new_stock_will_be}{" "}
+                            {formatStockOf(
+                                ingredient.mainStock + toBase(parseFloat(quantity) || 0, ingredient.purchaseMultiplier),
+                                ingredient
+                            )}
+                        </p>
+                    </div>
+
+                    <div className="space-y-2">
+                        <Label>{t.cost_per_unit_optional} ({ingredient.purchaseUnit})</Label>
                         <FormattedNumberInput
                             value={cost}
                             onChange={setCost}

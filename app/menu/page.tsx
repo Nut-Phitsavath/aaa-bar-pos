@@ -11,7 +11,7 @@ import { Header } from "@/components/header"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Switch } from "@/components/ui/switch"
-import { Plus, Edit, Trash2, Search, ImageIcon, X, Check, Minus, GripVertical } from "lucide-react"
+import { Plus, Edit, Trash2, Search, ImageIcon, X, Check, Minus, GripVertical, ClipboardList } from "lucide-react"
 import Link from "next/link"
 import Image from "next/image"
 import { useTranslation } from "@/hooks/use-translation"
@@ -20,6 +20,7 @@ import { useConfirm } from "@/components/confirm-provider"
 import { ReorderPanel } from "@/components/menu/reorder-panel"
 import { useLongPress } from "@/hooks/use-long-press"
 import { PriceInput } from "@/components/ui/PriceInput"
+import { RecipeEditor, type RecipeRow, type EditorIngredient } from "@/components/menu/recipe-editor"
 
 // --- Types ---
 type SizeItem = {
@@ -48,6 +49,8 @@ type MenuItem = {
   isAvailable: boolean
   image?: string
   variations: VariationItem[]
+  /** How many recipe rows this item has. Zero means it deducts no stock. */
+  _count?: { recipes: number }
 }
 
 const DEFAULT_SIZES = [
@@ -82,9 +85,27 @@ export default function MenuPage() {
   // Variation form state
   const [formVariations, setFormVariations] = useState<VariationItem[]>([])
 
+  /**
+   * The item's base recipe, buffered until Save.
+   *
+   * Held rather than written as you go so the dialog has one Save button and
+   * cancelling creates nothing - including for an item that does not exist yet.
+   * `originalRecipe` is what was loaded, so save can tell a removal from a row
+   * that was never there.
+   */
+  const [formRecipe, setFormRecipe] = useState<RecipeRow[]>([])
+  const [originalRecipe, setOriginalRecipe] = useState<RecipeRow[]>([])
+  const [editorIngredients, setEditorIngredients] = useState<EditorIngredient[]>([])
+
   useEffect(() => {
     fetchMenuItems()
     fetchCategories()
+    // Needed to price the recipe as it is built; the cost arithmetic runs in
+    // the browser so the figure moves as the price is typed.
+    fetch('/api/inventory')
+      .then((r) => (r.ok ? r.json() : []))
+      .then((rows) => setEditorIngredients(Array.isArray(rows) ? rows : []))
+      .catch(() => setEditorIngredients([]))
   }, [])
 
   const fetchMenuItems = async () => {
@@ -188,8 +209,36 @@ export default function MenuPage() {
     )
   }, [menuItems, searchQuery, activeCategory])
 
+  /**
+   * How many items sell but deduct no stock.
+   *
+   * Counted across the whole menu, not the current filter: the work does not
+   * stop existing because you are looking at one category.
+   */
+  const missingRecipes = useMemo(
+    () => menuItems.filter((m) => m._count?.recipes === 0).length,
+    [menuItems]
+  )
+
   const handleEdit = (item: MenuItem) => {
     setEditingItem(item)
+
+    // Load the base recipe into the buffer so Save can diff against it. Only
+    // base rows: a per-size recipe belongs to the recipes screen, and silently
+    // dropping one here would delete work this dialog never showed.
+    setFormRecipe([])
+    setOriginalRecipe([])
+    fetch(`/api/recipes/${item.id}`)
+      .then((r) => (r.ok ? r.json() : []))
+      .then((rows: { ingredientId: string; quantity: number; variationSizeId: string | null }[]) => {
+        const base = (Array.isArray(rows) ? rows : [])
+          .filter((r) => !r.variationSizeId)
+          .map((r) => ({ ingredientId: r.ingredientId, quantity: r.quantity }))
+        setFormRecipe(base)
+        setOriginalRecipe(base)
+      })
+      .catch(() => { setFormRecipe([]); setOriginalRecipe([]) })
+
     setFormData({
       id: item.id,
       name: item.name,
@@ -229,6 +278,8 @@ export default function MenuPage() {
     // Start with empty variations or maybe a default "Regular"?
     // User requested dynamic. Let's start empty and provide "Add Variation" UI.
     setFormVariations([])
+    setFormRecipe([])
+    setOriginalRecipe([])
     setIsDialogOpen(true)
   }
 
@@ -247,6 +298,31 @@ export default function MenuPage() {
     } catch (error) {
       console.error("Failed to delete", error)
       notify.error(t.delete_failed)
+    }
+  }
+
+  /**
+   * Apply the buffered recipe to a saved item.
+   *
+   * Upsert what is in the buffer, delete what was loaded and then removed.
+   * Runs after the item exists, which is the only reason the buffer exists at
+   * all - a new item has no id to hang recipe rows off until it is created.
+   */
+  const saveRecipe = async (productId: string) => {
+    const removed = originalRecipe.filter(
+      (o) => !formRecipe.some((r) => r.ingredientId === o.ingredientId)
+    )
+    for (const row of formRecipe) {
+      await fetch(`/api/recipes/${productId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ingredientId: row.ingredientId, quantity: row.quantity, variationSizeId: null })
+      })
+    }
+    for (const row of removed) {
+      await fetch(`/api/recipes/${productId}?ingredientId=${row.ingredientId}&variationSizeId=null`, {
+        method: 'DELETE'
+      })
     }
   }
 
@@ -275,6 +351,7 @@ export default function MenuPage() {
           headers: { 'Content-Type': 'application/json' }
         })
         if (res.ok) {
+          await saveRecipe(editingItem.id)
           notify.success(t.saved_success, { description: formData.name })
           setIsDialogOpen(false)
           fetchMenuItems()
@@ -289,6 +366,10 @@ export default function MenuPage() {
           headers: { 'Content-Type': 'application/json' }
         })
         if (res.ok) {
+          // The recipe rows need the id the item was just given, which is the
+          // whole reason they were held rather than written as they were added.
+          const created = await res.json()
+          if (created?.id) await saveRecipe(created.id)
           notify.success(t.saved_success, { description: formData.name })
           setIsDialogOpen(false)
           fetchMenuItems()
@@ -374,11 +455,10 @@ export default function MenuPage() {
     <div className="min-h-screen bg-background pb-20">
       {/* Header */}
 
-      <Header title={t.menu_management}>
-        <Link href="/menu/recipes">
-          <Button variant="outline" size="lg" className="text-md">{t.recipes}</Button>
-        </Link>
-      </Header>
+      {/* Recipes moved out of the header and into the action row below. Beside
+          the title it read as a subtitle; nobody looks there for something to
+          do, and it is the way in to linking stock to what you sell. */}
+      <Header title={t.menu_management} />
 
       <div className="p-6 space-y-6">
         {/* Search and Add */}
@@ -392,6 +472,27 @@ export default function MenuPage() {
               className="pl-10"
             />
           </div>
+          {/* Sits with the other things you can do, and says whether there is
+              anything to do: an item that sells but deducts no stock is
+              invisible until stocktake, so the count is the whole point of
+              putting this here rather than a plain link. */}
+          <Link href="/menu/recipes" className="shrink-0">
+            <Button
+              variant="outline"
+              className={missingRecipes > 0
+                ? "border-amber-500 text-amber-700 bg-amber-50/60 hover:bg-amber-100 font-bold"
+                : "text-slate-600 hover:bg-slate-50"}
+            >
+              <ClipboardList className="w-4 h-4 mr-2" />
+              {t.recipes}
+              {missingRecipes > 0 && (
+                <span className="ms-2 min-w-5 h-5 px-1.5 grid place-items-center rounded-full bg-amber-600 text-white text-[11px] font-black tabular-nums">
+                  {missingRecipes}
+                </span>
+              )}
+            </Button>
+          </Link>
+
           <Dialog open={isCategoryDialogOpen} onOpenChange={setIsCategoryDialogOpen}>
             <DialogTrigger asChild>
               <Button variant="outline" className="border-amber-600 text-amber-600 hover:bg-amber-50">
@@ -770,7 +871,23 @@ export default function MenuPage() {
                   </div>
                 </div>
 
-                <DialogFooter>
+                {/* Sits with the price it has to justify. Creating the item and
+                    saying what it costs are one job; splitting them across two
+                    screens is what let items ship deducting no stock at all. */}
+                <div className="mt-6 pt-6 border-t border-slate-200">
+                  <RecipeEditor
+                    value={formRecipe}
+                    onChange={setFormRecipe}
+                    ingredients={editorIngredients}
+                    price={formVariations.flatMap((v) => v.sizes)[0]?.price ?? 0}
+                    categoryName={formData.category}
+                  />
+                </div>
+
+                {/* Real distance and a rule before the commit row. "Add an
+                    ingredient" and "save and close" were a thumb-width apart on
+                    the same vertical axis. */}
+                <DialogFooter className="mt-8 pt-5 border-t border-slate-200">
                   <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
                     {t.cancel}
                   </Button>
@@ -911,9 +1028,28 @@ export default function MenuPage() {
                 </div>
 
                 <div className="flex items-center justify-between mt-1">
-                  <Badge variant="outline" className="text-[9px] font-bold bg-slate-50 border-slate-200 text-slate-500 uppercase">
-                    {item.category}
-                  </Badge>
+                  <div className="flex items-center gap-1">
+                    <Badge variant="outline" className="text-[9px] font-bold bg-slate-50 border-slate-200 text-slate-500 uppercase">
+                      {item.category}
+                    </Badge>
+                    {/* Sells but moves no stock - invisible until stocktake.
+                        Flagged rather than blocked: a corkage fee or a service
+                        charge legitimately has no recipe.
+
+                        The flag is also the way to fix it: it opens this item's
+                        recipe directly, rather than telling someone there is a
+                        problem and leaving them to find the screen. */}
+                    {item._count?.recipes === 0 && (
+                      <Link
+                        href={`/menu/recipes?product=${item.id}`}
+                        title={t.no_recipe_help}
+                        onPointerDown={(e) => e.stopPropagation()}
+                        className="text-[9px] font-bold bg-amber-50 border border-amber-200 text-amber-700 uppercase rounded-md px-1.5 py-0.5 hover:bg-amber-100 hover:border-amber-400 transition-colors duration-150"
+                      >
+                        {t.no_recipe}
+                      </Link>
+                    )}
+                  </div>
                   <div className="flex -space-x-1">
                     {item.variations?.filter(v => v.isEnabled).slice(0, 3).map((v, i) => (
                       <div 
