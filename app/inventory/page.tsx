@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogT
 import { Plus, Edit, Trash2, Package, ShoppingCart, Minus, Settings, Search, ArrowUpDown, Store, Warehouse, Printer, Pencil } from "lucide-react"
 import { formatTHB } from "@/lib/currency"
 import { formatStock } from "@/lib/stock"
-import { formatStockOf, toBase } from "@/lib/units"
+import { formatStockOf, toBase, fromBase } from "@/lib/units"
 import { UnitFields } from "@/components/inventory/unit-fields"
 import { canEditUnits } from "@/lib/ingredient-form"
 import type { MeasureType } from "@/lib/units"
@@ -144,6 +144,40 @@ export default function InventoryPage() {
     } catch (e) { console.error(e) }
   }
 
+  /**
+   * A stock or par figure, typed in the unit the person actually holds.
+   *
+   * These are stored in base units, and were being sent raw - so a par of
+   * "6 bottles" on a 700ml spirit saved as 6 millilitres, silently, with
+   * nothing on screen saying which unit the box wanted. Same fault the deposit
+   * and transfer dialogs had; this is the last place it lived.
+   *
+   * The placeholder is a plausible figure in that unit, so an empty box shows
+   * the shape of the answer instead of nothing at all.
+   *
+   * Deliberately a function that returns JSX rather than a component rendered
+   * as <StockField/>: a component defined inside another component is a new
+   * type on every render, so React would remount the input and it would lose
+   * focus after every keystroke.
+   */
+  const stockField = (
+    field: "mainStock" | "minStock" | "maxStock" | "minStockSub" | "maxStockSub",
+    placeholder: string,
+  ) => (
+    <div className="relative">
+      <FormattedNumberInput
+        allowDecimals
+        className="pr-20 tabular-nums"
+        placeholder={placeholder}
+        value={formData[field]}
+        onChange={(val: string) => setFormData({ ...formData, [field]: val })}
+      />
+      <span className="absolute right-4 top-1/2 -translate-y-1/2 text-[10px] font-black uppercase tracking-widest text-slate-300 pointer-events-none">
+        {formData.purchaseUnit || ""}
+      </span>
+    </div>
+  )
+
   const handleAddCategory = async () => {
     const name = newCatName.trim()
     if (!name) return
@@ -216,6 +250,11 @@ export default function InventoryPage() {
       const url = editingItem ? `/api/inventory/${editingItem.id}` : '/api/inventory'
       const method = editingItem ? 'PUT' : 'POST'
 
+      // The multiplier as it stands on the form: if it was just changed, the
+      // par figures the person typed are in the NEW unit, which is what they
+      // meant by typing them there.
+      const multiplier = parseFloat(formData.purchaseMultiplier) || 1
+
       // Convert string values to numbers for API
       const payload = {
         name: formData.name,
@@ -225,11 +264,13 @@ export default function InventoryPage() {
         measureType: formData.measureType,
         purchaseUnit: formData.purchaseUnit,
         purchaseMultiplier: parseFloat(formData.purchaseMultiplier) || 1,
-        mainStock: parseFloat(formData.mainStock) || 0,
-        minStock: parseFloat(formData.minStock) || 0,
-        maxStock: parseFloat(formData.maxStock) || 0,
-        minStockSub: parseFloat(formData.minStockSub) || 0,
-        maxStockSub: parseFloat(formData.maxStockSub) || 0,
+        // Typed in purchase units - what a person counts - and stored in base
+        // units like every other quantity in the system.
+        mainStock: toBase(parseFloat(formData.mainStock) || 0, multiplier),
+        minStock: toBase(parseFloat(formData.minStock) || 0, multiplier),
+        maxStock: toBase(parseFloat(formData.maxStock) || 0, multiplier),
+        minStockSub: toBase(parseFloat(formData.minStockSub) || 0, multiplier),
+        maxStockSub: toBase(parseFloat(formData.maxStockSub) || 0, multiplier),
         cost: parseFloat(formData.cost) || 0,
         categoryId: formData.categoryId || null
       }
@@ -267,11 +308,13 @@ export default function InventoryPage() {
       measureType: item.measureType || "EACH",
       purchaseUnit: item.purchaseUnit || item.unit,
       purchaseMultiplier: (item.purchaseMultiplier ?? 1).toString(),
-      mainStock: item.mainStock.toString(),
-      minStock: item.minStock.toString(),
-      maxStock: item.maxStock.toString(),
-      minStockSub: item.minStockSub.toString(),
-      maxStockSub: item.maxStockSub.toString(),
+      // Shown back in the unit it was typed in. Stored base units would put
+      // "4200" in a box labelled bottles.
+      mainStock: fromBase(item.mainStock, item.purchaseMultiplier ?? 1).toString(),
+      minStock: fromBase(item.minStock, item.purchaseMultiplier ?? 1).toString(),
+      maxStock: fromBase(item.maxStock, item.purchaseMultiplier ?? 1).toString(),
+      minStockSub: fromBase(item.minStockSub, item.purchaseMultiplier ?? 1).toString(),
+      maxStockSub: fromBase(item.maxStockSub, item.purchaseMultiplier ?? 1).toString(),
       cost: item.cost.toString(),
       categoryId: item.categoryId || ""
     })
@@ -646,30 +689,30 @@ export default function InventoryPage() {
                       />
                       <div className="space-y-2">
                         <Label>{t.initial_warehouse_stock}</Label>
-                        <FormattedNumberInput value={formData.mainStock} onChange={val => setFormData({ ...formData, mainStock: val })} />
+                        {stockField("mainStock", "12")}
                         <p className="text-xs text-muted-foreground">{t.shop_stock_starts_zero}</p>
                       </div>
-                      <div className="grid grid-cols-2 gap-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div className="space-y-2 p-3 bg-slate-50 rounded-lg">
-                          <Label className="text-amber-800 font-bold">🏭 Warehouse Limits</Label>
+                          <Label className="text-amber-800 font-bold">🏭 {t.warehouse_limits}</Label>
                           <div className="space-y-2 mt-2">
                             <Label>{t.min_stock}</Label>
-                            <FormattedNumberInput value={formData.minStock} onChange={val => setFormData({ ...formData, minStock: val })} />
+                            {stockField("minStock", "6")}
                           </div>
                           <div className="space-y-2">
                             <Label>{t.max_stock}</Label>
-                            <FormattedNumberInput value={formData.maxStock} onChange={val => setFormData({ ...formData, maxStock: val })} />
+                            {stockField("maxStock", "60")}
                           </div>
                         </div>
                         <div className="space-y-2 p-3 bg-amber-50 rounded-lg">
-                          <Label className="text-amber-800 font-bold">🏪 Shop Limits</Label>
+                          <Label className="text-amber-800 font-bold">🏪 {t.shop_limits}</Label>
                           <div className="space-y-2 mt-2">
                             <Label>{t.min_stock}</Label>
-                            <FormattedNumberInput value={formData.minStockSub} onChange={val => setFormData({ ...formData, minStockSub: val })} />
+                            {stockField("minStockSub", "2")}
                           </div>
                           <div className="space-y-2">
                             <Label>{t.max_stock}</Label>
-                            <FormattedNumberInput value={formData.maxStockSub} onChange={val => setFormData({ ...formData, maxStockSub: val })} />
+                            {stockField("maxStockSub", "12")}
                           </div>
                         </div>
                       </div>
