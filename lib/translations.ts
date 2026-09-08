@@ -807,6 +807,11 @@ export const translations = {
         verdict_high: "Above band",
         verdict_low: "Below band",
         verdict_ok: "In band",
+        new_ingredient: "New ingredient",
+        back_to_search: "Back to search",
+        create_and_add: "Create and add",
+        no_recipe: "No recipe",
+        no_recipe_help: "Sells, but moves no stock",
         // --- Table sessions (bar floor plan) ---
         tables: "Tables",
         table: "Table",
@@ -1805,6 +1810,11 @@ export const translations = {
         verdict_high: "ສູງກວ່າເກນ",
         verdict_low: "ຕ່ຳກວ່າເກນ",
         verdict_ok: "ຢູ່ໃນເກນ",
+        new_ingredient: "ວັດຖຸດິບໃໝ່",
+        back_to_search: "ກັບໄປຄົ້ນຫາ",
+        create_and_add: "ສ້າງ ແລະ ເພີ່ມ",
+        no_recipe: "ບໍ່ມີສູດ",
+        no_recipe_help: "ຂາຍໄດ້ ແຕ່ບໍ່ຕັດສະຕັອກ",
         // --- Table sessions (bar floor plan) ---
         tables: "ໂຕະ",
         table: "ໂຕະ",

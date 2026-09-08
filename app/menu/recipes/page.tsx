@@ -7,7 +7,11 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog"
-import { Plus, Search, Trash2, ChevronRight, Package, Coffee } from "lucide-react"
+import { Plus, Search, Trash2, ChevronRight, ChevronLeft, Package, Coffee } from "lucide-react"
+import { FormattedTextInput } from "@/components/ui/formatted-text-input"
+import { FormattedNumberInput } from "@/components/ui/formatted-number-input"
+import { UnitFields } from "@/components/inventory/unit-fields"
+import type { MeasureType } from "@/lib/units"
 import Link from "next/link"
 import { formatTHB } from "@/lib/currency"
 
@@ -88,6 +92,19 @@ export default function RecipesPage() {
     const [activeTab, setActiveTab] = useState("base")
     const [costInfo, setCostInfo] = useState<CostInfo | null>(null)
     const [costLoading, setCostLoading] = useState(false)
+
+    /** A blank ingredient, seeded with whatever was typed into the search. */
+    const emptyDraft = (name = "") => ({
+        name,
+        categoryId: "",
+        measureType: "EACH" as MeasureType,
+        purchaseUnit: "",
+        purchaseMultiplier: "1",
+        cost: "",
+    })
+    const [creatingIngredient, setCreatingIngredient] = useState(false)
+    const [draft, setDraft] = useState(emptyDraft())
+    const [savingIngredient, setSavingIngredient] = useState(false)
     const [categories, setCategories] = useState<Category[]>([])
     const [ingredientSearch, setIngredientSearch] = useState("")
     const [selectedCatId, setSelectedCatId] = useState("ALL")
@@ -153,6 +170,45 @@ export default function RecipesPage() {
             const res = await fetch('/api/inventory')
             if (res.ok) setIngredients(await res.json())
         } catch (e) { console.error(e) }
+    }
+
+    /**
+     * Create the missing ingredient and drop it straight into the recipe.
+     *
+     * The whole point of being here rather than on the inventory page: the
+     * manager came to build a recipe, found one ingredient did not exist, and
+     * should not have to leave, create it, come back and find their place.
+     */
+    const handleCreateAndAdd = async () => {
+        setSavingIngredient(true)
+        try {
+            const res = await fetch('/api/inventory', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    ...draft,
+                    unit: draft.purchaseUnit,
+                    purchaseMultiplier: parseFloat(draft.purchaseMultiplier) || 1,
+                    cost: parseFloat(draft.cost) || 0,
+                    categoryId: draft.categoryId || null,
+                    mainStock: 0, minStock: 0, maxStock: 0, minStockSub: 0, maxStockSub: 0,
+                }),
+            })
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({}))
+                notify.error(err.error || "Failed to create ingredient")
+                return
+            }
+            const created = await res.json()
+            setIngredients((prev) => [...prev, created])
+            setNewRecipeItem((prev) => ({ ...prev, ingredientId: created.id }))
+            setCreatingIngredient(false)
+        } catch (e) {
+            console.error(e)
+            notify.error("Failed to create ingredient")
+        } finally {
+            setSavingIngredient(false)
+        }
     }
 
     const fetchRecipe = async (productId: string) => {
@@ -529,6 +585,78 @@ export default function RecipesPage() {
                                         </div>
                                     </DialogHeader>
                                     
+                                    {/* The create form replaces the dialog's body rather than
+                                        opening a second dialog on top of it. Modal-on-modal is
+                                        where a touch till loses people; this is one surface that
+                                        changes what it is showing, with a way back. */}
+                                    {creatingIngredient ? (
+                                    <div className="p-8 space-y-6 bg-white">
+                                        <button
+                                            type="button"
+                                            onClick={() => setCreatingIngredient(false)}
+                                            className="flex items-center gap-2 text-sm font-bold text-slate-400 hover:text-slate-900 transition-colors"
+                                        >
+                                            <ChevronLeft className="w-4 h-4" /> {t.back_to_search}
+                                        </button>
+
+                                        <div className="space-y-2">
+                                            <Label className="text-xs font-black text-slate-400 uppercase tracking-widest">{t.name}</Label>
+                                            <FormattedTextInput
+                                                value={draft.name}
+                                                onChange={(v: string) => setDraft({ ...draft, name: v })}
+                                            />
+                                        </div>
+
+                                        <div className="space-y-2">
+                                            <Label className="text-xs font-black text-slate-400 uppercase tracking-widest">{t.category}</Label>
+                                            <select
+                                                className="w-full h-14 rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm font-bold text-slate-600 focus:ring-4 focus:ring-amber-500/10 focus:border-amber-500"
+                                                value={draft.categoryId}
+                                                onChange={(e) => setDraft({ ...draft, categoryId: e.target.value })}
+                                            >
+                                                <option value="">—</option>
+                                                {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                                            </select>
+                                        </div>
+
+                                        {/* The same block the inventory page uses, so both places
+                                            that create an ingredient teach one thing. */}
+                                        <UnitFields
+                                            value={{
+                                                name: draft.name,
+                                                measureType: draft.measureType,
+                                                purchaseUnit: draft.purchaseUnit,
+                                                purchaseMultiplier: draft.purchaseMultiplier,
+                                                cost: draft.cost,
+                                            }}
+                                            onChange={(next) => setDraft({
+                                                ...draft,
+                                                measureType: next.measureType,
+                                                purchaseUnit: next.purchaseUnit,
+                                                purchaseMultiplier: next.purchaseMultiplier,
+                                            })}
+                                        />
+
+                                        <div className="space-y-2">
+                                            <Label className="text-xs font-black text-slate-400 uppercase tracking-widest">
+                                                {t.cost_per_unit} {draft.purchaseUnit ? `/ ${draft.purchaseUnit}` : ""}
+                                            </Label>
+                                            <FormattedNumberInput
+                                                allowDecimals
+                                                value={draft.cost}
+                                                onChange={(v: string) => setDraft({ ...draft, cost: v })}
+                                            />
+                                        </div>
+
+                                        <Button
+                                            className="w-full h-16 rounded-2xl bg-amber-600 hover:bg-amber-700 text-white font-black text-lg shadow-xl shadow-amber-600/20 transition-all active:scale-95"
+                                            disabled={!draft.name || !draft.purchaseUnit || savingIngredient}
+                                            onClick={handleCreateAndAdd}
+                                        >
+                                            {savingIngredient ? t.processing : t.create_and_add}
+                                        </Button>
+                                    </div>
+                                    ) : (
                                     <div className="p-0 bg-white">
                                         {/* Search and Category Filter */}
                                         <div className="p-8 pb-4 space-y-4">
@@ -587,6 +715,16 @@ export default function RecipesPage() {
                                                         <p className="text-slate-400 font-bold">{t.no_ingredients_found || "No matching ingredients"}</p>
                                                     </div>
                                                 )}
+                                                {/* Always visible, not only on an empty search:
+                                                    it has to be findable before someone gives up
+                                                    and goes hunting for the inventory page. */}
+                                                <button
+                                                    type="button"
+                                                    onClick={() => { setDraft(emptyDraft(ingredientSearch)); setCreatingIngredient(true) }}
+                                                    className="col-span-2 h-14 rounded-2xl border-2 border-dashed border-slate-200 text-slate-500 font-bold hover:border-amber-500 hover:text-amber-700 hover:bg-amber-50/50 transition-colors flex items-center justify-center gap-2"
+                                                >
+                                                    <Plus className="w-4 h-4" /> {t.new_ingredient}
+                                                </button>
                                             </div>
                                         </div>
 
@@ -632,6 +770,7 @@ export default function RecipesPage() {
                                             </DialogFooter>
                                         </div>
                                     </div>
+                                    )}
                                 </DialogContent>
                             </Dialog>
                         </div>
