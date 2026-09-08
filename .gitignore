@@ -19,8 +19,9 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files
+# env files (.env.example is committed as the template)
 .env*
+!.env.example
 .env.local
 .env.development.local
 .env.test.local
