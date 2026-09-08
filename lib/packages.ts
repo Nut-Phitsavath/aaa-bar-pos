@@ -16,6 +16,8 @@
  * same number, so they run the same arithmetic.
  */
 
+import type { MeasureType } from './units.ts'
+
 /** A component of a package, priced at what the bar sells it for singly. */
 export type Component = {
     /** The single-serve menu item this component is sold as. */
@@ -46,7 +48,12 @@ export type SellableMenu = {
     name: string
     localName?: string | null
     unitPrice: number
-    recipe: { ingredientId: string; quantity: number }[]
+    /**
+     * `measureType` is optional so a caller that has not joined the ingredient
+     * can still build an index; where it is absent the old quantity rule alone
+     * applies, which is what every existing test relies on.
+     */
+    recipe: { ingredientId: string; quantity: number; measureType?: MeasureType }[]
 }
 
 export function componentIndex(menus: SellableMenu[]): Map<string, SellableMenu> {
@@ -54,6 +61,12 @@ export function componentIndex(menus: SellableMenu[]): Map<string, SellableMenu>
     for (const menu of menus) {
         if (menu.recipe.length !== 1) continue
         const [only] = menu.recipe
+        // Only a whole-unit ingredient can be exchanged: a customer can hand
+        // back a bottle, not 150 grams of ice or 30ml out of a measure. This
+        // used to be inferred from `quantity === 1`, which was standing in for
+        // a measure type that did not exist yet - and which would have quietly
+        // made ice exchangeable the day somebody added a 1kg bag to the menu.
+        if (only.measureType && only.measureType !== 'EACH') continue
         if (only.quantity !== 1) continue
         // First one wins, and menus arrive in a stable order, so which item
         // represents an ingredient does not change between two reads.

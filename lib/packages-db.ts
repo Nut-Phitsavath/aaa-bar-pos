@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/prisma'
 import type { SellableMenu } from '@/lib/packages'
+import type { MeasureType } from '@/lib/units'
 
 /**
  * Every menu item, with the one price and the recipe a package swap needs.
@@ -13,7 +14,16 @@ export async function sellableMenus(): Promise<SellableMenu[]> {
     const menus = await prisma.menu.findMany({
         where: { isAvailable: true },
         include: {
-            recipes: { select: { ingredientId: true, quantity: true } },
+            // measureType comes along so componentIndex can say what it means -
+            // only a whole-unit ingredient is exchangeable - instead of
+            // inferring it from the quantity being exactly 1.
+            recipes: {
+                select: {
+                    ingredientId: true,
+                    quantity: true,
+                    ingredient: { select: { measureType: true } },
+                },
+            },
             variations: {
                 include: { sizes: { where: { isAvailable: true }, orderBy: { displayOrder: 'asc' } } },
             },
@@ -29,7 +39,11 @@ export async function sellableMenus(): Promise<SellableMenu[]> {
             name: m.name,
             localName: m.localName,
             unitPrice: size?.price ?? 0,
-            recipe: m.recipes.map((r) => ({ ingredientId: r.ingredientId, quantity: r.quantity })),
+            recipe: m.recipes.map((r) => ({
+                ingredientId: r.ingredientId,
+                quantity: r.quantity,
+                measureType: r.ingredient.measureType as MeasureType,
+            })),
         }
     })
 }

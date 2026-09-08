@@ -5,7 +5,7 @@
  * is exactly the line the other strikes.
  */
 
-import type { StockMovement } from './stock'
+import type { StockMovement } from './stock.ts'
 
 /**
  * Bilingual and snapshotted, exactly like every other order line: a receipt has

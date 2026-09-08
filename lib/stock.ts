@@ -11,6 +11,11 @@
  * so two tills serving the same bottle at once still add up.
  */
 
+// Extension required: node --experimental-strip-types resolves these at
+// runtime for the lib tests, and tsconfig sets allowImportingTsExtensions for
+// exactly this reason.
+import { DECIMALS, formatDual, roundFor, type MeasureType } from './units.ts'
+
 /**
  * Enough to hold a millilitre out of a bottle; short enough to stay legible.
  *
@@ -105,8 +110,20 @@ export async function decrementStock(
 /**
  * How to show a stock figure. Trailing zeros are noise on a count sheet -
  * "300 bottles" not "300.000" - but a part-bottle still has to be readable.
+ *
+ * `measureType` is optional so call sites that do not have the ingredient to
+ * hand keep working; pass it wherever it is available and the figure rounds
+ * the way that type is stored.
  */
-export function formatStock(value: number | null | undefined): string {
+export function formatStock(value: number | null | undefined, measureType?: MeasureType): string {
     const n = Number(value) || 0
-    return Number(n.toFixed(STOCK_DP)).toLocaleString("en-US", { maximumFractionDigits: STOCK_DP })
+    const dp = measureType ? DECIMALS[measureType] : STOCK_DP
+    return Number(n.toFixed(dp)).toLocaleString("en-US", { maximumFractionDigits: dp })
 }
+
+/**
+ * Re-exported so a screen showing stock has one import rather than two, and so
+ * "which module formats stock" has a single answer.
+ */
+export { formatDual, roundFor }
+export type { MeasureType }
