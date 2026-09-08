@@ -53,6 +53,6 @@ next-env.d.ts
 current_main_pos.tsx
 
 # Ad-hoc database copies (dev.db.backup, dev.db.before-<x>) - "*.db" does not
-# match these, and one slipped into a commit as 2.5MB of real sales data.
+# match these, and one slipped into a commit as 2.5MB of binary churn.
 *.db.*
 *.db-*
