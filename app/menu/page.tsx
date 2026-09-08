@@ -20,6 +20,7 @@ import { useConfirm } from "@/components/confirm-provider"
 import { ReorderPanel } from "@/components/menu/reorder-panel"
 import { useLongPress } from "@/hooks/use-long-press"
 import { PriceInput } from "@/components/ui/PriceInput"
+import { RecipeEditor, type RecipeRow, type EditorIngredient } from "@/components/menu/recipe-editor"
 
 // --- Types ---
 type SizeItem = {
@@ -84,9 +85,27 @@ export default function MenuPage() {
   // Variation form state
   const [formVariations, setFormVariations] = useState<VariationItem[]>([])
 
+  /**
+   * The item's base recipe, buffered until Save.
+   *
+   * Held rather than written as you go so the dialog has one Save button and
+   * cancelling creates nothing - including for an item that does not exist yet.
+   * `originalRecipe` is what was loaded, so save can tell a removal from a row
+   * that was never there.
+   */
+  const [formRecipe, setFormRecipe] = useState<RecipeRow[]>([])
+  const [originalRecipe, setOriginalRecipe] = useState<RecipeRow[]>([])
+  const [editorIngredients, setEditorIngredients] = useState<EditorIngredient[]>([])
+
   useEffect(() => {
     fetchMenuItems()
     fetchCategories()
+    // Needed to price the recipe as it is built; the cost arithmetic runs in
+    // the browser so the figure moves as the price is typed.
+    fetch('/api/inventory')
+      .then((r) => (r.ok ? r.json() : []))
+      .then((rows) => setEditorIngredients(Array.isArray(rows) ? rows : []))
+      .catch(() => setEditorIngredients([]))
   }, [])
 
   const fetchMenuItems = async () => {
@@ -203,6 +222,23 @@ export default function MenuPage() {
 
   const handleEdit = (item: MenuItem) => {
     setEditingItem(item)
+
+    // Load the base recipe into the buffer so Save can diff against it. Only
+    // base rows: a per-size recipe belongs to the recipes screen, and silently
+    // dropping one here would delete work this dialog never showed.
+    setFormRecipe([])
+    setOriginalRecipe([])
+    fetch(`/api/recipes/${item.id}`)
+      .then((r) => (r.ok ? r.json() : []))
+      .then((rows: { ingredientId: string; quantity: number; variationSizeId: string | null }[]) => {
+        const base = (Array.isArray(rows) ? rows : [])
+          .filter((r) => !r.variationSizeId)
+          .map((r) => ({ ingredientId: r.ingredientId, quantity: r.quantity }))
+        setFormRecipe(base)
+        setOriginalRecipe(base)
+      })
+      .catch(() => { setFormRecipe([]); setOriginalRecipe([]) })
+
     setFormData({
       id: item.id,
       name: item.name,
@@ -242,6 +278,8 @@ export default function MenuPage() {
     // Start with empty variations or maybe a default "Regular"?
     // User requested dynamic. Let's start empty and provide "Add Variation" UI.
     setFormVariations([])
+    setFormRecipe([])
+    setOriginalRecipe([])
     setIsDialogOpen(true)
   }
 
@@ -260,6 +298,31 @@ export default function MenuPage() {
     } catch (error) {
       console.error("Failed to delete", error)
       notify.error(t.delete_failed)
+    }
+  }
+
+  /**
+   * Apply the buffered recipe to a saved item.
+   *
+   * Upsert what is in the buffer, delete what was loaded and then removed.
+   * Runs after the item exists, which is the only reason the buffer exists at
+   * all - a new item has no id to hang recipe rows off until it is created.
+   */
+  const saveRecipe = async (productId: string) => {
+    const removed = originalRecipe.filter(
+      (o) => !formRecipe.some((r) => r.ingredientId === o.ingredientId)
+    )
+    for (const row of formRecipe) {
+      await fetch(`/api/recipes/${productId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ingredientId: row.ingredientId, quantity: row.quantity, variationSizeId: null })
+      })
+    }
+    for (const row of removed) {
+      await fetch(`/api/recipes/${productId}?ingredientId=${row.ingredientId}&variationSizeId=null`, {
+        method: 'DELETE'
+      })
     }
   }
 
@@ -288,6 +351,7 @@ export default function MenuPage() {
           headers: { 'Content-Type': 'application/json' }
         })
         if (res.ok) {
+          await saveRecipe(editingItem.id)
           notify.success(t.saved_success, { description: formData.name })
           setIsDialogOpen(false)
           fetchMenuItems()
@@ -302,6 +366,10 @@ export default function MenuPage() {
           headers: { 'Content-Type': 'application/json' }
         })
         if (res.ok) {
+          // The recipe rows need the id the item was just given, which is the
+          // whole reason they were held rather than written as they were added.
+          const created = await res.json()
+          if (created?.id) await saveRecipe(created.id)
           notify.success(t.saved_success, { description: formData.name })
           setIsDialogOpen(false)
           fetchMenuItems()
@@ -801,6 +869,19 @@ export default function MenuPage() {
                       ))}
                     </div>
                   </div>
+                </div>
+
+                {/* Sits with the price it has to justify. Creating the item and
+                    saying what it costs are one job; splitting them across two
+                    screens is what let items ship deducting no stock at all. */}
+                <div className="mt-6 pt-6 border-t border-slate-200">
+                  <RecipeEditor
+                    value={formRecipe}
+                    onChange={setFormRecipe}
+                    ingredients={editorIngredients}
+                    price={formVariations.flatMap((v) => v.sizes)[0]?.price ?? 0}
+                    categoryName={formData.category}
+                  />
                 </div>
 
                 <DialogFooter>
