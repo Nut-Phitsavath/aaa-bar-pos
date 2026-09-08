@@ -217,13 +217,19 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
             for (const line of outLines) {
                 if (!line.variationSizeId) continue
                 for (const r of await recipeFor(tx, line.variationSizeId)) {
-                    await decrementStock(tx, r.ingredientId, -(r.quantity * line.quantity))
+                    await decrementStock(tx, r.ingredientId, -(r.quantity * line.quantity), {
+                        type: 'EXCHANGE', userId: user.id,
+                        notes: `swap out, item ${item.id}`, reason: line.menuId,
+                    })
                 }
             }
             for (const line of inLines) {
                 if (!line.variationSizeId) continue
                 for (const r of await recipeFor(tx, line.variationSizeId)) {
-                    await decrementStock(tx, r.ingredientId, r.quantity * line.quantity)
+                    await decrementStock(tx, r.ingredientId, r.quantity * line.quantity, {
+                        type: 'EXCHANGE', userId: user.id,
+                        notes: `swap in, item ${item.id}`, reason: line.menuId,
+                    })
                 }
             }
 

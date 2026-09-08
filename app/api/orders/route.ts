@@ -418,7 +418,9 @@ export async function POST(request: Request) {
                         })
 
                         for (const recipe of recipes) {
-                            await decrementStock(tx, recipe.ingredientId, recipe.quantity * item.quantity)
+                            await decrementStock(tx, recipe.ingredientId, recipe.quantity * item.quantity, {
+                                type: 'SALE', userId, notes: `order ${orderId}`, reason: vs.variation.menu.id,
+                            })
                         }
                     }
                 }
@@ -480,7 +482,9 @@ export async function POST(request: Request) {
                         })
 
                         for (const recipe of recipes) {
-                            await decrementStock(tx, recipe.ingredientId, -(recipe.quantity * item.quantity))
+                            await decrementStock(tx, recipe.ingredientId, -(recipe.quantity * item.quantity), {
+                                type: 'SALE_VOID', userId, notes: `order ${orderId}`, reason: vs.variation.menu.id,
+                            })
                         }
                     }
                 }

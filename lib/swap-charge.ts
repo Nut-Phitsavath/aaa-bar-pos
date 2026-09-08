@@ -5,6 +5,8 @@
  * is exactly the line the other strikes.
  */
 
+import type { StockMovement } from './stock'
+
 /**
  * Bilingual and snapshotted, exactly like every other order line: a receipt has
  * to read the same next year whatever language the till is set to now, and
@@ -43,13 +45,23 @@ export async function reverseSwap(
     tx: any,
     swap: { id: string; chargeItemId: string | null; lines: any[] },
     userId: string,
-    decrementStock: (tx: any, ingredientId: string, quantity: number) => Promise<void>,
+    decrementStock: (
+        tx: any,
+        ingredientId: string,
+        quantity: number,
+        movement: StockMovement,
+    ) => Promise<void>,
 ): Promise<void> {
     for (const line of swap.lines) {
         if (!line.variationSizeId) continue
         const sign = line.direction === 'OUT' ? 1 : -1
         for (const r of await recipeFor(tx, line.variationSizeId)) {
-            await decrementStock(tx, r.ingredientId, sign * r.quantity * line.quantity)
+            await decrementStock(tx, r.ingredientId, sign * r.quantity * line.quantity, {
+                type: 'EXCHANGE_REVERSE',
+                userId,
+                notes: `swap ${swap.id}`,
+                reason: line.menuId ?? null,
+            })
         }
     }
 

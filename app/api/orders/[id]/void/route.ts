@@ -92,7 +92,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
                     },
                 })
                 for (const recipe of recipes) {
-                    await decrementStock(tx, recipe.ingredientId, -(recipe.quantity * item.quantity))
+                    await decrementStock(tx, recipe.ingredientId, -(recipe.quantity * item.quantity), {
+                        type: 'SALE_VOID', userId: user.id, notes: `void order ${id}`,
+                        reason: vs.variation.menu.id,
+                    })
                 }
             }
 

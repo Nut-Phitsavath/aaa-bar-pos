@@ -191,7 +191,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
                 })
                 for (const recipe of recipes) {
                     // Negative decrement: the same rounded path a sale takes.
-                    await decrementStock(tx, recipe.ingredientId, -(recipe.quantity * line.quantity))
+                    // Typed RETURN_UNOPENED_STOCK, not RETURN_UNOPENED: the row
+                    // below is the one per returned line that the cap is netted
+                    // against, and it must stay exactly one.
+                    await decrementStock(tx, recipe.ingredientId, -(recipe.quantity * line.quantity), {
+                        type: 'RETURN_UNOPENED_STOCK', userId: user.id,
+                        notes: `${id} · ${item.name}`, reason: line.menuId,
+                    })
                 }
 
                 // Exactly one row per returned line, whatever the recipe holds.
