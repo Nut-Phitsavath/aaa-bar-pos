@@ -117,7 +117,23 @@ model IngredientCategory {
 model Ingredient {
   id           String              @id @default(uuid())
   name         String
+  /// Legacy free-text unit. Kept for display and for the migration's audit
+  /// trail; nothing computes from it any more.
   unit         String
+  /// WEIGHT | VOLUME | EACH. Immutable once any StockTransaction references
+  /// this ingredient - changing it would rewrite what every past deduction
+  /// meant. "Stock has moved" is that row existing, not stock being non-zero:
+  /// an ingredient received and fully consumed is back at zero and must stay
+  /// locked.
+  measureType  String              @default("EACH")
+  /// g | ml | each. Derived from measureType, never entered by hand.
+  baseUnit     String              @default("each")
+  /// What the delivery note says: "bottle", "case", "kg".
+  purchaseUnit String              @default("each")
+  /// Base units per purchase unit. 700 for a 700ml bottle, 1000 for a kg.
+  /// This is the number that used to be smeared across every recipe row as a
+  /// repeating decimal.
+  purchaseMultiplier Float         @default(1)
   mainStock    Float               @default(0)
   subStock     Float               @default(0)
   minStock     Float
