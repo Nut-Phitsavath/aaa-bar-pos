@@ -40,6 +40,7 @@ type Ingredient = {
     id: string
     name: string
     unit: string
+    baseUnit: string
     categoryId?: string | null
     category?: { name: string }
 }
@@ -737,7 +738,7 @@ export default function RecipesPage() {
                                                             </div>
                                                             <div className="overflow-hidden flex-1">
                                                                 <p className="font-black truncate text-sm leading-tight uppercase tracking-tight">{ing.name}</p>
-                                                                <p className={`text-[10px] uppercase font-black tracking-widest mt-0.5 ${newRecipeItem.ingredientId === ing.id ? 'text-amber-200' : 'text-slate-400'}`}>{ing.unit}</p>
+                                                                <p className={`text-[10px] uppercase font-black tracking-widest mt-0.5 ${newRecipeItem.ingredientId === ing.id ? 'text-amber-200' : 'text-slate-400'}`}>{ing.baseUnit}</p>
                                                             </div>
                                                         </button>
                                                     ))
@@ -778,8 +779,11 @@ export default function RecipesPage() {
                                                             value={newRecipeItem.quantity || ''}
                                                             onChange={e => setNewRecipeItem({ ...newRecipeItem, quantity: parseFloat(e.target.value) || 0 })}
                                                         />
+                                                        {/* A recipe quantity is in BASE units. Labelling
+                                                            it with the purchase unit invited someone to
+                                                            type 1 meaning a bottle and get 1 millilitre. */}
                                                         <span className="absolute right-6 top-1/2 -translate-y-1/2 font-black text-slate-300 pointer-events-none group-focus-within:text-amber-600 uppercase text-sm tracking-widest">
-                                                            {ingredients.find(i => i.id === newRecipeItem.ingredientId)?.unit || '-'}
+                                                            {ingredients.find(i => i.id === newRecipeItem.ingredientId)?.baseUnit || '-'}
                                                         </span>
                                                     </div>
                                                 </div>

@@ -13,17 +13,21 @@ export async function GET(
                 ingredient: {
                     select: {
                         name: true,
-                        unit: true
+                        unit: true,
+                        baseUnit: true
                     }
                 }
             }
         })
 
-        // Format to match old structure
         const formatted = recipes.map(r => ({
             ...r,
             ingredientName: r.ingredient.name,
-            unit: r.ingredient.unit
+            // Recipe.quantity is in BASE units, so this is the unit that
+            // describes it. Returning the legacy purchase unit made the screen
+            // read "30 bottle" for a 30ml pour.
+            unit: r.ingredient.baseUnit,
+            purchaseUnit: r.ingredient.unit
         }))
 
         return NextResponse.json(formatted)
