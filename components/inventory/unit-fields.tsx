@@ -43,6 +43,20 @@ export function UnitFields({
     const labelFor = (mt: MeasureType) =>
         mt === "WEIGHT" ? t.measure_weight : mt === "VOLUME" ? t.measure_volume : t.measure_each
 
+    /**
+     * Three measure types is the whole set - Restaurant365 puts it plainly:
+     * every other unit equates to Weight, Volume or Each. Variety lives in the
+     * PURCHASE unit, which is free text: a keg is Volume, a case is Each, a
+     * sack is Weight. So the help under each is an example of the kind of
+     * thing, not a definition of the word.
+     */
+    const pick = <T,>(w: T, v: T, e: T) =>
+        value.measureType === "WEIGHT" ? w : value.measureType === "VOLUME" ? v : e
+
+    const exampleFor = pick(t.measure_weight_eg, t.measure_volume_eg, t.measure_each_eg)
+    const unitPlaceholder = pick(t.purchase_unit_eg_weight, t.purchase_unit_eg_volume, t.purchase_unit_eg_each)
+    const echoExample = pick(t.echo_eg_weight, t.echo_eg_volume, t.echo_eg_each)
+
     const echo = describeConversion({
         name: value.name,
         measureType: value.measureType,
@@ -99,7 +113,14 @@ export function UnitFields({
                 {locked ? (
                     <p className="text-xs font-semibold text-amber-700">{t.units_locked}</p>
                 ) : (
-                    <p className="text-xs text-slate-400">{t.measure_type_help}</p>
+                    // What KIND of thing this is, in things from this bar's own
+                    // shelves. "Decides how stock is counted" is true and tells
+                    // nobody which button to press.
+                    <p className="text-xs text-slate-400">
+                        <span className="text-slate-500">{exampleFor}</span>
+                        <span className="mx-1.5 text-slate-300" aria-hidden>·</span>
+                        {t.measure_type_help}
+                    </p>
                 )}
             </div>
 
@@ -110,10 +131,12 @@ export function UnitFields({
                     <Label className="text-xs font-black text-slate-400 uppercase tracking-widest">
                         {t.purchase_unit_label}
                     </Label>
+                    {/* Placeholder follows the measure type: offering "kg" to
+                        someone setting up a spirit is noise. */}
                     <FormattedTextInput
                         value={value.purchaseUnit}
                         disabled={locked}
-                        placeholder={t.purchase_unit_placeholder}
+                        placeholder={unitPlaceholder}
                         onChange={(v: string) => onChange({ ...value, purchaseUnit: v })}
                     />
                 </div>
@@ -142,18 +165,28 @@ export function UnitFields({
                 than a boxed callout: it is a sentence to read back, not a status
                 to notice. The numbers carry the weight, so the eye lands on the
                 part that can be wrong - 0.64 per ml against 64.29 per ml. */}
-            <p aria-live="polite" className="text-sm leading-relaxed text-slate-500">
+            {/* Before there is anything to read back, show what the sentence
+                will look like. Repeating the help text from above taught
+                nothing and printed the same line twice on one form. */}
+            <p
+                aria-live="polite"
+                className={`text-sm leading-relaxed rounded-xl px-3 py-2 ${
+                    echo.valid
+                        ? "text-slate-500 bg-amber-50/50 border border-amber-100"
+                        : "text-slate-400 italic bg-slate-50 border border-slate-100"
+                }`}
+            >
                 {echo.valid
                     ? echo.sentence.split(/([\d.,]+)/).map((part, i) =>
                           /^[\d.,]+$/.test(part) ? (
-                              <strong key={i} className="font-bold text-slate-900 tabular-nums">
+                              <strong key={i} className="font-bold text-slate-900 tabular-nums not-italic">
                                   {part}
                               </strong>
                           ) : (
                               part
                           )
                       )
-                    : t.measure_type_help}
+                    : echoExample}
             </p>
         </div>
     )
