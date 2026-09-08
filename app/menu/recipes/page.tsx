@@ -44,6 +44,18 @@ type Category = {
     name: string
 }
 
+/** What GET /api/recipes/:id/cost returns. */
+type CostLine = { name: string; quantity: number; baseUnit: string; cost: number }
+type CostInfo = {
+    cost: number
+    price: number
+    margin: number
+    pourCostPct: number
+    band: [number, number]
+    verdict: "BELOW_COST" | "HIGH" | "OK" | "LOW"
+    lines: CostLine[]
+}
+
 type RecipeItem = {
     id: string
     productId: string
@@ -74,6 +86,8 @@ export default function RecipesPage() {
     const [isAddIngredientOpen, setIsAddIngredientOpen] = useState(false)
     const [isLoading, setIsLoading] = useState(false)
     const [activeTab, setActiveTab] = useState("base")
+    const [costInfo, setCostInfo] = useState<CostInfo | null>(null)
+    const [costLoading, setCostLoading] = useState(false)
     const [categories, setCategories] = useState<Category[]>([])
     const [ingredientSearch, setIngredientSearch] = useState("")
     const [selectedCatId, setSelectedCatId] = useState("ALL")
@@ -108,6 +122,24 @@ export default function RecipesPage() {
             setActiveTab("base")
         }
     }, [selectedProduct])
+
+    /**
+     * What this serving costs, against what it sells for.
+     *
+     * Refetched after every recipe edit rather than computed here, so the
+     * footer and the rows above it can never disagree - and so a change to an
+     * ingredient's cost shows up without anyone reloading the page.
+     */
+    useEffect(() => {
+        if (!selectedProduct) { setCostInfo(null); return }
+        setCostLoading(true)
+        const qs = activeTab !== "base" ? `?variationSizeId=${activeTab}` : ""
+        fetch(`/api/recipes/${selectedProduct.id}/cost${qs}`)
+            .then((r) => (r.ok ? r.json() : null))
+            .then(setCostInfo)
+            .catch(() => setCostInfo(null))
+            .finally(() => setCostLoading(false))
+    }, [selectedProduct, activeTab, recipe])
 
     const fetchProducts = async () => {
         try {
@@ -270,7 +302,15 @@ export default function RecipesPage() {
                             <div className="flex items-center gap-6">
                                 <div className="text-right">
                                     <p className="text-xs text-muted-foreground">{t.quantity_used}</p>
-                                    <p className="font-bold text-lg text-slate-900">{item.quantity} {item.unit}</p>
+                                    <p className="font-bold text-lg text-slate-900 tabular-nums">{item.quantity} {item.unit}</p>
+                                    {/* Where the money actually goes. A total
+                                        alone has to be taken on trust. */}
+                                    {(() => {
+                                        const line = costInfo?.lines.find((l) => l.name === item.ingredientName)
+                                        return line ? (
+                                            <p className="text-xs text-slate-400 tabular-nums">{formatTHB(line.cost)}</p>
+                                        ) : null
+                                    })()}
                                 </div>
                                 <Button
                                     variant="ghost"
@@ -305,6 +345,49 @@ export default function RecipesPage() {
                             })()}
                         </div>
                     )}
+
+                    {/* What it costs against what it sells for. Without this a
+                        recipe that loses money looks identical to one that does
+                        not, and the bar finds out at stocktake. It is also
+                        where a wrong multiplier finally shows itself: gin
+                        entered as 7ml per bottle reads as a 1,500% loss. */}
+                    {costLoading ? (
+                        <div className="h-11 rounded-xl bg-slate-100 animate-pulse" aria-hidden />
+                    ) : costInfo && costInfo.lines.length > 0 ? (
+                        <div className="flex items-center gap-4 flex-wrap px-4 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-sm">
+                            <span className="text-slate-600">
+                                {t.recipe_cost}{" "}
+                                <strong className="text-slate-900 tabular-nums">{formatTHB(costInfo.cost)}</strong>
+                            </span>
+                            <span className="text-slate-300" aria-hidden>·</span>
+                            <span className="text-slate-600">
+                                {t.recipe_margin}{" "}
+                                <strong className="text-slate-900 tabular-nums">{formatTHB(costInfo.margin)}</strong>
+                            </span>
+                            {/* Rose loses money, emerald is in band, amber is a
+                                question in either direction - out of band high
+                                and out of band low are both worth a look, but
+                                neither is a failure. */}
+                            <span
+                                className={`ms-auto font-bold tabular-nums px-2.5 py-1 rounded-lg ${
+                                    costInfo.verdict === "BELOW_COST"
+                                        ? "bg-rose-50 text-rose-700"
+                                        : costInfo.verdict === "OK"
+                                            ? "bg-emerald-50 text-emerald-700"
+                                            : "bg-amber-50 text-amber-700"
+                                }`}
+                            >
+                                {t.pour_cost} {costInfo.pourCostPct}%
+                                <span className="font-semibold opacity-70">
+                                    {" · "}
+                                    {costInfo.verdict === "BELOW_COST" ? t.verdict_below_cost
+                                        : costInfo.verdict === "HIGH" ? t.verdict_high
+                                            : costInfo.verdict === "LOW" ? t.verdict_low
+                                                : t.verdict_ok}
+                                </span>
+                            </span>
+                        </div>
+                    ) : null}
                 </div>
             ) : (
                 <div className="py-12 border-2 border-dashed rounded-xl flex flex-col items-center justify-center text-center bg-slate-50/50">
