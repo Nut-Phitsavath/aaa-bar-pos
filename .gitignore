@@ -19,8 +19,9 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files
+# env files (.env.example is committed as the template)
 .env*
+!.env.example
 .env.local
 .env.development.local
 .env.test.local
@@ -52,6 +53,6 @@ next-env.d.ts
 current_main_pos.tsx
 
 # Ad-hoc database copies (dev.db.backup, dev.db.before-<x>) - "*.db" does not
-# match these, and one slipped into a commit as 2.5MB of real sales data.
+# match these, and one slipped into a commit as 2.5MB of binary churn.
 *.db.*
 *.db-*
