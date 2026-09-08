@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Printer, ArrowLeft } from "lucide-react"
 import { useTranslation } from "@/hooks/use-translation"
 import { APP_NAME } from "@/lib/shop"
-import { formatDual, type MeasureType } from "@/lib/stock"
+import { formatStockOf, type MeasureType } from "@/lib/units"
 
 /**
  * The stock count sheet (requirement #22).
@@ -148,11 +148,7 @@ export default function AuditSheetPage() {
                                                 repeating decimal is not a number they can
                                                 check against a shelf. */}
                                             <td className="py-2 text-right tabular-nums">
-                                                {formatDual(r.subStock, {
-                                                    measureType: r.measureType,
-                                                    purchaseUnit: r.purchaseUnit,
-                                                    multiplier: r.purchaseMultiplier,
-                                                })}
+                                                {formatStockOf(r.subStock, r)}
                                             </td>
                                             {/* Ruled boxes, wide enough to write in with a pen. */}
                                             <td className="py-2">

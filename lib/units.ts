@@ -113,6 +113,41 @@ export function formatDual(
     return `${plural(sign * whole, purchaseUnit)} + ${rest} ${baseUnit}`
 }
 
+/**
+ * The fields any screen needs to read or write a stock quantity correctly.
+ *
+ * Stock is stored in base units; people think and type in purchase units. Every
+ * screen that takes a quantity from a person has to convert, and every screen
+ * that shows one has to convert back. Naming that contract here is what stops
+ * a dialog quietly adding 12 millilitres when someone meant 12 bottles.
+ */
+export type UnitBearing = {
+    measureType: MeasureType
+    purchaseUnit: string
+    purchaseMultiplier: number
+    /**
+     * Legacy free-text unit. Optional and unused by anything here - it is kept
+     * only so records that still carry it satisfy this shape, and deliberately
+     * not required, because nothing about a conversion depends on it.
+     */
+    unit?: string
+}
+
+/**
+ * `formatDual` for anything already carrying the standard unit fields.
+ *
+ * Exists because the field is `purchaseMultiplier` on a record and `multiplier`
+ * in the formatter's options, and hand-mapping that at every call site is one
+ * typo away from printing a bottle count as millilitres.
+ */
+export function formatStockOf(value: number, item: UnitBearing): string {
+    return formatDual(value, {
+        measureType: item.measureType,
+        purchaseUnit: item.purchaseUnit,
+        multiplier: item.purchaseMultiplier,
+    })
+}
+
 export type ConversionInput = {
     name: string
     measureType: MeasureType

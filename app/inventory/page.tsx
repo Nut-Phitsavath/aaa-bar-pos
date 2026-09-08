@@ -10,7 +10,8 @@ import { Badge } from "@/components/ui/badge"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog"
 import { Plus, Edit, Trash2, Package, ShoppingCart, Minus, Settings, Search, ArrowUpDown, Store, Warehouse, Printer } from "lucide-react"
 import { formatTHB } from "@/lib/currency"
-import { formatStock, formatDual } from "@/lib/stock"
+import { formatStock } from "@/lib/stock"
+import { formatStockOf, toBase } from "@/lib/units"
 import { UnitFields } from "@/components/inventory/unit-fields"
 import { canEditUnits } from "@/lib/ingredient-form"
 import type { MeasureType } from "@/lib/units"
@@ -227,14 +228,16 @@ export default function InventoryPage() {
         body: JSON.stringify({
           ingredientId: transferItem.id,
           type: 'TRANSFER',
-          quantity: parseFloat(transferQty),
+          // Typed in purchase units, moved in base units - staff carry bottles
+          // from the store room, not millilitres.
+          quantity: toBase(parseFloat(transferQty), transferItem.purchaseMultiplier),
           fromStore: 'MAIN',
           toStore: 'SUB'
         })
       })
 
       if (res.ok) {
-        notify.success(t.transfer_success, { description: `${transferQty} ${transferItem.unit} — ${transferItem.name} → ${t.to_shop}` })
+        notify.success(t.transfer_success, { description: `${transferQty} ${transferItem.purchaseUnit} — ${transferItem.name} → ${t.to_shop}` })
         setIsTransferOpen(false)
         setTransferQty("")
         fetchInventory()
@@ -674,11 +677,7 @@ export default function InventoryPage() {
                           <TableCell className={`font-bold text-lg tabular-nums ${(activeTab === "SUB" ? item.subStock : item.mainStock) < 0 ? "text-rose-600" : ""}`}>
                             {/* "3 bottles + 250 ml", not "907.2". Staff think
                                 in bottles even when the shelf is counted in ml. */}
-                            {formatDual(activeTab === "SUB" ? item.subStock : item.mainStock, {
-                              measureType: item.measureType,
-                              purchaseUnit: item.purchaseUnit || item.unit,
-                              multiplier: item.purchaseMultiplier,
-                            })}
+                            {formatStockOf(activeTab === "SUB" ? item.subStock : item.mainStock, item)}
                           </TableCell>
                           <TableCell>{item.unit}</TableCell>
                           <TableCell className="tabular-nums">{formatStock(activeTab === "SUB" ? item.minStockSub : item.minStock)}</TableCell>
@@ -768,15 +767,25 @@ export default function InventoryPage() {
                   Move stock from Warehouse to Shop for daily operations
                 </p>
                 <div className="space-y-2">
-                  <Label>{t.available_in_warehouse} {transferItem?.mainStock} {transferItem?.unit}</Label>
-                  <Label>{t.quantity_to_transfer}</Label>
-                  <Input
-                    type="number"
-                    placeholder={t.enter_quantity}
-                    value={transferQty}
-                    onChange={e => setTransferQty(e.target.value)}
-                    max={transferItem?.mainStock}
-                  />
+                  <Label>
+                    {t.available_in_warehouse}{" "}
+                    <span className="tabular-nums">
+                      {transferItem ? formatStockOf(transferItem.mainStock, transferItem) : ""}
+                    </span>
+                  </Label>
+                  <Label>{t.quantity_to_transfer} ({transferItem?.purchaseUnit})</Label>
+                  <div className="relative">
+                    <Input
+                      type="number"
+                      className="pr-20 tabular-nums"
+                      placeholder={t.enter_quantity}
+                      value={transferQty}
+                      onChange={e => setTransferQty(e.target.value)}
+                    />
+                    <span className="absolute right-4 top-1/2 -translate-y-1/2 font-black text-slate-300 pointer-events-none uppercase text-xs tracking-widest">
+                      {transferItem?.purchaseUnit}
+                    </span>
+                  </div>
                 </div>
               </div>
               <DialogFooter>
@@ -784,7 +793,7 @@ export default function InventoryPage() {
                 <Button
                   className="bg-amber-600 hover:bg-amber-700"
                   onClick={handleTransfer}
-                  disabled={!transferQty || parseFloat(transferQty) <= 0 || parseFloat(transferQty) > (transferItem?.mainStock || 0)}
+                  disabled={!transferQty || parseFloat(transferQty) <= 0 || toBase(parseFloat(transferQty), transferItem?.purchaseMultiplier ?? 1) > (transferItem?.mainStock || 0)}
                 >
                   Transfer to Shop
                 </Button>

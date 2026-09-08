@@ -5,7 +5,7 @@ import { useTranslation } from "@/hooks/use-translation"
 import { Card } from "@/components/ui/card"
 import { ClipboardCheck } from "lucide-react"
 import { formatTHB } from "@/lib/currency"
-import { formatDual, type MeasureType } from "@/lib/stock"
+import { formatStockOf, type MeasureType } from "@/lib/units"
 
 type VarianceRow = {
     id: string
@@ -52,12 +52,7 @@ export function VarianceReport({ startDate, endDate }: { startDate: string; endD
 
     useEffect(() => { load() }, [load])
 
-    const qty = (row: VarianceRow, value: number) =>
-        formatDual(value, {
-            measureType: row.measureType,
-            purchaseUnit: row.purchaseUnit,
-            multiplier: row.purchaseMultiplier,
-        })
+    const qty = (row: VarianceRow, value: number) => formatStockOf(value, row)
 
     if (loading) {
         return <div className="h-40 rounded-2xl bg-slate-100 animate-pulse" aria-hidden />

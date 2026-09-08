@@ -10,16 +10,16 @@ import { FormattedNumberInput } from "@/components/ui/formatted-number-input"
 import { AlertTriangle } from "lucide-react"
 import { useTranslation } from "@/hooks/use-translation"
 import { notify } from "@/components/ui/sonner"
+import { formatStockOf, toBase, type UnitBearing } from "@/lib/units"
 
 interface ShopAdjustDialogProps {
     open: boolean
     onOpenChange: (open: boolean) => void
-    ingredient: {
+    ingredient: (UnitBearing & {
         id: string
         name: string
-        unit: string
         subStock: number
-    } | null
+    }) | null
     onSuccess: () => void
 }
 
@@ -30,7 +30,10 @@ export function ShopAdjustDialog({ open, onOpenChange, ingredient, onSuccess }: 
     const [notes, setNotes] = useState("")
     const [isLoading, setIsLoading] = useState(false)
 
-    const discrepancy = ingredient ? (parseFloat(actualStock) || 0) - ingredient.subStock : 0
+    // Staff count in whatever they pick up - bottles, kilos - and the shelf is
+    // held in base units, so the count converts before anything is compared.
+    const actualBase = ingredient ? toBase(parseFloat(actualStock) || 0, ingredient.purchaseMultiplier) : 0
+    const discrepancy = ingredient ? actualBase - ingredient.subStock : 0
 
     const handleSubmit = async () => {
         if (!ingredient || actualStock === "") {
@@ -50,7 +53,7 @@ export function ShopAdjustDialog({ open, onOpenChange, ingredient, onSuccess }: 
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     ingredientId: ingredient.id,
-                    actualStock: parseFloat(actualStock),
+                    actualStock: actualBase,
                     reason,
                     notes: notes || undefined
                 })
@@ -95,12 +98,14 @@ export function ShopAdjustDialog({ open, onOpenChange, ingredient, onSuccess }: 
                     <div className="grid grid-cols-2 gap-3">
                         <div className="p-3 bg-slate-50 rounded-lg border">
                             <p className="text-xs text-muted-foreground">{t.system_stock}</p>
-                            <p className="text-xl font-bold text-slate-700">{ingredient.subStock} {ingredient.unit}</p>
+                            <p className="text-xl font-bold text-slate-700 tabular-nums">
+                                {formatStockOf(ingredient.subStock, ingredient)}
+                            </p>
                         </div>
                         <div className="p-3 bg-amber-50 rounded-lg border border-amber-100">
                             <p className="text-xs text-muted-foreground">{t.actual_stock}</p>
-                            <p className="text-xl font-bold text-amber-700">
-                                {actualStock ? `${parseFloat(actualStock)} ${ingredient.unit}` : "—"}
+                            <p className="text-xl font-bold text-amber-700 tabular-nums">
+                                {actualStock ? formatStockOf(actualBase, ingredient) : "—"}
                             </p>
                         </div>
                     </div>
@@ -108,8 +113,8 @@ export function ShopAdjustDialog({ open, onOpenChange, ingredient, onSuccess }: 
                     {actualStock && discrepancy !== 0 && (
                         <div className={`p-3 rounded-lg border ${discrepancy > 0 ? 'bg-green-50 border-green-100' : 'bg-rose-50 border-rose-100'}`}>
                             <p className="text-xs text-muted-foreground">{t.discrepancy}</p>
-                            <p className={`text-lg font-bold ${discrepancy > 0 ? 'text-green-700' : 'text-rose-700'}`}>
-                                {discrepancy > 0 ? '+' : ''}{discrepancy.toFixed(2)} {ingredient.unit}
+                            <p className={`text-lg font-bold tabular-nums ${discrepancy > 0 ? 'text-green-700' : 'text-rose-700'}`}>
+                                {discrepancy > 0 ? '+' : ''}{formatStockOf(discrepancy, ingredient)}
                             </p>
                             <p className="text-xs text-muted-foreground mt-1">
                                 {discrepancy > 0 ? t.more_than_expected : t.less_than_expected}
@@ -118,13 +123,19 @@ export function ShopAdjustDialog({ open, onOpenChange, ingredient, onSuccess }: 
                     )}
 
                     <div className="space-y-2">
-                        <Label>{t.actual_physical_stock} *</Label>
-                        <FormattedNumberInput
-                            value={actualStock}
-                            onChange={setActualStock}
-                            allowDecimals={true}
-                            placeholder={t.enter_actual_stock}
-                        />
+                        <Label>{t.actual_physical_stock} ({ingredient.purchaseUnit}) *</Label>
+                        <div className="relative">
+                            <FormattedNumberInput
+                                value={actualStock}
+                                onChange={setActualStock}
+                                allowDecimals={true}
+                                className="pr-20 tabular-nums"
+                                placeholder={t.enter_actual_stock}
+                            />
+                            <span className="absolute right-4 top-1/2 -translate-y-1/2 font-black text-slate-300 pointer-events-none uppercase text-xs tracking-widest">
+                                {ingredient.purchaseUnit}
+                            </span>
+                        </div>
                         <p className="text-xs text-muted-foreground">
                             {t.count_physical_hint}
                         </p>

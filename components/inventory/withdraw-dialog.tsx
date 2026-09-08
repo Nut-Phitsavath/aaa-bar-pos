@@ -10,16 +10,16 @@ import { FormattedNumberInput } from "@/components/ui/formatted-number-input"
 import { Minus } from "lucide-react"
 import { useTranslation } from "@/hooks/use-translation"
 import { notify } from "@/components/ui/sonner"
+import { formatStockOf, toBase, type UnitBearing } from "@/lib/units"
 
 interface WithdrawDialogProps {
     open: boolean
     onOpenChange: (open: boolean) => void
-    ingredient: {
+    ingredient: (UnitBearing & {
         id: string
         name: string
-        unit: string
         mainStock: number
-    } | null
+    }) | null
     onSuccess: () => void
 }
 
@@ -41,8 +41,10 @@ export function WithdrawDialog({ open, onOpenChange, ingredient, onSuccess }: Wi
             return
         }
 
-        if (parseFloat(quantity) > ingredient.mainStock) {
-            notify.warn(t.cannot_withdraw_more_than, { description: `${ingredient.mainStock} ${ingredient.unit}` })
+        // Compared in base units, because that is what the shelf holds - the
+        // typed figure is bottles and the balance is millilitres.
+        if (toBase(parseFloat(quantity), ingredient.purchaseMultiplier) > ingredient.mainStock) {
+            notify.warn(t.cannot_withdraw_more_than, { description: formatStockOf(ingredient.mainStock, ingredient) })
             return
         }
 
@@ -53,14 +55,15 @@ export function WithdrawDialog({ open, onOpenChange, ingredient, onSuccess }: Wi
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     ingredientId: ingredient.id,
-                    quantity: parseFloat(quantity),
+                    // Typed in purchase units, moved in base units.
+                    quantity: toBase(parseFloat(quantity), ingredient.purchaseMultiplier),
                     reason,
                     notes: notes || undefined
                 })
             })
 
             if (res.ok) {
-                notify.success(t.withdrew_successfully, { description: `${quantity} ${ingredient.unit} — ${ingredient.name}` })
+                notify.success(t.withdrew_successfully, { description: `${quantity} ${ingredient.purchaseUnit} — ${ingredient.name}` })
                 handleClose()
                 onSuccess()
             } else {
@@ -97,19 +100,31 @@ export function WithdrawDialog({ open, onOpenChange, ingredient, onSuccess }: Wi
                 <div className="space-y-4">
                     <div className="p-3 bg-rose-50 rounded-lg border border-rose-100">
                         <p className="text-sm text-muted-foreground">{t.current_warehouse_stock}</p>
-                        <p className="text-2xl font-bold text-rose-700">{ingredient.mainStock} {ingredient.unit}</p>
+                        <p className="text-2xl font-bold text-rose-700 tabular-nums">
+                            {formatStockOf(ingredient.mainStock, ingredient)}
+                        </p>
                     </div>
 
                     <div className="space-y-2">
-                        <Label>{t.quantity_to_withdraw} *</Label>
-                        <FormattedNumberInput
-                            value={quantity}
-                            onChange={setQuantity}
-                            allowDecimals={true}
-                            placeholder={t.enter_quantity}
-                        />
-                        <p className="text-xs text-muted-foreground">
-                            {t.remaining_stock_will_be} {Math.max(0, ingredient.mainStock - (parseFloat(quantity) || 0))} {ingredient.unit}
+                        <Label>{t.quantity_to_withdraw} ({ingredient.purchaseUnit}) *</Label>
+                        <div className="relative">
+                            <FormattedNumberInput
+                                value={quantity}
+                                onChange={setQuantity}
+                                allowDecimals={true}
+                                className="pr-20 tabular-nums"
+                                placeholder={t.enter_quantity}
+                            />
+                            <span className="absolute right-4 top-1/2 -translate-y-1/2 font-black text-slate-300 pointer-events-none uppercase text-xs tracking-widest">
+                                {ingredient.purchaseUnit}
+                            </span>
+                        </div>
+                        <p className="text-xs text-muted-foreground tabular-nums">
+                            {t.remaining_stock_will_be}{" "}
+                            {formatStockOf(
+                                Math.max(0, ingredient.mainStock - toBase(parseFloat(quantity) || 0, ingredient.purchaseMultiplier)),
+                                ingredient
+                            )}
                         </p>
                     </div>
 
