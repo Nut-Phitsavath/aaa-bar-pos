@@ -812,6 +812,10 @@ export const translations = {
         create_and_add: "Create and add",
         no_recipe: "No recipe",
         no_recipe_help: "Sells, but moves no stock",
+        variance: "Stock variance",
+        shrinkage: "Shrinkage",
+        overage: "Overage",
+        no_counts_yet: "No counts in this range. Print the audit sheet from Inventory, count the shelf, and enter what you find.",
         // --- Table sessions (bar floor plan) ---
         tables: "Tables",
         table: "Table",
@@ -1815,6 +1819,10 @@ export const translations = {
         create_and_add: "ສ້າງ ແລະ ເພີ່ມ",
         no_recipe: "ບໍ່ມີສູດ",
         no_recipe_help: "ຂາຍໄດ້ ແຕ່ບໍ່ຕັດສະຕັອກ",
+        variance: "ຜົນຕ່າງສະຕັອກ",
+        shrinkage: "ສະຕັອກຂາດ",
+        overage: "ສະຕັອກເກີນ",
+        no_counts_yet: "ບໍ່ມີການນັບໃນຊ່ວງນີ້. ພິມໃບກວດສະຕັອກຈາກສາງ, ນັບເຄື່ອງ, ແລ້ວປ້ອນຜົນ.",
         // --- Table sessions (bar floor plan) ---
         tables: "ໂຕະ",
         table: "ໂຕະ",

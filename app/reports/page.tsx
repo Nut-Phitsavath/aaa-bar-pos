@@ -7,6 +7,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ZReport } from "@/components/reports/z-report"
 import { ServerPerformance } from "@/components/reports/server-performance"
 import { VoidAudit } from "@/components/reports/void-audit"
+import { VarianceReport } from "@/components/reports/variance"
 import { ExchangeAudit } from "@/components/reports/exchange-audit"
 import {
   Bar, BarChart, ResponsiveContainer, XAxis, YAxis, Tooltip, Legend,
@@ -311,6 +312,7 @@ export default function ReportsPage() {
             <TabsTrigger value="servers">{t.server_staff}</TabsTrigger>
             <TabsTrigger value="voids">{t.void_audit}</TabsTrigger>
             <TabsTrigger value="exchanges">{t.exchange_log}</TabsTrigger>
+            <TabsTrigger value="variance">{t.variance}</TabsTrigger>
             <TabsTrigger value="zreport">{t.z_report}</TabsTrigger>
             </TabsList>
           </div>
@@ -327,6 +329,15 @@ export default function ReportsPage() {
           <TabsContent value="voids">
             {dateRange?.from && dateRange?.to && (
               <VoidAudit
+                startDate={startOfDay(dateRange.from).toISOString()}
+                endDate={endOfDay(dateRange.to).toISOString()}
+              />
+            )}
+          </TabsContent>
+
+          <TabsContent value="variance">
+            {dateRange?.from && dateRange?.to && (
+              <VarianceReport
                 startDate={startOfDay(dateRange.from).toISOString()}
                 endDate={endOfDay(dateRange.to).toISOString()}
               />

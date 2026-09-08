@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { getSessionUser } from '@/lib/auth'
 
 export async function GET(request: Request) {
     try {
@@ -33,6 +34,11 @@ export async function POST(request: Request) {
         // own - so when it failed, the ledger was left claiming an adjustment
         // that never reached the shelf, which is the one thing a stock ledger
         // must never say.
+        // Who counted. A variance report whose "counted by" column is always a
+        // dash cannot answer the question a manager actually has, which is not
+        // "how much is missing" but "who was holding the clipboard".
+        const user = await getSessionUser()
+
         const stockCount = await prisma.$transaction(async (tx) => {
             const count = await tx.stockCount.create({
                 data: {
@@ -40,7 +46,8 @@ export async function POST(request: Request) {
                     theoreticalStock,
                     actualStock,
                     notes,
-                    difference
+                    difference,
+                    userId: user?.id ?? null
                 }
             })
 
@@ -51,6 +58,7 @@ export async function POST(request: Request) {
                         type: 'SHOP_ADJUST',
                         quantity: difference,
                         toStore: 'SUB',
+                        userId: user?.id ?? null,
                         reason: `Stock Audit Adjustment: ${notes || 'No notes'}`,
                         notes: `Theoretical: ${theoreticalStock}, Actual: ${actualStock}`
                     }
