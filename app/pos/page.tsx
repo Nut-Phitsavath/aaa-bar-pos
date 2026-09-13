@@ -15,10 +15,9 @@ import { Label } from "@/components/ui/label"
 import {
   Search, Plus, Minus, CreditCard, Clock, Printer, HandCoins, CheckCircle,
   AlertCircle, Smartphone, Info, MapPin, MonitorPlay, WifiOff, RefreshCw, Smartphone as TabletIcon, PhoneIcon,
-  ShoppingBag, Package, ShoppingCart, CandyOff, Droplet, Candy, Coffee, StickyNote,
+  ShoppingBag, ShoppingCart, CandyOff, Droplet, Candy, Coffee, StickyNote,
   X, Tag, Star, User, Trash2, Pause, Check, Loader2,
-  ArrowRight, Beer, Wine, Martini, CupSoda, Utensils,
-  type LucideIcon
+  ArrowRight,
 } from "lucide-react"
 import Link from "next/link"
 
@@ -27,7 +26,7 @@ import { formatTHB, calculateChange, THB_DENOMINATIONS, calculateTax, calculateI
 import { promoBlocker, promoDiscountFor, type PromoBlocker } from "@/lib/promotions"
 import { PaymentQR } from "@/components/payment-qr"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
-import Image from "next/image"
+import { MenuItemCard } from "@/components/menu-item-card"
 import { useTranslation } from "@/hooks/use-translation"
 import { APP_NAME } from "@/lib/shop"
 import { notify } from "@/components/ui/sonner"
@@ -81,84 +80,23 @@ type Customer = {
   phone?: string
 }
 
-// Colour and glyph per category, so a row is identifiable before it is read.
-// This is an information channel, not decoration: staff reach for "a beer" or
-// "a cocktail" long before they read which one, and every tile carrying the
-// same grey box was what made the list scan as a spreadsheet. A real photo,
-// when the owner supplies one, replaces the glyph and keeps the tint.
-const CATEGORY_STYLE: Record<string, { bg: string; fg: string; Icon: LucideIcon }> = {
-  Beer: { bg: "bg-amber-100", fg: "text-amber-700", Icon: Beer },
-  Sets: { bg: "bg-violet-100", fg: "text-violet-700", Icon: Package },
-  Spirits: { bg: "bg-rose-100", fg: "text-rose-700", Icon: Wine },
-  Cocktails: { bg: "bg-sky-100", fg: "text-sky-700", Icon: Martini },
-  Mixers: { bg: "bg-teal-100", fg: "text-teal-700", Icon: CupSoda },
-  Snacks: { bg: "bg-emerald-100", fg: "text-emerald-700", Icon: Utensils },
-}
-const FALLBACK_STYLE = { bg: "bg-slate-100", fg: "text-slate-400", Icon: Package }
-
 // Memoised so a keystroke in an unrelated input -- search, cash, beeper -- does
 // not re-render all ~50 menu cards and their next/image children. POSPage holds
 // 28 pieces of state; without this, any one of them repaints the whole grid.
 // Relies on a stable onClick (useCallback below) and a memoised filteredItems.
+// The wrapper is what carries the memo, so the inline arrow below costs nothing.
 const MenuCard = memo(function MenuCard({ item, index, onClick }: {
   item: MenuItem
   index: number
   onClick: (item: MenuItem, e: React.MouseEvent<HTMLDivElement>) => void
 }) {
-  // Every bar item carries exactly one size, so this is the price, not a "from".
-  // Min rather than [0] so a future two-size item degrades to the lower price
-  // instead of whichever row the query happened to return first.
-  const price = Math.min(
-    ...item.variations.flatMap((v) => v.sizes.map((z) => z.price)).filter((n) => n > 0)
-  )
-
-  const style = CATEGORY_STYLE[item.category] ?? FALLBACK_STYLE
-
   return (
-    <Card
-      className={`p-2 cursor-pointer bg-white border-slate-200 shadow-none hover:bg-amber-50 hover:border-amber-300 transition-colors duration-150 ${!item.isAvailable ? 'opacity-50 pointer-events-none' : ''}`}
+    <MenuItemCard
+      item={item}
+      index={index}
       onClick={(e) => onClick(item, e)}
-    >
-      {/* A row, not a tile. A full-bleed square image ties cell height to column
-          width, which is what capped the grid at two visible rows; as a fixed
-          thumbnail the photo stays - staff recognise a bottle faster than they
-          read one - while row height follows the type instead.
-
-          Amber is the hover state, not the resting one: a grid where every tile
-          is already the accent colour has nowhere left to go when you touch it,
-          and reads as one flat wall. */}
-      <div className="flex items-center gap-3">
-        <div className={`relative w-16 h-16 shrink-0 rounded-lg overflow-hidden ${style.bg}`}>
-          {item.image && item.image !== "/placeholder.svg" ? (
-            <Image
-              src={item.image}
-              alt={item.name}
-              fill
-              className="object-cover"
-              sizes="64px"
-              priority={index < 12}
-            />
-          ) : (
-            <div className={`w-full h-full flex items-center justify-center ${style.fg}`}>
-              <style.Icon className="w-7 h-7" />
-            </div>
-          )}
-        </div>
-        <div className="min-w-0 flex-1">
-          <h3 className="font-bold text-base leading-tight text-slate-800 truncate">
-            {item.localName || item.name}
-          </h3>
-          {item.localName && (
-            <p className="text-xs leading-tight text-slate-500 font-medium truncate mt-0.5">{item.name}</p>
-          )}
-          {Number.isFinite(price) && (
-            <span className="block text-[15px] font-bold text-slate-900 tabular-nums mt-1">
-              {formatTHB(price)}
-            </span>
-          )}
-        </div>
-      </div>
-    </Card>
+      className={!item.isAvailable ? "opacity-50 pointer-events-none" : ""}
+    />
   )
 })
 

@@ -18,6 +18,7 @@ import { useTranslation } from "@/hooks/use-translation"
 import { notify } from "@/components/ui/sonner"
 import { useConfirm } from "@/components/confirm-provider"
 import { ReorderPanel } from "@/components/menu/reorder-panel"
+import { MenuItemCard } from "@/components/menu-item-card"
 import { useLongPress } from "@/hooks/use-long-press"
 import { PriceInput } from "@/components/ui/PriceInput"
 import { RecipeEditor, type RecipeRow, type EditorIngredient } from "@/components/menu/recipe-editor"
@@ -902,11 +903,13 @@ export default function MenuPage() {
 
         {/* Categories Bar */}
         <div className="flex flex-wrap gap-2 p-1 overflow-x-auto pb-2 no-scrollbar border-b">
+          {/* Same chip as the till's category row, down to the corner radius.
+              Pill here and rectangle there was the loudest tell that these were
+              two unrelated screens rather than the same menu, twice. */}
           <Button
             variant={activeCategory === "All" ? "default" : "outline"}
-            size="sm"
             onClick={() => setActiveCategory("All")}
-            className={activeCategory === "All" ? "bg-amber-600 hover:bg-amber-700 h-11 px-4 rounded-full" : "h-11 px-4 rounded-full"}
+            className={activeCategory === "All" ? "bg-amber-600 hover:bg-amber-700 text-lg h-11" : "text-lg h-11"}
           >
             {t.all_categories || "All Categories"}
           </Button>
@@ -914,9 +917,8 @@ export default function MenuPage() {
             <Button
               key={cat.id}
               variant={activeCategory === cat.name ? "default" : "outline"}
-              size="sm"
               onClick={() => setActiveCategory(cat.name)}
-              className={activeCategory === cat.name ? "bg-amber-600 hover:bg-amber-700 h-11 px-4 rounded-full" : "h-11 px-4 rounded-full"}
+              className={activeCategory === cat.name ? "bg-amber-600 hover:bg-amber-700 text-lg h-11" : "text-lg h-11"}
             >
               {cat.name}
             </Button>
@@ -928,9 +930,8 @@ export default function MenuPage() {
           {!reordering && (
             <Button
               variant="outline"
-              size="sm"
               onClick={() => setReordering(true)}
-              className="h-11 px-4 rounded-full ms-auto border-slate-300 text-slate-600"
+              className="h-11 ms-auto border-slate-300 text-slate-600"
             >
               <GripVertical className="w-4 h-4 mr-1.5" />
               {t.reorder}
@@ -956,119 +957,81 @@ export default function MenuPage() {
             onSaved={() => { fetchMenuItems(); fetchCategories() }}
           />
         ) : (
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-4">
-          {filteredItems.map((item) => (
-            <Card
+        /* The till's grid rule, not a copy of its numbers. Six columns of tall
+           photo tiles here against four compact rows there was two products,
+           not one, and the till is the screen staff learn first - so this page
+           follows it: same auto-fill, same 1.5 gap, no breakpoints.
+
+           21rem, not the till's 15rem, because this row carries the 6rem
+           edit/delete pair the till has no use for. Sized that way the two
+           grids land on the same column count on the same screen - four at the
+           bar's 1920 - and both step down together on a smaller one. */
+        <div
+          className="grid gap-1.5"
+          style={{ gridTemplateColumns: "repeat(auto-fill, minmax(21rem, 1fr))" }}
+        >
+          {filteredItems.map((item, index) => (
+            <MenuItemCard
               key={item.id}
+              item={item}
+              index={index}
               // Press and hold to rearrange. The card has no tap action of its
               // own - edit and delete are their own buttons - so a long press
               // costs nothing and is the gesture people already try.
               {...longPress}
-              className="flex flex-col group overflow-hidden border-2 border-slate-100 hover:border-amber-200 transition-all duration-300 shadow-sm hover:shadow-xl bg-white"
-            >
-              {/* Image Container */}
-              <div className="relative aspect-square overflow-hidden bg-slate-50">
-                {item.image ? (
-                  <Image
-                    src={item.image}
-                    alt={item.name}
-                    fill
-                    sizes="(max-width: 768px) 50vw, (max-width: 1200px) 33vw, 20vw"
-                    className="object-cover transition-transform duration-500 group-hover:scale-110"
-                  />
-                ) : (
-                  <div className="flex items-center justify-center w-full h-full text-4xl bg-gradient-to-br from-amber-50 to-orange-100">
-                    ☕
-                  </div>
-                )}
-                
-                {/* Status Badge */}
-                {!item.isAvailable && (
-                  <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px] flex items-center justify-center z-10">
-                    <Badge variant="destructive" className="px-3 py-1 font-bold tracking-widest uppercase">
-                      {t.unavailable}
-                    </Badge>
-                  </div>
-                )}
-
-                {/* Quick actions overlay */}
-                {/* Hover-reveal on anything with a mouse, always visible on touch.
-                    Tailwind gates hover: behind @media (hover:hover), so a plain
-                    hover-reveal is unreachable on the till -- pointer-fine: scopes
-                    the hiding to devices that can actually hover. */}
-                <div className="absolute bottom-2 right-2 flex gap-2 z-20 transition-all duration-300
-                                pointer-fine:opacity-0 pointer-fine:translate-y-2
-                                pointer-fine:group-hover:opacity-100 pointer-fine:group-hover:translate-y-0">
-                  <Button 
-                    variant="secondary" 
-                    size="icon" 
-                    className="h-11 w-11 rounded-full shadow-lg bg-white/95 backdrop-blur hover:bg-white"
+              className={item.isAvailable ? "" : "opacity-60"}
+              trailing={
+                <>
+                  {/* stopPropagation, not preventDefault: without it the press
+                      that opens the editor also starts the reorder timer. */}
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-11 w-11 text-amber-600 hover:bg-amber-50"
+                    aria-label={`${t.edit} ${item.localName || item.name}`}
+                    onPointerDown={(e) => e.stopPropagation()}
                     onClick={() => handleEdit(item)}
                   >
-                    <Edit className="w-5 h-5 text-amber-600" />
+                    <Edit className="w-5 h-5" />
                   </Button>
-                  <Button 
-                    variant="secondary" 
-                    size="icon" 
-                    className="h-11 w-11 rounded-full shadow-lg bg-white/95 backdrop-blur hover:bg-red-50"
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-11 w-11 text-red-600 hover:bg-red-50"
+                    aria-label={`${t.delete} ${item.localName || item.name}`}
+                    onPointerDown={(e) => e.stopPropagation()}
                     onClick={() => handleDelete(item.id)}
                   >
-                    <Trash2 className="w-5 h-5 text-red-600" />
+                    <Trash2 className="w-5 h-5" />
                   </Button>
-                </div>
-              </div>
+                </>
+              }
+            >
+              {/* Everything that is true of the item rather than of this page
+                  sits on the price line, so the row keeps one height. */}
+              {!item.isAvailable && (
+                <Badge variant="destructive" className="text-[9px] px-1.5 py-0 font-bold uppercase shrink-0">
+                  {t.unavailable}
+                </Badge>
+              )}
+              {/* Sells but moves no stock - invisible until stocktake.
+                  Flagged rather than blocked: a corkage fee or a service
+                  charge legitimately has no recipe.
 
-              {/* Info Container */}
-              <div className="p-3 flex-1 flex flex-col justify-between">
-                <div>
-                  <div className="flex items-start justify-between gap-1 mb-1">
-                    <h3 className="font-black text-amber-950 leading-tight line-clamp-1">{item.localName || item.name}</h3>
-                  </div>
-                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest line-clamp-1 mb-2">{item.name}</p>
-                </div>
-
-                <div className="flex items-center justify-between mt-1">
-                  <div className="flex items-center gap-1">
-                    <Badge variant="outline" className="text-[9px] font-bold bg-slate-50 border-slate-200 text-slate-500 uppercase">
-                      {item.category}
-                    </Badge>
-                    {/* Sells but moves no stock - invisible until stocktake.
-                        Flagged rather than blocked: a corkage fee or a service
-                        charge legitimately has no recipe.
-
-                        The flag is also the way to fix it: it opens this item's
-                        recipe directly, rather than telling someone there is a
-                        problem and leaving them to find the screen. */}
-                    {item._count?.recipes === 0 && (
-                      <Link
-                        href={`/menu/recipes?product=${item.id}`}
-                        title={t.no_recipe_help}
-                        onPointerDown={(e) => e.stopPropagation()}
-                        className="text-[9px] font-bold bg-amber-50 border border-amber-200 text-amber-700 uppercase rounded-md px-1.5 py-0.5 hover:bg-amber-100 hover:border-amber-400 transition-colors duration-150"
-                      >
-                        {t.no_recipe}
-                      </Link>
-                    )}
-                  </div>
-                  <div className="flex -space-x-1">
-                    {item.variations?.filter(v => v.isEnabled).slice(0, 3).map((v, i) => (
-                      <div 
-                        key={i} 
-                        className="w-5 h-5 rounded-full border border-white bg-amber-100 flex items-center justify-center text-[8px] font-black text-amber-700 shadow-sm"
-                        title={v.type}
-                      >
-                        {v.type[0]}
-                      </div>
-                    ))}
-                    {(item.variations?.filter(v => v.isEnabled).length || 0) > 3 && (
-                      <div className="w-5 h-5 rounded-full border border-white bg-slate-100 flex items-center justify-center text-[8px] font-black text-slate-500">
-                        +{(item.variations?.filter(v => v.isEnabled).length || 0) - 3}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </Card>
+                  The flag is also the way to fix it: it opens this item's
+                  recipe directly, rather than telling someone there is a
+                  problem and leaving them to find the screen. */}
+              {item._count?.recipes === 0 && (
+                <Link
+                  href={`/menu/recipes?product=${item.id}`}
+                  title={t.no_recipe_help}
+                  onPointerDown={(e) => e.stopPropagation()}
+                  className="text-[9px] font-bold bg-amber-50 border border-amber-200 text-amber-700 uppercase rounded-md px-1.5 py-0.5 shrink-0 hover:bg-amber-100 hover:border-amber-400 transition-colors duration-150"
+                >
+                  {t.no_recipe}
+                </Link>
+              )}
+            </MenuItemCard>
           ))}
         </div>
         )}
