@@ -10,6 +10,7 @@ import {
     thbToLak, thbToUsd,
     calculateChange, calculateInclusiveTax,
     DEFAULT_RATE_LAK, DEFAULT_RATE_USD,
+    billRates,
 } from './currency.ts'
 
 test('formatTHB groups thousands and shows no decimals', () => {
@@ -97,4 +98,45 @@ test('shipped defaults are sane', () => {
     // sets the real counter rate in settings.
     assert.ok(DEFAULT_RATE_LAK > 100 && DEFAULT_RATE_LAK < 2000)
     assert.ok(DEFAULT_RATE_USD > 10 && DEFAULT_RATE_USD < 100)
+})
+
+// Requirement #18, generalised: a rate is a per-transaction fact. FX and VAT
+// are both stamped at close, and these tests are the only thing standing
+// between a settings edit and what last night's bills say they charged.
+
+test('a closed bill keeps the rates it was settled at', () => {
+    // Owner moves the counter rate and registers for VAT this morning. The bill
+    // closed last night was charged at 690 and 7%, and stays that way.
+    const bill = { status: 'CLOSED', fxRateLAK: 690, fxRateUSD: 33, taxRate: 7 }
+    assert.deepEqual(
+        billRates(bill, { lak: 720, usd: 35, tax: 10 }),
+        { lak: 690, usd: 33, tax: 7 }
+    )
+})
+
+test('an open bill quotes the current rates', () => {
+    // Nothing stamped yet - a table still drinking is quoted at today's rates.
+    const bill = { status: 'OPEN', fxRateLAK: null, fxRateUSD: null, taxRate: null }
+    assert.deepEqual(
+        billRates(bill, { lak: 720, usd: 35, tax: 10 }),
+        { lak: 720, usd: 35, tax: 10 }
+    )
+})
+
+test('a bill closed before rates were stamped shows no conversion and no VAT', () => {
+    // Bills that predate the columns have no rate to show. Null prints no LAK
+    // line and no VAT line, which is honest; today's rates would be a lie about
+    // what that customer was charged.
+    const bill = { status: 'CLOSED', fxRateLAK: null, fxRateUSD: null, taxRate: null }
+    assert.deepEqual(
+        billRates(bill, { lak: 720, usd: 35, tax: 10 }),
+        { lak: null, usd: null, tax: null }
+    )
+})
+
+test('a zero VAT rate stamped at close survives a later registration', () => {
+    // 0 is a real answer, not a missing one: a bar not registered for VAT
+    // charged no VAT, and `?? live` would quietly backfill today's 10%.
+    const bill = { status: 'CLOSED', fxRateLAK: 690, fxRateUSD: 33, taxRate: 0 }
+    assert.equal(billRates(bill, { lak: 720, usd: 35, tax: 10 }).tax, 0)
 })

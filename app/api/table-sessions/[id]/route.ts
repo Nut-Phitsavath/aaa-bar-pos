@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { sessionTotal } from '@/lib/sessions'
 import { balanceOf, changeDue, billTotalOf, discountAmount } from '@/lib/payments'
-import { DEFAULT_RATE_LAK, DEFAULT_RATE_USD } from '@/lib/currency'
+import { DEFAULT_RATE_LAK, DEFAULT_RATE_USD, billRates, taxRateOf } from '@/lib/currency'
 import { outstandingForCustomer } from '@/lib/customer-tabs'
 import { componentIndex, contentsOf } from '@/lib/packages'
 import { sellableMenus } from '@/lib/packages-db'
@@ -71,27 +71,23 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
             return NextResponse.json({ error: 'Session not found' }, { status: 404 })
         }
 
-        // An open bill quotes today's rate; a closed one re-reads the rate it
-        // was settled at, forever. Resolving this server-side means no screen
-        // can accidentally render a closed bill at the live rate (req #18).
-        let fxRateLAK = session.fxRateLAK
-        let fxRateUSD = session.fxRateUSD
-        let showUsd = false
-
+        // An open bill quotes today's rates; a closed one re-reads the rates it
+        // was settled at, forever - FX and VAT alike. Resolving this server-side
+        // means no screen can render a closed bill at live rates (req #18).
         const settings = await prisma.setting.findMany({
-            where: { key: { in: ['rate_lak', 'rate_usd', 'show_usd'] } }
+            where: { key: { in: ['rate_lak', 'rate_usd', 'show_usd', 'taxRate', 'tax_rate'] } }
         })
         const valueOf = (key: string) => settings.find((s) => s.key === key)?.value
-        showUsd = valueOf('show_usd') === 'true'
-
-        if (session.status !== 'CLOSED') {
-            const live = (key: string, fallback: number) => {
-                const parsed = Number(valueOf(key))
-                return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback
-            }
-            fxRateLAK = live('rate_lak', DEFAULT_RATE_LAK)
-            fxRateUSD = live('rate_usd', DEFAULT_RATE_USD)
+        const showUsd = valueOf('show_usd') === 'true'
+        const live = (key: string, fallback: number) => {
+            const parsed = Number(valueOf(key))
+            return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback
         }
+        const { lak: fxRateLAK, usd: fxRateUSD, tax: taxRate } = billRates(session, {
+            lak: live('rate_lak', DEFAULT_RATE_LAK),
+            usd: live('rate_usd', DEFAULT_RATE_USD),
+            tax: taxRateOf(valueOf('taxRate') ?? valueOf('tax_rate')),
+        })
 
         // What this guest already owes on other nights. The till needs it
         // before the round is served, not after: a regular who is 20,000 down
@@ -143,6 +139,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
             changeDue: changeDue(total, session.payments),
             fxRateLAK,
             fxRateUSD,
+            taxRate,
             showUsd,
             customerOwes
         })

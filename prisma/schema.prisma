@@ -319,6 +319,12 @@ model TableSession {
   // Null while the bill is open - an open bill quotes the current rate.
   fxRateLAK  Float?
   fxRateUSD  Float?
+  // The VAT rate this bill was settled at, stamped at the same moment and for
+  // the same reason. An Order already stores its taxAmount; a table bill stored
+  // nothing, so reprinting last month's bill recomputed VAT at today's rate.
+  // The tax is inclusive, so this never moved the total - only the split, which
+  // is the figure the books are built from. 0 is a real rate, not a missing one.
+  taxRate    Float?
   /// Per-table discount (req #15). PERCENT rounds the resulting total up.
   /// A manager authorises it and their id stays on the row, so every
   /// write-off has a name against it.
