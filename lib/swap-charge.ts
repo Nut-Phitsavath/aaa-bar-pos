@@ -14,20 +14,10 @@ import type { StockMovement } from './stock.ts'
  */
 export const EXCHANGE_CHARGE = 'ສ່ວນຕ່າງການແລກປ່ຽນ (Exchange difference)'
 
-/** The recipe rule the order path uses: the menu's base lines plus this size's. */
-async function recipeFor(tx: any, variationSizeId: string) {
-    const vs = await tx.variationSize.findUnique({
-        where: { id: variationSizeId },
-        include: { variation: { include: { menu: true } } },
-    })
-    if (!vs?.variation?.menu) return []
+/** The recipe rule swaps use: the menu item's base lines. */
+async function recipeFor(tx: any, menuId: string) {
     return tx.recipe.findMany({
-        where: {
-            OR: [
-                { menuId: vs.variation.menu.id, variationSizeId: null },
-                { variationSizeId },
-            ],
-        },
+        where: { menuId, variationSizeId: null },
     })
 }
 
@@ -53,9 +43,9 @@ export async function reverseSwap(
     ) => Promise<void>,
 ): Promise<void> {
     for (const line of swap.lines) {
-        if (!line.variationSizeId) continue
+        if (!line.menuId) continue
         const sign = line.direction === 'OUT' ? 1 : -1
-        for (const r of await recipeFor(tx, line.variationSizeId)) {
+        for (const r of await recipeFor(tx, line.menuId)) {
             await decrementStock(tx, r.ingredientId, sign * r.quantity * line.quantity, {
                 type: 'EXCHANGE_REVERSE',
                 userId,

@@ -9,8 +9,8 @@ import assert from 'node:assert/strict'
 import { returnable, canReturn, type Returnable } from './returns.ts'
 
 const HAD: Returnable[] = [
-    { menuId: 'beerlao', variationSizeId: 'v1', name: 'Beer Lao', quantity: 5 },
-    { menuId: 'water', variationSizeId: 'v2', name: 'Drinking Water', quantity: 2 },
+    { menuId: 'beerlao', name: 'Beer Lao', quantity: 5 },
+    { menuId: 'water', name: 'Drinking Water', quantity: 2 },
 ]
 
 test('what the table was served is what can come back', () => {
@@ -20,8 +20,8 @@ test('what the table was served is what can come back', () => {
 test('the same drink on two rounds is one line', () => {
     const merged = returnable(
         [
-            { menuId: 'beerlao', variationSizeId: 'v1', name: 'Beer Lao', quantity: 5 },
-            { menuId: 'beerlao', variationSizeId: 'v1', name: 'Beer Lao', quantity: 3 },
+            { menuId: 'beerlao', name: 'Beer Lao', quantity: 5 },
+            { menuId: 'beerlao', name: 'Beer Lao', quantity: 3 },
         ],
         [],
     )
