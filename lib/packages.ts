@@ -22,7 +22,6 @@ import type { MeasureType } from './units.ts'
 export type Component = {
     /** The single-serve menu item this component is sold as. */
     menuId: string
-    variationSizeId: string | null
     name: string
     localName?: string | null
     unitPrice: number
@@ -44,7 +43,6 @@ export type Component = {
  */
 export type SellableMenu = {
     menuId: string
-    variationSizeId: string | null
     name: string
     localName?: string | null
     unitPrice: number
@@ -87,7 +85,6 @@ export function contentsOf(
         if (!Number.isInteger(line.quantity) || line.quantity < 1) continue
         out.push({
             menuId: sellable.menuId,
-            variationSizeId: sellable.variationSizeId,
             name: sellable.name,
             localName: sellable.localName ?? null,
             unitPrice: sellable.unitPrice,

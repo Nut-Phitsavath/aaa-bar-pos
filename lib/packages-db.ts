@@ -14,9 +14,6 @@ export async function sellableMenus(): Promise<SellableMenu[]> {
     const menus = await prisma.menu.findMany({
         where: { isAvailable: true },
         include: {
-            // measureType comes along so componentIndex can say what it means -
-            // only a whole-unit ingredient is exchangeable - instead of
-            // inferring it from the quantity being exactly 1.
             recipes: {
                 select: {
                     ingredientId: true,
@@ -24,26 +21,19 @@ export async function sellableMenus(): Promise<SellableMenu[]> {
                     ingredient: { select: { measureType: true } },
                 },
             },
-            variations: {
-                include: { sizes: { where: { isAvailable: true }, orderBy: { displayOrder: 'asc' } } },
-            },
         },
         orderBy: { name: 'asc' },
     })
 
-    return menus.map((m) => {
-        const size = m.variations.flatMap((v) => v.sizes)[0]
-        return {
-            menuId: m.id,
-            variationSizeId: size?.id ?? null,
-            name: m.name,
-            localName: m.localName,
-            unitPrice: size?.price ?? 0,
-            recipe: m.recipes.map((r) => ({
-                ingredientId: r.ingredientId,
-                quantity: r.quantity,
-                measureType: r.ingredient.measureType as MeasureType,
-            })),
-        }
-    })
+    return menus.map((m) => ({
+        menuId: m.id,
+        name: m.name,
+        localName: m.localName,
+        unitPrice: m.price,
+        recipe: m.recipes.map((r) => ({
+            ingredientId: r.ingredientId,
+            quantity: r.quantity,
+            measureType: r.ingredient.measureType as MeasureType,
+        })),
+    }))
 }
