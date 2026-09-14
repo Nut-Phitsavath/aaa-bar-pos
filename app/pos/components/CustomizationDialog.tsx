@@ -5,7 +5,6 @@ import { Input } from "@/components/ui/input"
 import { useState, useEffect } from "react"
 import { createPortal } from "react-dom"
 import { useTranslation } from "@/hooks/use-translation"
-import { notify } from "@/components/ui/sonner"
 import { formatTHB } from "@/lib/currency"
 import {
     Droplet,
@@ -14,41 +13,29 @@ import {
     Candy,
     Coffee,
     Minus,
-    Trash2,
     ShoppingBag
 } from "lucide-react"
 import { Switch } from "@/components/ui/switch"
-
-interface MenuVariation {
-    id: string
-    type: string
-    displayOrder?: number
-    sizes: {
-        id: string
-        size: string
-        price: number
-        displayOrder?: number
-    }[]
-}
 
 interface CustomizationDialogProps {
     isOpen: boolean
     onClose: () => void
     onConfirm: (selection: {
-        variationSizeId: string
+        menuId: string
         name: string
         localName?: string
         price: number
         sugar: string
         shot: string
-        variation: string
-        size: string
         isTakeaway: boolean
         note: string
     }) => void
     menuName: string
     localName?: string
-    variations: MenuVariation[]
+    /** The item being added. Price is a flat property on the menu item now —
+     * there is no variation/size table underneath it to look a price up in. */
+    menuId: string
+    price: number
     hasSugarLevel?: boolean
     hasShotType?: boolean
     imageUrl?: string
@@ -61,7 +48,8 @@ export function CustomizationDialog({
     onConfirm,
     menuName,
     localName,
-    variations,
+    menuId,
+    price,
     hasSugarLevel = true,
     hasShotType = true,
     imageUrl
@@ -69,8 +57,6 @@ export function CustomizationDialog({
     const { t } = useTranslation()
     const [sugar, setSugar] = useState("Normal Sweet")
     const [shot, setShot] = useState("Normal Shot")
-    const [selectedVariation, setSelectedVariation] = useState<string>("")
-    const [selectedSize, setSelectedSize] = useState<string>("")
     const [isTakeaway, setIsTakeaway] = useState(false)
     // Requirement #4's preparation note. OrderItem has carried the field all
     // along; nothing ever offered a way to type one, so "no ice" reached the
@@ -79,21 +65,13 @@ export function CustomizationDialog({
 
     // Reset defaults when opening
     useEffect(() => {
-        if (isOpen && variations.length > 0) {
+        if (isOpen) {
             setSugar("Normal Sweet")
             setShot("Normal Shot")
-
-            // Set default variation (first available)
-            const defaultVar = variations[0]
-            setSelectedVariation(defaultVar.type)
-
-            // Set default size (M if available, otherwise first)
-            const mSize = defaultVar.sizes.find(s => s.size === "M")
-            setSelectedSize(mSize ? mSize.id : defaultVar.sizes[0]?.id || "")
             setIsTakeaway(false)
             setNote("")
         }
-    }, [isOpen, variations])
+    }, [isOpen])
 
     const sugarOptions = [
         { label: "No Sweet", icon: CandyOff, key: "no_sweet" },
@@ -111,45 +89,17 @@ export function CustomizationDialog({
     const effectiveSugar = hasSugarLevel ? sugar : "Normal Sweet"
     const effectiveShot = hasShotType ? shot : "Normal Shot"
 
-    // Get current variation object
-    const currentVariation = variations.find(v => v.type === selectedVariation)
-
-    // Get selected size details
-    const selectedSizeObj = currentVariation?.sizes.find(s => s.id === selectedSize)
-    const basePrice = selectedSizeObj?.price || 0
     const shotPrice = shot === "Double Shot" ? 10000 : 0
-    const finalPrice = basePrice + shotPrice
-
-    const handleVariationChange = (varType: string) => {
-        setSelectedVariation(varType)
-        const newVar = variations.find(v => v.type === varType)
-        if (newVar) {
-            // Try to keep same size if available
-            const sameSize = newVar.sizes.find(s => s.size === selectedSizeObj?.size)
-            if (sameSize) {
-                setSelectedSize(sameSize.id)
-            } else {
-                // Default to first size
-                setSelectedSize(newVar.sizes[0]?.id || "")
-            }
-        }
-    }
+    const finalPrice = price + shotPrice
 
     const handleConfirm = (event: React.MouseEvent<HTMLButtonElement>) => {
-        if (!selectedSize || !selectedSizeObj) {
-            notify.warn(t.please_select_customization)
-            return
-        }
-
         onConfirm({
-            variationSizeId: selectedSize,
+            menuId,
             name: menuName, // Keep name as the base product name
             localName: localName,
             price: finalPrice,
             sugar: effectiveSugar,
             shot: effectiveShot,
-            variation: selectedVariation,
-            size: selectedSizeObj.size,
             isTakeaway: isTakeaway,
             note: note.trim(),
         })
@@ -234,47 +184,6 @@ export function CustomizationDialog({
                     </DialogDescription>
                 </DialogHeader>
                 <div className="grid gap-4 py-0">
-
-                    {/* Variation Type */}
-                    <div className="space-y-2">
-                        <Label className="text-md">{t.variation || "Variation"}</Label>
-                        <div className="flex flex-wrap gap-2">
-                            {[...variations]
-                                .sort((a, b) => (a.displayOrder || 0) - (b.displayOrder || 0))
-                                .map((variation) => (
-                                    <Button
-                                        key={variation.type}
-                                        variant={selectedVariation === variation.type ? "default" : "outline"}
-                                        onClick={() => handleVariationChange(variation.type)}
-                                        className="flex-1"
-                                    >
-                                        {variation.type === 'HOT' ? t.hot : variation.type === 'ICE' ? t.ice : variation.type === 'BLEND' ? t.blend : variation.type}
-                                    </Button>
-                                ))}
-                        </div>
-                    </div>
-
-                    {/* Size Selection */}
-                    <div className="space-y-2">
-                        <Label className="text-md">{t.choice || "Choice"}</Label>
-                        <div className="flex flex-wrap gap-2">
-                            {[...(currentVariation?.sizes || [])]
-                                .sort((a, b) => (a.displayOrder || 0) - (b.displayOrder || 0))
-                                .map((size) => (
-                                    <Button
-                                        key={size.id}
-                                        variant={selectedSize === size.id ? "default" : "outline"}
-                                        onClick={() => setSelectedSize(size.id)}
-                                        className="flex-1 h-12"
-                                    >
-                                        <div className="flex flex-col items-center">
-                                            <span className="text-lg font-bold">{size.size === 'S' ? t.s_size : size.size === 'M' ? t.m_size : size.size === 'L' ? t.l_size : size.size}</span>
-                                            <span className="text-xs">{formatTHB(size.price)}</span>
-                                        </div>
-                                    </Button>
-                                ))}
-                        </div>
-                    </div>
 
                     {/* Sugar Level */}
                     {hasSugarLevel && (

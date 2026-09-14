@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation"
 import { toast } from "sonner"
 import { TicketPanel, type TicketBill } from "@/components/pos/ticket-panel"
 import { ReceiptDialog } from "@/components/receipt-dialog"
-import { cartKey } from "@/lib/cart-storage"
+import { cartKey, COUNTER_CART_KEY } from "@/lib/cart-storage"
 import { SessionBanner, type Waiter } from "@/components/session-banner"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -45,20 +45,13 @@ type MenuItem = {
   image?: string
   hasSugarLevel?: boolean
   hasShotType?: boolean
-  variations: Array<{
-    id: string
-    type: string
-    sizes: Array<{
-      id: string
-      size: string
-      price: number
-    }>
-  }>
+  /** Flat now -- one item, one price. No variation/size table underneath it. */
+  price: number
 }
 
 type CartItem = {
   id: string
-  variationSizeId: string
+  menuId: string
   name: string
   localName?: string
   price: number
@@ -92,7 +85,12 @@ const MenuCard = memo(function MenuCard({ item, index, onClick }: {
 }) {
   return (
     <MenuItemCard
-      item={item}
+      // MenuItemCard still reads its price through the old variations/sizes
+      // shape (components/menu-item-card.tsx is Task 10's file, not this
+      // one) -- synthesised here at the boundary so the card keeps showing
+      // a real price instead of crashing on `item.variations` being gone
+      // from the API response.
+      item={{ ...item, variations: [{ sizes: [{ price: item.price }] }] }}
       index={index}
       onClick={(e) => onClick(item, e)}
       className={!item.isAvailable ? "opacity-50 pointer-events-none" : ""}
@@ -499,7 +497,7 @@ function POSPageInner() {
           waiterId,
           status: "SENT",
           items: cart.map((i) => ({
-            variationSizeId: i.variationSizeId,
+            menuId: i.menuId,
             name: i.localName ? `${i.localName} (${i.name})` : i.name,
             price: i.price,
             quantity: i.quantity,
@@ -547,7 +545,7 @@ function POSPageInner() {
           pointsRedeemed,
           taxAmount: tax,
           items: cart.map(i => ({
-            variationSizeId: i.variationSizeId,
+            menuId: i.menuId,
             name: i.localName ? `${i.localName} (${i.name})` : i.name, // Snapshot both names
             price: i.price,
             quantity: i.quantity,
@@ -619,7 +617,7 @@ function POSPageInner() {
           notify.error(t.order_create_failed, { description: t.order_stale_items })
           // IDs likely changed because of seeding. Clear cart to be safe or prune if we have missingIds.
           if (errorData.missingIds) {
-            setCart(prev => prev.filter(i => !errorData.missingIds.includes(i.variationSizeId)))
+            setCart(prev => prev.filter(i => !errorData.missingIds.includes(i.menuId)))
           }
         } else if (errorData.code === 'STALE_CUSTOMER_VIOLATION') {
           notify.error(t.order_create_failed, { description: t.order_stale_customer })
@@ -679,7 +677,7 @@ function POSPageInner() {
       const res = await fetch('/api/menu?availableOnly=true')
       if (res.ok) {
         const data = await res.json()
-        // Data already in correct hierarchical format from API
+        // Flat items straight from the API -- price lives on the item itself.
         setMenuItems(data)
 
         // Extract unique categories
@@ -687,11 +685,9 @@ function POSPageInner() {
         setCategories(["All", ...uniqueCategories])
 
         // Silent Validation: Remove cart items that no longer exist in the menu
-        const allVariationSizeIds = new Set(
-          data.flatMap((m: any) => m.variations.flatMap((v: any) => v.sizes.map((s: any) => s.id)))
-        )
+        const validMenuIds = new Set(data.map((m: any) => m.id))
         setCart((prev) => {
-          const valid = prev.filter(item => allVariationSizeIds.has(item.variationSizeId))
+          const valid = prev.filter(item => validMenuIds.has(item.menuId))
           if (valid.length !== prev.length) {
             console.warn("Pruned invalid/stale items from cart after seeding/update.")
           }
@@ -756,10 +752,10 @@ function POSPageInner() {
         const found = all.find((o: any) => o.id === resumeId)
         if (found) {
           setCart(found.items.map((i: any) => {
-            const compositeId = `${i.variationSizeId}-${i.sugarLevel || ''}-${i.shotType || ''}-${i.variation || ''}-${i.isTakeaway || false}-${i.note || ''}`
+            const compositeId = `${i.menuId}-${i.sugarLevel || ''}-${i.shotType || ''}-${i.variation || ''}-${i.isTakeaway || false}-${i.note || ''}`
             return {
               id: compositeId,
-              variationSizeId: i.variationSizeId,
+              menuId: i.menuId,
               name: i.name,
               price: i.price,
               quantity: i.quantity,
@@ -795,7 +791,7 @@ function POSPageInner() {
     const resumeId = params.get('resumeOrder')
 
     // Auto-Hold existing session if switching (this logic remains in the useEffect for initial load)
-    const existingCartStr = localStorage.getItem("pos_cart")
+    const existingCartStr = localStorage.getItem(COUNTER_CART_KEY)
     const existingCart = existingCartStr ? JSON.parse(existingCartStr) : []
     const existingResumedId = localStorage.getItem("pos_resumedOrderId")
 
@@ -816,7 +812,7 @@ function POSPageInner() {
             body: JSON.stringify({
               id: existingResumedId,
               items: existingCart.map((i: any) => ({
-                variationSizeId: i.variationSizeId,
+                menuId: i.menuId,
                 name: i.name,
                 price: i.price,
                 quantity: i.quantity,
@@ -999,23 +995,21 @@ function POSPageInner() {
   }, [])
 
   const handleAddToCartWithCustomization = (selection: {
-    variationSizeId: string
+    menuId: string
     name: string
     localName?: string
     price: number
     sugar: string
     shot: string
-    variation: string
-    size: string
     isTakeaway: boolean
     note: string
   }) => {
     const finalPrice = selection.price
 
     setCart((prev) => {
-      // Unique ID based on variationSizeId + customizations. The note is part
-      // of it: two of the same drink, one "no ice", are two lines, not a qty 2.
-      const uniqueId = `${selection.variationSizeId}-${selection.sugar}-${selection.shot}-${selection.variation}-${selection.isTakeaway}-${selection.note}`
+      // Unique ID based on menuId + customizations. The note is part of it:
+      // two of the same drink, one "no ice", are two lines, not a qty 2.
+      const uniqueId = `${selection.menuId}-${selection.sugar}-${selection.shot}-${selection.isTakeaway}-${selection.note}`
 
       // Check existing similar item
       const existing = prev.find((item) => item.id === uniqueId)
@@ -1028,15 +1022,13 @@ function POSPageInner() {
 
       return [...prev, {
         id: uniqueId,
-        variationSizeId: selection.variationSizeId,
+        menuId: selection.menuId,
         name: selection.name,
         localName: selection.localName,
         price: finalPrice,
         quantity: 1,
         sugar: selection.sugar,
         shot: selection.shot,
-        variation: selection.variation,
-        size: selection.size,
         category: productToCustomize?.category || "Other",
         image: productToCustomize?.image,
         isTakeaway: selection.isTakeaway,
@@ -1048,7 +1040,7 @@ function POSPageInner() {
 
   const getCartSignature = () => {
     return JSON.stringify({
-      items: cart.map(i => ({ id: i.variationSizeId, qty: i.quantity, sugar: i.sugar, shot: i.shot, takeaway: i.isTakeaway })),
+      items: cart.map(i => ({ id: i.menuId, qty: i.quantity, sugar: i.sugar, shot: i.shot, takeaway: i.isTakeaway })),
       total,
       promoId: appliedPromo?.id,
       customerId: selectedCustomer?.id,
@@ -1083,7 +1075,7 @@ function POSPageInner() {
         body: JSON.stringify({
           id: resumedOrderId,
           items: cart.map(i => ({
-            variationSizeId: i.variationSizeId,
+            menuId: i.menuId,
             name: i.name,
             price: i.price,
             quantity: i.quantity,
@@ -1178,7 +1170,7 @@ function POSPageInner() {
         body: JSON.stringify({
           id: resumedOrderId,
           items: cart.map(i => ({
-            variationSizeId: i.variationSizeId,
+            menuId: i.menuId,
             name: i.localName ? `${i.localName} (${i.name})` : i.name,
             price: i.price,
             quantity: i.quantity,
@@ -1241,7 +1233,7 @@ function POSPageInner() {
           id: resumedOrderId,
           items: cart.map(i => ({
             id: i.id,
-            variationSizeId: i.variationSizeId,
+            menuId: i.menuId,
             name: i.name,
             price: i.price,
             quantity: i.quantity
@@ -2293,7 +2285,8 @@ function POSPageInner() {
             onConfirm={handleAddToCartWithCustomization}
             menuName={productToCustomize.name}
             localName={productToCustomize.localName}
-            variations={productToCustomize.variations || []}
+            menuId={productToCustomize.id}
+            price={productToCustomize.price}
             hasSugarLevel={productToCustomize.hasSugarLevel}
             hasShotType={productToCustomize.hasShotType}
             imageUrl={productToCustomize.image}

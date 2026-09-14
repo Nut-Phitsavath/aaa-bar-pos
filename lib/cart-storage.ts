@@ -15,8 +15,15 @@
  * that "client-side" now means per ticket instead of per browser.
  */
 
-/** The walk-in counter keeps the original key, so nothing in flight is lost. */
-export const COUNTER_CART_KEY = 'pos_cart'
+/**
+ * Versioned so a cart line survives what created it. A cart line used to be
+ * keyed on variationSizeId; once the till stopped writing that field, an
+ * old cart deserialised under the unversioned key would come back as a line
+ * with no menu item (variationSizeId undefined, menuId never set). Bumping
+ * the key makes that old JSON simply not be found, which is what "not a
+ * stale line" needs to mean.
+ */
+export const COUNTER_CART_KEY = 'pos_cart-v2'
 
 export function cartKey(sessionId: string | null | undefined): string {
     return sessionId ? `${COUNTER_CART_KEY}:${sessionId}` : COUNTER_CART_KEY

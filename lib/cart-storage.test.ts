@@ -18,7 +18,7 @@ test('the counter keeps the original key', () => {
 })
 
 test('a table gets a key of its own', () => {
-    assert.equal(cartKey('abc-123'), 'pos_cart:abc-123')
+    assert.equal(cartKey('abc-123'), 'pos_cart-v2:abc-123')
 })
 
 test('two tables never share a key', () => {
@@ -32,8 +32,14 @@ test('a table never shares the counter key', () => {
 
 test('cart keys are recognisable, so they can be swept up', () => {
     assert.equal(isCartKey(COUNTER_CART_KEY), true)
-    assert.equal(isCartKey('pos_cart:abc'), true)
+    assert.equal(isCartKey('pos_cart-v2:abc'), true)
     assert.equal(isCartKey('pos_customer'), false)
     assert.equal(isCartKey('pos_table'), false)
     assert.equal(isCartKey(''), false)
+})
+
+test('a pre-bump cart key is no longer recognised, so a stale cart is never found', () => {
+    // The whole point of the version bump: this used to be the counter's key.
+    assert.equal(isCartKey('pos_cart'), false)
+    assert.equal(isCartKey('pos_cart:abc-123'), false)
 })
