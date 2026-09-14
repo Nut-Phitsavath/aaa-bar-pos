@@ -8,36 +8,36 @@ datasource db {
 }
 
 model User {
-  id                String             @id @default(uuid())
-  name              String
-  username          String             @unique
-  role              String
-  pin               String
-  isActive          Boolean            @default(true)
-  createdAt         DateTime           @default(now())
-  updatedAt         DateTime           @updatedAt
-  orders            Order[]
-  shifts            Shift[]
-  stockCounts       StockCount[]
-  stockTransactions StockTransaction[]
+  id                   String              @id @default(uuid())
+  name                 String
+  username             String              @unique
+  role                 String
+  pin                  String
+  isActive             Boolean             @default(true)
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
+  orders               Order[]
+  shifts               Shift[]
+  stockCounts          StockCount[]
+  stockTransactions    StockTransaction[]
   // `orders` above is the cashier who rang the sale up. `waitedOrders` is the
   // waiter who served it — a different person on a bar table, which is the
   // whole point of assigning a waiter per order instead of per login.
-  waitedOrders      Order[]            @relation("OrderWaiter")
-  sessionsOpened    TableSession[]     @relation("SessionOpenedBy")
-  paymentsTaken     Payment[]          @relation("PaymentTakenBy")
-  paymentsApproved  Payment[]          @relation("PaymentApprovedBy")
-  discountsApproved TableSession[]     @relation("SessionDiscountApprover")
-  tabsApproved      TableSession[]     @relation("SessionTabApprover")
+  waitedOrders         Order[]             @relation("OrderWaiter")
+  sessionsOpened       TableSession[]      @relation("SessionOpenedBy")
+  paymentsTaken        Payment[]           @relation("PaymentTakenBy")
+  paymentsApproved     Payment[]           @relation("PaymentApprovedBy")
+  discountsApproved    TableSession[]      @relation("SessionDiscountApprover")
+  tabsApproved         TableSession[]      @relation("SessionTabApprover")
   // Who struck a line, which is the "staff name" column req #24 asks for. It
   // is deliberately not the same person as `waitedOrders`: the report has to
   // separate who took the round from who cancelled it.
-  itemsVoided       OrderItem[]        @relation("OrderItemVoidedBy")
-  paymentsVoided    Payment[]          @relation("PaymentVoidedBy")
-  sessionsReopened  TableSession[]     @relation("SessionReopenedBy")
-  packageSwaps      PackageSwap[]
-  packageSwapsReversed PackageSwap[]  @relation("PackageSwapReversedBy")
-  tableEvents       TableSessionEvent[]
+  itemsVoided          OrderItem[]         @relation("OrderItemVoidedBy")
+  paymentsVoided       Payment[]           @relation("PaymentVoidedBy")
+  sessionsReopened     TableSession[]      @relation("SessionReopenedBy")
+  packageSwaps         PackageSwap[]
+  packageSwapsReversed PackageSwap[]       @relation("PackageSwapReversedBy")
+  tableEvents          TableSessionEvent[]
 }
 
 model Category {
@@ -58,25 +58,25 @@ model Category {
 }
 
 model Menu {
-  id          String          @id @default(uuid())
-  name        String
-  description String?
-  isAvailable Boolean         @default(true)
+  id           String          @id @default(uuid())
+  name         String
+  description  String?
+  isAvailable  Boolean         @default(true)
   /// What this item sells for. One item, one price: the bar names the serving
   /// in the item itself ("Whisky (glass)", "Beer Lao Bucket (5)") rather than
   /// carrying a size axis. 0 means not priced yet, which is what the old
   /// filter(n => n > 0) meant when the price lived two tables away.
-  price        Float   @default(0)
+  price        Float           @default(0)
   /// Where this sits inside its category on the till (0 = first).
-  displayOrder Int            @default(0)
-  image       String?         @default("/placeholder.svg")
-  categoryId  String
-  createdAt   DateTime        @default(now())
-  updatedAt   DateTime        @updatedAt
-  localName   String?
-  category    Category        @relation(fields: [categoryId], references: [id])
-  variations  MenuVariation[]
-  recipes     Recipe[]
+  displayOrder Int             @default(0)
+  image        String?         @default("/placeholder.svg")
+  categoryId   String
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+  localName    String?
+  category     Category        @relation(fields: [categoryId], references: [id])
+  variations   MenuVariation[]
+  recipes      Recipe[]
   orderItems   OrderItem[]
 
   @@index([categoryId, displayOrder])
@@ -121,39 +121,39 @@ model IngredientCategory {
 }
 
 model Ingredient {
-  id           String              @id @default(uuid())
-  name         String
+  id                 String              @id @default(uuid())
+  name               String
   /// Legacy free-text unit. Kept for display and for the migration's audit
   /// trail; nothing computes from it any more.
-  unit         String
+  unit               String
   /// WEIGHT | VOLUME | EACH. Immutable once any StockTransaction references
   /// this ingredient - changing it would rewrite what every past deduction
   /// meant. "Stock has moved" is that row existing, not stock being non-zero:
   /// an ingredient received and fully consumed is back at zero and must stay
   /// locked.
-  measureType  String              @default("EACH")
+  measureType        String              @default("EACH")
   /// g | ml | each. Derived from measureType, never entered by hand.
-  baseUnit     String              @default("each")
+  baseUnit           String              @default("each")
   /// What the delivery note says: "bottle", "case", "kg".
-  purchaseUnit String              @default("each")
+  purchaseUnit       String              @default("each")
   /// Base units per purchase unit. 700 for a 700ml bottle, 1000 for a kg.
   /// This is the number that used to be smeared across every recipe row as a
   /// repeating decimal.
-  purchaseMultiplier Float         @default(1)
-  mainStock    Float               @default(0)
-  subStock     Float               @default(0)
-  minStock     Float
-  maxStock     Float
-  minStockSub  Float               @default(0)
-  maxStockSub  Float               @default(0)
-  cost         Float
-  categoryId   String?
-  category     IngredientCategory? @relation(fields: [categoryId], references: [id])
-  createdAt    DateTime            @default(now())
-  updatedAt    DateTime            @updatedAt
-  recipes      Recipe[]
-  stockCounts  StockCount[]
-  transactions StockTransaction[]
+  purchaseMultiplier Float               @default(1)
+  mainStock          Float               @default(0)
+  subStock           Float               @default(0)
+  minStock           Float
+  maxStock           Float
+  minStockSub        Float               @default(0)
+  maxStockSub        Float               @default(0)
+  cost               Float
+  categoryId         String?
+  category           IngredientCategory? @relation(fields: [categoryId], references: [id])
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  recipes            Recipe[]
+  stockCounts        StockCount[]
+  transactions       StockTransaction[]
 }
 
 model StockCount {
@@ -191,7 +191,7 @@ model StockTransaction {
 model Recipe {
   id              String         @id @default(uuid())
   menuId          String
-  variationSizeId String?        // For e.g. "Standard" or "Large" deduction
+  variationSizeId String? // For e.g. "Standard" or "Large" deduction
   ingredientId    String
   quantity        Float
   createdAt       DateTime       @default(now())
@@ -204,20 +204,20 @@ model Recipe {
 }
 
 model Customer {
-  id            String    @id @default(uuid())
+  id            String         @id @default(uuid())
   name          String
   phone         String?
   email         String?
   dateOfBirth   DateTime?
-  loyaltyPoints Int       @default(0)
-  totalSpent    Float     @default(0)
-  visitCount    Int       @default(0)
-  lastVisit     DateTime  @default(now())
-  type          String    @default("NORMAL")
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  loyaltyPoints Int            @default(0)
+  totalSpent    Float          @default(0)
+  visitCount    Int            @default(0)
+  lastVisit     DateTime       @default(now())
+  type          String         @default("NORMAL")
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
   orders        Order[]
-  tableSessions    TableSession[]
+  tableSessions TableSession[]
 }
 
 model Promotion {
@@ -244,28 +244,28 @@ model Promotion {
 }
 
 model Order {
-  id                 String      @id @default(uuid())
+  id                 String        @id @default(uuid())
   orderNumber        String
-  status             String      @default("COMPLETED")
+  status             String        @default("COMPLETED")
   total              Float
   subtotal           Float
   tax                Float
-  discount           Float       @default(0)
+  discount           Float         @default(0)
   promoId            String?
-  paymentMethod      String      @default("CASH")
+  paymentMethod      String        @default("CASH")
   customerId         String?
-  createdAt          DateTime    @default(now())
-  updatedAt          DateTime    @updatedAt
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
   cancellationReason String?
   beeperNumber       String?
-  pointsRedeemed     Int?        @default(0)
-  taxAmount          Float?      @default(0)
-  cashReceived       Float?      @default(0)
-  changeAmount       Float?      @default(0)
-  isReportable       Boolean     @default(true)
+  pointsRedeemed     Int?          @default(0)
+  taxAmount          Float?        @default(0)
+  cashReceived       Float?        @default(0)
+  changeAmount       Float?        @default(0)
+  isReportable       Boolean       @default(true)
   userId             String?
-  bankReference      String?     @unique
-  paymentStatus      String?     @default("PENDING")
+  bankReference      String?       @unique
+  paymentStatus      String?       @default("PENDING")
   qrCodeData         String?
   shiftId            String?
   // Set when this order was rung into an open table bill. Null for walk-in
@@ -280,10 +280,10 @@ model Order {
   waiterId           String?
   session            TableSession? @relation(fields: [sessionId], references: [id])
   waiter             User?         @relation("OrderWaiter", fields: [waiterId], references: [id])
-  promotion          Promotion?  @relation(fields: [promoId], references: [id])
-  user               User?       @relation(fields: [userId], references: [id])
-  customer           Customer?   @relation(fields: [customerId], references: [id])
-  shift              Shift?      @relation(fields: [shiftId], references: [id])
+  promotion          Promotion?    @relation(fields: [promoId], references: [id])
+  user               User?         @relation(fields: [userId], references: [id])
+  customer           Customer?     @relation(fields: [customerId], references: [id])
+  shift              Shift?        @relation(fields: [shiftId], references: [id])
   items              OrderItem[]
 
   // Without these every orders/reports/dashboard query does a full table scan.
@@ -313,24 +313,24 @@ model Table {
 }
 
 model TableSession {
-  id         String    @id @default(uuid())
-  tableId    String
-  status     String    @default("OPEN")
+  id                   String              @id @default(uuid())
+  tableId              String
+  status               String              @default("OPEN")
   // Printed on the bill: when the walk-in opened, when the table checked out.
-  openedAt   DateTime  @default(now())
-  closedAt   DateTime?
+  openedAt             DateTime            @default(now())
+  closedAt             DateTime?
   // The rate this bill was settled at, stamped once at close. Requirement #18:
   // changing the rate in settings tomorrow must not rewrite what a customer
   // was charged last night, so a closed bill never reads the live rate again.
   // Null while the bill is open - an open bill quotes the current rate.
-  fxRateLAK  Float?
-  fxRateUSD  Float?
+  fxRateLAK            Float?
+  fxRateUSD            Float?
   // The VAT rate this bill was settled at, stamped at the same moment and for
   // the same reason. An Order already stores its taxAmount; a table bill stored
   // nothing, so reprinting last month's bill recomputed VAT at today's rate.
   // The tax is inclusive, so this never moved the total - only the split, which
   // is the figure the books are built from. 0 is a real rate, not a missing one.
-  taxRate    Float?
+  taxRate              Float?
   /// Per-table discount (req #15). PERCENT rounds the resulting total up.
   /// A manager authorises it and their id stays on the row, so every
   /// write-off has a name against it.
@@ -339,39 +339,39 @@ model TableSession {
   discountApprovedById String?
   /// Owner VIP comp (req #16). Stock is still deducted by the normal order
   /// path; the bill is settled by an OWNER_VIP payment for the full balance.
-  isOwnerVip Boolean   @default(false)
+  isOwnerVip           Boolean             @default(false)
   /// Whose table this is. Set when a regular sits down, not only when a bill
   /// goes on the slate - so the floor plan can warn that they already owe
   /// something while they are still in the room, which is the only moment a
   /// tab actually gets collected.
   customerId           String?
   payLaterApprovedById String?
-  openedById String?
+  openedById           String?
   /// Set when a settled bill was put back into play. Kept as a fact on the
   /// session rather than a flag that gets cleared: a bill that was reopened
   /// once stays a bill that was reopened, which is what an audit asks.
-  reopenedAt   DateTime?
-  reopenedById String?
-  reopenReason String?
-  createdAt  DateTime  @default(now())
-  updatedAt  DateTime  @updatedAt
-  table              Table     @relation(fields: [tableId], references: [id])
-  openedBy           User?     @relation("SessionOpenedBy", fields: [openedById], references: [id])
-  reopenedBy         User?     @relation("SessionReopenedBy", fields: [reopenedById], references: [id])
-  discountApprovedBy User?     @relation("SessionDiscountApprover", fields: [discountApprovedById], references: [id])
-  payLaterApprovedBy User?     @relation("SessionTabApprover", fields: [payLaterApprovedById], references: [id])
-  customer           Customer? @relation(fields: [customerId], references: [id])
+  reopenedAt           DateTime?
+  reopenedById         String?
+  reopenReason         String?
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
+  table                Table               @relation(fields: [tableId], references: [id])
+  openedBy             User?               @relation("SessionOpenedBy", fields: [openedById], references: [id])
+  reopenedBy           User?               @relation("SessionReopenedBy", fields: [reopenedById], references: [id])
+  discountApprovedBy   User?               @relation("SessionDiscountApprover", fields: [discountApprovedById], references: [id])
+  payLaterApprovedBy   User?               @relation("SessionTabApprover", fields: [payLaterApprovedById], references: [id])
+  customer             Customer?           @relation(fields: [customerId], references: [id])
   /// Set when this bill was poured into another and closed (req #2). Kept so
   /// history can say where a ฿0 closed bill's rounds went, rather than leaving
   /// an empty table session nobody can account for.
-  mergedIntoId       String?
-  orders             Order[]
-  payments           Payment[]
+  mergedIntoId         String?
+  orders               Order[]
+  payments             Payment[]
   /// Package swaps made at this table (req #9: the log lives on the session).
-  packageSwaps       PackageSwap[]
+  packageSwaps         PackageSwap[]
   /// Moves, merges and splits. None of them asks for a manager PIN, so this is
   /// the record of who rearranged the floor and when.
-  events             TableSessionEvent[]
+  events               TableSessionEvent[]
 
   @@index([customerId])
   // "Does this table already have a bill open?" runs on every table tap.
@@ -489,6 +489,7 @@ model OrderItem {
   // orderId is looked up once per order on any query that includes items.
   @@index([orderId])
   @@index([variationSizeId])
+  @@index([menuId])
   // The void report filters on this across a date range.
   @@index([voidedAt])
 }
@@ -501,17 +502,17 @@ model OrderItem {
 /// screen that makes it, this table is the only record that a staff member
 /// traded a set for a bottle of water, so it is written before anything moves.
 model PackageSwap {
-  id          String            @id @default(uuid())
-  orderItemId String
+  id           String            @id @default(uuid())
+  orderItemId  String
   /// Null for a walk-in sale; set for a table so the log reads per session.
-  sessionId   String?
-  userId      String?
+  sessionId    String?
+  userId       String?
   /// Menu value of what came out and what went in, and what the customer was
   /// charged - which is the difference, or zero. Stored rather than derived so
   /// a later menu price change cannot rewrite last night's swap.
-  outValue    Float
-  inValue     Float
-  charged     Float             @default(0)
+  outValue     Float
+  inValue      Float
+  charged      Float             @default(0)
   /// The line this swap added to the bill when the replacement cost more, so
   /// undoing the swap can strike the same charge rather than guessing at it.
   chargeItemId String?
@@ -520,12 +521,12 @@ model PackageSwap {
   /// an unexplained stock movement.
   reversedAt   DateTime?
   reversedById String?
-  createdAt   DateTime          @default(now())
-  orderItem   OrderItem         @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
-  session     TableSession?     @relation(fields: [sessionId], references: [id], onDelete: SetNull)
-  user        User?             @relation(fields: [userId], references: [id])
-  reversedBy  User?             @relation("PackageSwapReversedBy", fields: [reversedById], references: [id])
-  lines       PackageSwapLine[]
+  createdAt    DateTime          @default(now())
+  orderItem    OrderItem         @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+  session      TableSession?     @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+  user         User?             @relation(fields: [userId], references: [id])
+  reversedBy   User?             @relation("PackageSwapReversedBy", fields: [reversedById], references: [id])
+  lines        PackageSwapLine[]
 
   @@index([sessionId])
   @@index([createdAt])
@@ -555,7 +556,7 @@ model PackageSwapLine {
 /// floor and a PIN would be worked around within a week - so this table is the
 /// only record that a bill changed shape. Written before anything moves.
 model TableSessionEvent {
-  id             String   @id @default(uuid())
+  id             String       @id @default(uuid())
   sessionId      String
   /// MOVE, MERGE or SPLIT.
   kind           String
@@ -568,7 +569,7 @@ model TableSessionEvent {
   otherSessionId String?
   /// How many lines a split carried, so the log reads without a join.
   lineCount      Int?
-  createdAt      DateTime @default(now())
+  createdAt      DateTime     @default(now())
   session        TableSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   user           User?        @relation(fields: [userId], references: [id])
 
