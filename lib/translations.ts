@@ -490,6 +490,12 @@ export const translations = {
         image_not_readable: "That file could not be read as a photo. Try a JPG or PNG.",
         image_upload_failed: "Photo upload failed",
         confirm: "Confirm",
+        // Raised when a dialog with typing in it is about to close. The title
+        // asks, the description says what is at stake, and the button names
+        // the outcome rather than saying "OK" - the pattern used for deletes.
+        discard_changes: "Discard changes?",
+        discard_changes_help: "What you typed here has not been saved yet",
+        discard: "Discard",
         cannot_be_undone: "This cannot be undone.",
         delete_confirm_title: "Delete this item?",
         delete_category_confirm: "Delete this category?",
@@ -1516,6 +1522,9 @@ export const translations = {
         image_not_readable: "ໄຟລ໌ນີ້ອ່ານເປັນຮູບບໍ່ໄດ້. ກະລຸນາລອງໃຊ້ JPG ຫຼື PNG.",
         image_upload_failed: "ອັບໂຫຼດຮູບບໍ່ສຳເລັດ",
         confirm: "ຢືນຢັນ",
+        discard_changes: "ຍົກເລີກການປ່ຽນແປງບໍ?",
+        discard_changes_help: "ສິ່ງທີ່ພິມໄວ້ຍັງບໍ່ທັນຖືກບັນທຶກ",
+        discard: "ບໍ່ບັນທຶກ",
         cannot_be_undone: "ການກະທຳນີ້ບໍ່ສາມາດຍົກເລີກໄດ້.",
         delete_confirm_title: "ລົບລາຍການນີ້ບໍ່?",
         delete_category_confirm: "ລົບໝວດໝູ່ນີ້ບໍ່?",

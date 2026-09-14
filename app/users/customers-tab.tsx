@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label"
 import { Plus, Search, Star, Eye } from "lucide-react"
 import { formatTHB } from "@/lib/currency"
 import { useTranslation } from "@/hooks/use-translation"
+import { useDiscardGuard } from "@/components/confirm-provider"
 
 type Customer = {
     id: string
@@ -28,6 +29,8 @@ export function CustomersTab() {
     const { t } = useTranslation()
     const [searchQuery, setSearchQuery] = useState("")
     const [isDialogOpen, setIsDialogOpen] = useState(false)
+    // Overlay, Escape, × and Cancel all ask before throwing away typing.
+    const { requestClose, markDirty } = useDiscardGuard(isDialogOpen, setIsDialogOpen)
     const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null)
     const [customers, setCustomers] = useState<Customer[]>([])
     const [isLoading, setIsLoading] = useState(false)
@@ -128,7 +131,7 @@ export function CustomersTab() {
                         className="pl-10"
                     />
                 </div>
-                <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+                <Dialog open={isDialogOpen} onOpenChange={requestClose}>
                     <DialogTrigger asChild>
                         <Button className="bg-amber-600 hover:bg-amber-700 font-bold" onClick={() => {
                             setSelectedCustomer(null)
@@ -138,7 +141,7 @@ export function CustomersTab() {
                             {t.add_customer}
                         </Button>
                     </DialogTrigger>
-                    <DialogContent>
+                    <DialogContent onInput={markDirty}>
                         <DialogHeader>
                             <DialogTitle>{selectedCustomer ? (user?.role === 'STAFF' ? t.customer_details : t.edit_customer_details) : t.add_new_customer}</DialogTitle>
                         </DialogHeader>
@@ -186,7 +189,7 @@ export function CustomersTab() {
                             </div>
                         </div>
                         <DialogFooter>
-                            <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
+                            <Button variant="outline" onClick={() => requestClose(false)}>
                                 {t.cancel}
                             </Button>
                             {(!selectedCustomer || user?.role !== 'STAFF') && (

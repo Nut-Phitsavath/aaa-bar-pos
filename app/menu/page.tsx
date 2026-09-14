@@ -16,7 +16,7 @@ import Link from "next/link"
 import Image from "next/image"
 import { useTranslation } from "@/hooks/use-translation"
 import { notify } from "@/components/ui/sonner"
-import { useConfirm } from "@/components/confirm-provider"
+import { useConfirm, useDiscardGuard } from "@/components/confirm-provider"
 import { ReorderPanel } from "@/components/menu/reorder-panel"
 import { MenuItemCard } from "@/components/menu-item-card"
 import { useLongPress } from "@/hooks/use-long-press"
@@ -64,6 +64,8 @@ export default function MenuPage() {
   const confirm = useConfirm()
   const [searchQuery, setSearchQuery] = useState("")
   const [isDialogOpen, setIsDialogOpen] = useState(false)
+  // Every way out of the edit dialog except Save runs through this.
+  const { requestClose, markDirty } = useDiscardGuard(isDialogOpen, setIsDialogOpen)
   const [editingItem, setEditingItem] = useState<MenuItem | null>(null)
   const [menuItems, setMenuItems] = useState<MenuItem[]>([])
   const [categories, setCategories] = useState<{ id: string, name: string, hasSugarLevel: boolean, hasShotType: boolean }[]>([])
@@ -596,14 +598,14 @@ export default function MenuPage() {
             </DialogContent>
           </Dialog>
 
-          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+          <Dialog open={isDialogOpen} onOpenChange={requestClose}>
             <DialogTrigger asChild>
               <Button className="bg-amber-600 hover:bg-amber-700" onClick={handleAddNew}>
                 <Plus className="w-4 h-4 mr-2" />
                 {t.add_item}
               </Button>
             </DialogTrigger>
-            <DialogContent className="w-[95vw] max-w-7xl max-h-[95vh] overflow-y-auto" size="xl">
+            <DialogContent className="w-[95vw] max-w-7xl max-h-[95vh] overflow-y-auto" size="xl" onInput={markDirty}>
               <form onSubmit={(e) => { e.preventDefault(); handleSubmit(); }}>
                 <DialogHeader>
                   <DialogTitle>{editingItem ? t.edit_menu_item : t.add_menu_item}</DialogTitle>
@@ -726,7 +728,7 @@ export default function MenuPage() {
                         <Switch
                           id="availability"
                           checked={formData.isAvailable ?? true}
-                          onCheckedChange={(checked) => setFormData({ ...formData, isAvailable: checked })}
+                          onCheckedChange={(checked) => { markDirty(); setFormData({ ...formData, isAvailable: checked }) }}
                         />
                         <Label htmlFor="availability">{t.available}</Label>
                       </div>
@@ -760,7 +762,7 @@ export default function MenuPage() {
                             <div className="flex items-center gap-3">
                               <Switch
                                 checked={variation.isEnabled}
-                                onCheckedChange={() => toggleVariation(vIndex)}
+                                onCheckedChange={() => { markDirty(); toggleVariation(vIndex) }}
                               />
                               <Label className="text-base font-bold">{variation.type}</Label>
                             </div>
@@ -889,7 +891,7 @@ export default function MenuPage() {
                     ingredient" and "save and close" were a thumb-width apart on
                     the same vertical axis. */}
                 <DialogFooter className="mt-8 pt-5 border-t border-slate-200">
-                  <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
+                  <Button type="button" variant="outline" onClick={() => requestClose(false)}>
                     {t.cancel}
                   </Button>
                   <Button type="submit" className="bg-amber-600 hover:bg-amber-700" disabled={isLoading}>

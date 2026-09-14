@@ -29,12 +29,15 @@ type Promotion = {
 
 import { useTranslation } from "@/hooks/use-translation"
 import { notify } from "@/components/ui/sonner"
+import { useDiscardGuard } from "@/components/confirm-provider"
 
 export default function PromotionsPage() {
   const { t } = useTranslation()
   const [promotions, setPromotions] = useState<Promotion[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
+  // Overlay, Escape, × and Cancel all ask before throwing away typing.
+  const { requestClose, markDirty } = useDiscardGuard(isDialogOpen, setIsDialogOpen)
   const [editingPromo, setEditingPromo] = useState<Promotion | null>(null)
 
   useEffect(() => {
@@ -124,13 +127,13 @@ export default function PromotionsPage() {
         </div>
 
         <div className="flex justify-end">
-          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+          <Dialog open={isDialogOpen} onOpenChange={requestClose}>
             <DialogTrigger asChild>
               <Button className="bg-amber-600 hover:bg-amber-700" onClick={handleAddNew}>
                 <Plus className="w-4 h-4 mr-2" /> {t.create_promotion}
               </Button>
             </DialogTrigger>
-            <DialogContent className="max-w-2xl">
+            <DialogContent onInput={markDirty} className="max-w-2xl">
               <form onSubmit={handleSave}>
                 <DialogHeader>
                   <DialogTitle>{editingPromo ? t.edit_promotion : t.create_promotion}</DialogTitle>
@@ -197,7 +200,7 @@ export default function PromotionsPage() {
                   </div>
                 </div>
                 <DialogFooter>
-                  <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>{t.cancel}</Button>
+                  <Button type="button" variant="outline" onClick={() => requestClose(false)}>{t.cancel}</Button>
                   <Button type="submit" className="bg-amber-600">{t.save}</Button>
                 </DialogFooter>
               </form>
