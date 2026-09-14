@@ -85,12 +85,7 @@ const MenuCard = memo(function MenuCard({ item, index, onClick }: {
 }) {
   return (
     <MenuItemCard
-      // MenuItemCard still reads its price through the old variations/sizes
-      // shape (components/menu-item-card.tsx is Task 10's file, not this
-      // one) -- synthesised here at the boundary so the card keeps showing
-      // a real price instead of crashing on `item.variations` being gone
-      // from the API response.
-      item={{ ...item, variations: [{ sizes: [{ price: item.price }] }] }}
+      item={item}
       index={index}
       onClick={(e) => onClick(item, e)}
       className={!item.isAvailable ? "opacity-50 pointer-events-none" : ""}

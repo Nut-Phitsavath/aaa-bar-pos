@@ -22,7 +22,6 @@ type MenuItem = {
     name: string
     localName?: string | null
     category?: string | null
-    variationSizeId: string
     price: number
 }
 
@@ -98,25 +97,14 @@ export function ExchangeDialog({
         fetch("/api/menu")
             .then((r) => (r.ok ? r.json() : []))
             .then((rows: any[]) => {
-                // One row per sellable size: what a swap adds is a priced item,
-                // not a menu heading.
-                const flat: MenuItem[] = []
-                for (const m of Array.isArray(rows) ? rows : []) {
-                    for (const v of m.variations ?? []) {
-                        for (const s of v.sizes ?? []) {
-                            flat.push({
-                                id: `${m.id}:${s.id}`,
-                                name: m.name,
-                                localName: m.localName,
-                                category: m.category?.name ?? null,
-                                variationSizeId: s.id,
-                                price: s.price,
-                            })
-                            break
-                        }
-                        break
-                    }
-                }
+                // One row per menu item, each already carrying its own price.
+                const flat: MenuItem[] = (Array.isArray(rows) ? rows : []).map((m) => ({
+                    id: m.id,
+                    name: m.name,
+                    localName: m.localName,
+                    category: m.category?.name ?? null,
+                    price: m.price,
+                }))
                 setMenu(flat)
             })
             .catch(() => setMenu([]))
@@ -132,8 +120,8 @@ export function ExchangeDialog({
     )
     const inLines = useMemo(
         () => menu
-            .filter((m) => (inn[m.variationSizeId] ?? 0) > 0)
-            .map((m) => ({ unitPrice: m.price, quantity: inn[m.variationSizeId] })),
+            .filter((m) => (inn[m.id] ?? 0) > 0)
+            .map((m) => ({ unitPrice: m.price, quantity: inn[m.id] })),
         [menu, inn],
     )
 
@@ -170,7 +158,7 @@ export function ExchangeDialog({
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     removing: outLines.map((l) => ({ menuId: l.menuId, quantity: l.quantity })),
-                    adding: Object.entries(inn).filter(([, q]) => q > 0).map(([variationSizeId, quantity]) => ({ variationSizeId, quantity })),
+                    adding: Object.entries(inn).filter(([, q]) => q > 0).map(([menuId, quantity]) => ({ menuId, quantity })),
                 }),
             })
             const data = await res.json().catch(() => ({}))
@@ -278,20 +266,20 @@ export function ExchangeDialog({
                         </div>
                         <div className="max-h-60 overflow-y-auto">
                             {visible.map((m) => (
-                                <div key={m.variationSizeId} className="flex items-center gap-2 px-3 py-2 border-b border-slate-100 last:border-0">
+                                <div key={m.id} className="flex items-center gap-2 px-3 py-2 border-b border-slate-100 last:border-0">
                                     <div className="min-w-0 flex-1">
                                         <p className="font-bold text-slate-900 truncate">{m.localName || m.name}</p>
                                         <p className="text-xs text-slate-500 tabular-nums">{formatTHB(m.price)}</p>
                                     </div>
                                     <Button variant="outline" size="icon" className="h-9 w-9 shrink-0"
                                         aria-label={`${t.remove} ${m.name}`}
-                                        onClick={() => step(setInn, m.variationSizeId, -1)}>
+                                        onClick={() => step(setInn, m.id, -1)}>
                                         <Minus className="w-4 h-4" />
                                     </Button>
-                                    <span className="w-6 text-center font-black tabular-nums">{inn[m.variationSizeId] ?? 0}</span>
+                                    <span className="w-6 text-center font-black tabular-nums">{inn[m.id] ?? 0}</span>
                                     <Button variant="outline" size="icon" className="h-9 w-9 shrink-0"
                                         aria-label={`${t.add} ${m.name}`}
-                                        onClick={() => step(setInn, m.variationSizeId, 1)}>
+                                        onClick={() => step(setInn, m.id, 1)}>
                                         <Plus className="w-4 h-4" />
                                     </Button>
                                 </div>

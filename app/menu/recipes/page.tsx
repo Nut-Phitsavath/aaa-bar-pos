@@ -15,24 +15,11 @@ import type { MeasureType } from "@/lib/units"
 import Link from "next/link"
 import { formatTHB } from "@/lib/currency"
 
-type Size = {
-    id: string
-    size: string
-    price: number
-    displayOrder: number
-}
-
-type Variation = {
-    id: string
-    type: string
-    sizes: Size[]
-}
-
 type Product = {
     id: string
     name: string
     categoryName: string
-    variations: Variation[]
+    price: number
     _count?: { recipes: number }
 }
 
@@ -66,13 +53,11 @@ type RecipeItem = {
     id: string
     productId: string
     ingredientId: string
-    variationSizeId: string | null
     quantity: number
     ingredientName: string
     unit: string
 }
 
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useTranslation } from "@/hooks/use-translation"
 import { useConfirm } from "@/components/confirm-provider"
 import { notify } from "@/components/ui/sonner"
@@ -91,7 +76,6 @@ export default function RecipesPage() {
     const [searchQuery, setSearchQuery] = useState("")
     const [isAddIngredientOpen, setIsAddIngredientOpen] = useState(false)
     const [isLoading, setIsLoading] = useState(false)
-    const [activeTab, setActiveTab] = useState("base")
     const [costInfo, setCostInfo] = useState<CostInfo | null>(null)
     const [costLoading, setCostLoading] = useState(false)
 
@@ -111,8 +95,6 @@ export default function RecipesPage() {
     const [ingredientSearch, setIngredientSearch] = useState("")
     const [selectedCatId, setSelectedCatId] = useState("ALL")
 
-    // Form state: "s:id"
-    const [targetSelection, setTargetSelection] = useState("")
     const [newRecipeItem, setNewRecipeItem] = useState({
         ingredientId: "",
         quantity: 0
@@ -138,7 +120,6 @@ export default function RecipesPage() {
     useEffect(() => {
         if (selectedProduct) {
             fetchRecipe(selectedProduct.id)
-            setActiveTab("base")
         }
     }, [selectedProduct])
 
@@ -152,13 +133,12 @@ export default function RecipesPage() {
     useEffect(() => {
         if (!selectedProduct) { setCostInfo(null); return }
         setCostLoading(true)
-        const qs = activeTab !== "base" ? `?variationSizeId=${activeTab}` : ""
-        fetch(`/api/recipes/${selectedProduct.id}/cost${qs}`)
+        fetch(`/api/recipes/${selectedProduct.id}/cost`)
             .then((r) => (r.ok ? r.json() : null))
             .then(setCostInfo)
             .catch(() => setCostInfo(null))
             .finally(() => setCostLoading(false))
-    }, [selectedProduct, activeTab, recipe])
+    }, [selectedProduct, recipe])
 
     const fetchProducts = async () => {
         try {
@@ -235,11 +215,6 @@ export default function RecipesPage() {
         if (!selectedProduct || !newRecipeItem.ingredientId) return
         setIsLoading(true)
 
-        let variationSizeId = null
-        if (targetSelection.startsWith('s:')) {
-            variationSizeId = targetSelection.replace('s:', '')
-        }
-
         try {
             const res = await fetch(`/api/recipes/${selectedProduct.id}`, {
                 method: 'POST',
@@ -247,7 +222,7 @@ export default function RecipesPage() {
                 body: JSON.stringify({
                     ingredientId: newRecipeItem.ingredientId,
                     quantity: newRecipeItem.quantity,
-                    variationSizeId
+                    variationSizeId: null
                 })
             })
             if (res.ok) {
@@ -262,11 +237,11 @@ export default function RecipesPage() {
         finally { setIsLoading(false) }
     }
 
-    const handleRemoveIngredient = async (ingredientId: string, variationSizeId: string | null) => {
+    const handleRemoveIngredient = async (ingredientId: string) => {
         if (!selectedProduct) return
         if (!(await confirm({ title: t.delete_confirm_title, description: t.cannot_be_undone, confirmLabel: t.delete, destructive: true }))) return
         try {
-            const res = await fetch(`/api/recipes/${selectedProduct.id}?ingredientId=${ingredientId}&variationSizeId=${variationSizeId || 'null'}`, {
+            const res = await fetch(`/api/recipes/${selectedProduct.id}?ingredientId=${ingredientId}&variationSizeId=null`, {
                 method: 'DELETE'
             })
             if (res.ok) {
@@ -291,21 +266,7 @@ export default function RecipesPage() {
             return an - bn || a.name.localeCompare(b.name)
         })
 
-    // Helper to find scope name
-    const getScopeName = (vSizeId: string | null) => {
-        if (!vSizeId) return t.base_recipe || "Base Recipe"
-        if (!selectedProduct) return ""
-
-        for (const v of selectedProduct.variations) {
-            for (const s of v.sizes) {
-                if (s.id === vSizeId) return `${v.type} - ${s.size}`
-            }
-        }
-        return "Specific Choice"
-    }
-
-    const openAddModal = (scope: string) => {
-        setTargetSelection(scope)
+    const openAddModal = () => {
         setIngredientSearch("")
         setSelectedCatId("ALL")
         setIsAddIngredientOpen(true)
@@ -328,18 +289,18 @@ export default function RecipesPage() {
             }, 0)
             : 0
 
-    const RecipeSection = ({ items, scopeId }: { items: RecipeItem[], scopeId: string | null }) => (
+    const RecipeSection = ({ items }: { items: RecipeItem[] }) => (
         <div className="space-y-4">
             <div className="flex items-center justify-between">
                 <h3 className="text-lg font-semibold flex items-center gap-2">
                     <Package className="w-5 h-5 text-slate-400" />
                     {t.ingredients_list}
                 </h3>
-                <Button 
-                    variant="outline" 
-                    size="sm" 
+                <Button
+                    variant="outline"
+                    size="sm"
                     className="border-amber-200 text-amber-700 hover:bg-amber-50"
-                    onClick={() => openAddModal(scopeId ? `s:${scopeId}` : "")}
+                    onClick={() => openAddModal()}
                 >
                     <Plus className="w-4 h-4 mr-1" />
                     {t.add_ingredient}
@@ -393,7 +354,7 @@ export default function RecipesPage() {
                                     variant="ghost"
                                     size="icon"
                                     className="text-slate-300 hover:text-red-500 hover:bg-red-50 transition-colors"
-                                    onClick={() => handleRemoveIngredient(item.ingredientId, item.variationSizeId)}
+                                    onClick={() => handleRemoveIngredient(item.ingredientId)}
                                 >
                                     <Trash2 className="w-4 h-4" />
                                 </Button>
@@ -410,7 +371,7 @@ export default function RecipesPage() {
                                 {t.contents_value} <strong className="text-slate-900 tabular-nums">{formatTHB(contentsValue(items))}</strong>
                             </span>
                             {(() => {
-                                const price = selectedProduct?.variations.flatMap((v) => v.sizes)[0]?.price ?? 0
+                                const price = selectedProduct?.price ?? 0
                                 if (!price) return null
                                 const gap = contentsValue(items) - price
                                 return (
@@ -470,10 +431,10 @@ export default function RecipesPage() {
                 <div className="py-12 border-2 border-dashed rounded-xl flex flex-col items-center justify-center text-center bg-slate-50/50">
                     <Package className="w-10 h-10 text-slate-200 mb-2" />
                     <p className="text-sm text-slate-400">{t.no_ingredients_linked}</p>
-                    <Button 
-                        variant="link" 
+                    <Button
+                        variant="link"
                         className="text-amber-600 mt-1"
-                        onClick={() => openAddModal(scopeId ? `s:${scopeId}` : "")}
+                        onClick={() => openAddModal()}
                     >
                         {t.add_ingredient}
                     </Button>
@@ -563,40 +524,7 @@ export default function RecipesPage() {
                                 <p className="text-slate-500 text-lg">{t.consumption_per_unit || "Consumption per unit produced"}</p>
                             </div>
 
-                            <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-                                <div className="bg-slate-100/80 p-1.5 rounded-2xl mb-8 w-fit inline-flex shadow-inner">
-                                    <TabsList className="bg-transparent h-10 gap-1">
-                                        <TabsTrigger value="base" className="rounded-xl px-6 data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-amber-700 font-semibold transition-all">
-                                            {t.base_recipe || "Base Recipe"}
-                                        </TabsTrigger>
-                                        {selectedProduct.variations.map(v => (
-                                            v.sizes.map(s => (
-                                                <TabsTrigger key={s.id} value={s.id} className="rounded-xl px-6 data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-amber-700 font-semibold transition-all">
-                                                    {v.type} - {s.size}
-                                                </TabsTrigger>
-                                            ))
-                                        ))}
-                                    </TabsList>
-                                </div>
-
-                                <TabsContent value="base" className="mt-0 focus-visible:outline-none">
-                                    <RecipeSection 
-                                        items={recipe.filter(r => !r.variationSizeId)} 
-                                        scopeId={null} 
-                                    />
-                                </TabsContent>
-
-                                {selectedProduct.variations.map(v => (
-                                    v.sizes.map(s => (
-                                        <TabsContent key={s.id} value={s.id} className="mt-0 focus-visible:outline-none">
-                                            <RecipeSection 
-                                                items={recipe.filter(r => r.variationSizeId === s.id)} 
-                                                scopeId={s.id} 
-                                            />
-                                        </TabsContent>
-                                    ))
-                                ))}
-                            </Tabs>
+                            <RecipeSection items={recipe} />
 
                             <Dialog open={isAddIngredientOpen} onOpenChange={setIsAddIngredientOpen}>
                                 <DialogContent className="max-w-2xl rounded-[2rem] p-0 overflow-hidden border-none shadow-2xl">
@@ -611,7 +539,7 @@ export default function RecipesPage() {
                                                 </DialogTitle>
                                                 <div className="flex items-center gap-2 mt-1">
                                                     <Badge variant="outline" className="bg-amber-100/50 text-amber-700 border-amber-200 font-bold uppercase text-[10px] tracking-wider">
-                                                        {getScopeName(targetSelection.startsWith('s:') ? targetSelection.replace('s:', '') : null)}
+                                                        {t.base_recipe || "Base Recipe"}
                                                     </Badge>
                                                     <span className="text-slate-400 font-medium text-sm">for {selectedProduct.name}</span>
                                                 </div>

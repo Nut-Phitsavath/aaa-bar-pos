@@ -32,7 +32,7 @@ export type MenuCardItem = {
   localName?: string
   category: string
   image?: string
-  variations: Array<{ sizes: Array<{ price: number }> }>
+  price: number
 }
 
 type Props = {
@@ -47,12 +47,7 @@ type Props = {
 } & Omit<React.ComponentProps<"div">, "onClick" | "children">
 
 export function MenuItemCard({ item, index = 0, onClick, trailing, children, className, ...rest }: Props) {
-  // Every bar item carries exactly one size, so this is the price, not a "from".
-  // Min rather than [0] so a future two-size item degrades to the lower price
-  // instead of whichever row the query happened to return first.
-  const price = Math.min(
-    ...item.variations.flatMap((v) => v.sizes.map((z) => z.price)).filter((n) => n > 0)
-  )
+  const price = item.price
   const style = CATEGORY_STYLE[item.category] ?? FALLBACK_STYLE
 
   return (
