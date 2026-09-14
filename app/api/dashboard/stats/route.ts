@@ -51,7 +51,7 @@ export async function GET() {
             take: 5
         })
 
-        // 6. Top Selling Items (Grouped by Menu + Variation)
+        // 6. Top Selling Items (Grouped by Menu)
         const topItemsRaw = await prisma.orderItem.findMany({
             where: {
                 order: {
@@ -60,22 +60,13 @@ export async function GET() {
                 }
             },
             include: {
-                variationSize: {
-                    include: {
-                        variation: {
-                            include: { menu: true }
-                        }
-                    }
-                }
+                menu: true
             }
         })
 
         const itemMap = new Map()
         topItemsRaw.forEach(item => {
-            const vs = item.variationSize
-            const menuName = vs?.variation.menu.name || item.name.split(' - ')[0]
-            const varType = vs?.variation.type || ""
-            const groupKey = `${menuName} (${varType})`
+            const groupKey = item.menu?.name || item.name.split(' - ')[0]
 
             if (!itemMap.has(groupKey)) {
                 itemMap.set(groupKey, { name: groupKey, sold: 0, revenue: 0 })
