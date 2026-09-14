@@ -35,7 +35,6 @@ function addedComponents(
             const live = byMenu.get(line.menuId)
             added.set(line.menuId, {
                 menuId: line.menuId,
-                variationSizeId: live?.variationSizeId ?? line.variationSizeId,
                 name: live?.name ?? line.name,
                 localName: live?.localName ?? null,
                 unitPrice: live?.unitPrice ?? line.unitPrice,
@@ -46,20 +45,10 @@ function addedComponents(
     return Array.from(added.values())
 }
 
-/** The recipe rule the order path uses: the menu's base lines plus this size's. */
-async function recipeFor(tx: any, variationSizeId: string) {
-    const vs = await tx.variationSize.findUnique({
-        where: { id: variationSizeId },
-        include: { variation: { include: { menu: true } } },
-    })
-    if (!vs?.variation?.menu) return []
+/** The recipe rule swaps use: the menu item's base lines. */
+async function recipeFor(tx: any, menuId: string) {
     return tx.recipe.findMany({
-        where: {
-            OR: [
-                { menuId: vs.variation.menu.id, variationSizeId: null },
-                { variationSizeId },
-            ],
-        },
+        where: { menuId, variationSizeId: null },
     })
 }
 
@@ -74,12 +63,12 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
             where: { id },
             include: {
                 swaps: { include: { lines: true }, orderBy: { createdAt: 'asc' } },
-                variationSize: { include: { variation: { include: { menu: { include: { recipes: true } } } } } },
+                menu: { include: { recipes: true } },
             },
         })
         if (!item) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
-        const menu = item.variationSize?.variation?.menu
+        const menu = item.menu
         const menus = await sellableMenus()
         const index = componentIndex(menus)
         const contents = menu
@@ -133,14 +122,14 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
         const body = await request.json()
         const removing: { menuId: string; quantity: number }[] = Array.isArray(body.removing) ? body.removing : []
-        const adding: { variationSizeId: string; quantity: number }[] = Array.isArray(body.adding) ? body.adding : []
+        const adding: { menuId: string; quantity: number }[] = Array.isArray(body.adding) ? body.adding : []
 
         const item = await prisma.orderItem.findUnique({
             where: { id },
             include: {
                 order: { select: { id: true, status: true, sessionId: true } },
                 swaps: { include: { lines: true } },
-                variationSize: { include: { variation: { include: { menu: { include: { recipes: true } } } } } },
+                menu: { include: { recipes: true } },
             },
         })
         if (!item) return NextResponse.json({ error: 'Not found' }, { status: 404 })
@@ -159,7 +148,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
             }
         }
 
-        const menu = item.variationSize?.variation?.menu
+        const menu = item.menu
         if (!menu) return NextResponse.json({ error: 'NOT_A_PACKAGE' }, { status: 409 })
 
         const menus = await sellableMenus()
@@ -185,24 +174,21 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         const outLines = removing.map((r) => {
             const held = left.find((c) => c.menuId === r.menuId)!
             return {
-                direction: 'OUT', menuId: held.menuId, variationSizeId: held.variationSizeId,
+                direction: 'OUT', menuId: held.menuId,
                 name: held.name, quantity: r.quantity, unitPrice: held.unitPrice,
             }
         })
 
-        const sizes = await prisma.variationSize.findMany({
-            where: { id: { in: adding.map((a) => a.variationSizeId) } },
-            include: { variation: { include: { menu: true } } },
+        const addedMenus = await prisma.menu.findMany({
+            where: { id: { in: adding.map((a) => a.menuId) } },
         })
         const inLines = adding.map((a) => {
-            const size = sizes.find((s) => s.id === a.variationSizeId)
-            if (!size) throw new Error('UNKNOWN_ITEM')
+            const added = addedMenus.find((m) => m.id === a.menuId)
+            if (!added) throw new Error('UNKNOWN_ITEM')
             return {
-                direction: 'IN', menuId: size.variation.menu.id, variationSizeId: size.id,
-                name: size.variation.menu.localName
-                    ? `${size.variation.menu.localName} (${size.variation.menu.name})`
-                    : size.variation.menu.name,
-                quantity: a.quantity, unitPrice: size.price,
+                direction: 'IN', menuId: added.id,
+                name: added.localName ? `${added.localName} (${added.name})` : added.name,
+                quantity: a.quantity, unitPrice: added.price,
             }
         })
 
@@ -215,8 +201,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
             // used, so a bottle returned to the shelf is the same bottle the
             // package took off it.
             for (const line of outLines) {
-                if (!line.variationSizeId) continue
-                for (const r of await recipeFor(tx, line.variationSizeId)) {
+                if (!line.menuId) continue
+                for (const r of await recipeFor(tx, line.menuId)) {
                     await decrementStock(tx, r.ingredientId, -(r.quantity * line.quantity), {
                         type: 'EXCHANGE', userId: user.id,
                         notes: `swap out, item ${item.id}`, reason: line.menuId,
@@ -224,8 +210,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
                 }
             }
             for (const line of inLines) {
-                if (!line.variationSizeId) continue
-                for (const r of await recipeFor(tx, line.variationSizeId)) {
+                if (!line.menuId) continue
+                for (const r of await recipeFor(tx, line.menuId)) {
                     await decrementStock(tx, r.ingredientId, r.quantity * line.quantity, {
                         type: 'EXCHANGE', userId: user.id,
                         notes: `swap in, item ${item.id}`, reason: line.menuId,

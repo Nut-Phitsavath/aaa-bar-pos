@@ -21,8 +21,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
                     orderBy: { createdAt: 'asc' },
                     include: {
                         // The photo and category are not on the order line - they
-                        // are snapshotted only as name and price - so walk the
-                        // relation to fetch them. The customer display groups by
+                        // are snapshotted only as name and price - so join the
+                        // menu item to fetch them. The customer display groups by
                         // category and shows the photo, exactly as it does for a
                         // walk-in cart.
                         items: {
@@ -33,22 +33,14 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
                                 // What this package actually delivered, so the
                                 // ticket and the printed bill can say so (req #9).
                                 swaps: { include: { lines: true }, orderBy: { createdAt: "asc" } },
-                                variationSize: {
-                                    include: {
-                                        variation: {
-                                            include: {
-                                                menu: {
-                                                    select: {
-                                                        image: true,
-                                                        localName: true,
-                                                        category: { select: { name: true } },
-                                                        // Enough to say whether this line is a
-                                                        // package with anything swappable in it.
-                                                        recipes: { select: { ingredientId: true, quantity: true } }
-                                                    }
-                                                }
-                                            }
-                                        }
+                                menu: {
+                                    select: {
+                                        image: true,
+                                        localName: true,
+                                        category: { select: { name: true } },
+                                        // Enough to say whether this line is a
+                                        // package with anything swappable in it.
+                                        recipes: { select: { ingredientId: true, quantity: true } }
                                     }
                                 }
                             }
@@ -104,13 +96,12 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
         const sellableIndex = componentIndex(await sellableMenus())
 
         // Flatten the menu lookup onto each line so no screen has to walk the
-        // relation itself. A deleted menu item leaves variationSize null, and
-        // the line still renders from its snapshotted name and price.
+        // relation itself. A deleted menu item leaves menuId (and so item.menu)
+        // null, and the line still renders from its snapshotted name and price.
         const orders = session.orders.map((order) => ({
             ...order,
             items: order.items.map((item) => {
-                const menu = item.variationSize?.variation?.menu
-                const { variationSize, ...line } = item
+                const { menu, ...line } = item
                 return {
                     ...line,
                     image: menu?.image ?? null,

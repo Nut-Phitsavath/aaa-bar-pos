@@ -29,7 +29,7 @@ async function servedBy(sessionId: string): Promise<{ had: Returnable[]; menus: 
             items: {
                 include: {
                     swaps: { include: { lines: true } },
-                    variationSize: { include: { variation: { include: { menu: { include: { recipes: true } } } } } },
+                    menu: { include: { recipes: true } },
                 },
             },
         },
@@ -42,8 +42,8 @@ async function servedBy(sessionId: string): Promise<{ had: Returnable[]; menus: 
 
     for (const order of orders) {
         for (const item of order.items) {
-            if (item.voidedAt || !item.variationSizeId) continue
-            const menu = item.variationSize?.variation?.menu
+            if (item.voidedAt || !item.menuId) continue
+            const menu = item.menu
             if (!menu) continue
 
             const contents = contentsOf(
@@ -63,7 +63,6 @@ async function servedBy(sessionId: string): Promise<{ had: Returnable[]; menus: 
                             const sellable = byMenuId.get(l.menuId as string)
                             return {
                                 menuId: l.menuId as string,
-                                variationSizeId: sellable?.variationSizeId ?? l.variationSizeId,
                                 name: sellable?.name ?? l.name,
                                 localName: sellable?.localName ?? null,
                                 unitPrice: sellable?.unitPrice ?? l.unitPrice,
@@ -72,7 +71,7 @@ async function servedBy(sessionId: string): Promise<{ had: Returnable[]; menus: 
                         }))
                 for (const c of remainingContents(contents, removed, added)) {
                     had.push({
-                        menuId: c.menuId, variationSizeId: c.variationSizeId,
+                        menuId: c.menuId,
                         name: c.name, localName: c.localName, quantity: c.quantity,
                     })
                 }
@@ -81,11 +80,10 @@ async function servedBy(sessionId: string): Promise<{ had: Returnable[]; menus: 
 
             // A plain drink, returnable only if the bar sells it singly - which
             // is also the only way its stock knows how to come back.
-            const sellable = menus.find((m) => m.variationSizeId === item.variationSizeId)
+            const sellable = menus.find((m) => m.menuId === item.menuId)
             if (!sellable || sellable.recipe.length !== 1) continue
             had.push({
                 menuId: sellable.menuId,
-                variationSizeId: sellable.variationSizeId,
                 name: sellable.name,
                 localName: sellable.localName ?? null,
                 quantity: item.quantity,
@@ -173,21 +171,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         await prisma.$transaction(async (tx) => {
             for (const line of returning) {
                 const item = available.find((a) => a.menuId === line.menuId)!
-                if (!item.variationSizeId) continue
-
-                const vs = await tx.variationSize.findUnique({
-                    where: { id: item.variationSizeId },
-                    include: { variation: { include: { menu: true } } },
-                })
-                if (!vs?.variation?.menu) continue
 
                 const recipes = await tx.recipe.findMany({
-                    where: {
-                        OR: [
-                            { menuId: vs.variation.menu.id, variationSizeId: null },
-                            { variationSizeId: item.variationSizeId },
-                        ],
-                    },
+                    where: { menuId: item.menuId, variationSizeId: null },
                 })
                 for (const recipe of recipes) {
                     // Negative decrement: the same rounded path a sale takes.

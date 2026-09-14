@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { startOfDay, endOfDay } from 'date-fns'
-import { calculateInclusiveTax } from '@/lib/currency'
 
 export async function GET(request: Request) {
     try {
