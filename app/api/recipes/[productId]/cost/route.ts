@@ -28,7 +28,6 @@ export async function GET(
             where: { id: productId },
             include: {
                 category: { select: { name: true } },
-                variations: { include: { sizes: true } },
             },
         })
         if (!menu) return NextResponse.json({ error: 'Not found' }, { status: 404 })
@@ -64,8 +63,7 @@ export async function GET(
 
         const cost = recipeCost(lines)
 
-        const sizes = menu.variations.flatMap((v) => v.sizes)
-        const price = (variationSizeId ? sizes.find((s) => s.id === variationSizeId) : sizes[0])?.price ?? 0
+        const price = menu.price
         const pct = pourCost(cost, price)
 
         return NextResponse.json({

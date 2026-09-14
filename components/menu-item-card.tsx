@@ -92,9 +92,9 @@ export function MenuItemCard({ item, index = 0, onClick, trailing, children, cla
           {item.localName && (
             <p className="text-xs leading-tight text-slate-500 font-medium truncate mt-0.5">{item.name}</p>
           )}
-          {(Number.isFinite(price) || children) && (
+          {((Number.isFinite(price) && price > 0) || children) && (
             <div className="flex items-center gap-1.5 mt-1 min-w-0">
-              {Number.isFinite(price) && (
+              {Number.isFinite(price) && price > 0 && (
                 <span className="text-[15px] font-bold text-slate-900 tabular-nums">
                   {formatTHB(price)}
                 </span>
