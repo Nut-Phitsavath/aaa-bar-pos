@@ -30,17 +30,6 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
             categoryId = current?.categoryId!
         }
 
-        // A missing price on update keeps the item's current price rather
-        // than silently zeroing it out — unlike category/isAvailable above,
-        // a dropped price is a real financial change, not just a fallback.
-        let resolvedPrice: number
-        if (price !== undefined && price !== null) {
-            resolvedPrice = parseFloat(price.toString())
-        } else {
-            const current = await prisma.menu.findUnique({ where: { id }, select: { price: true } })
-            resolvedPrice = current?.price ?? 0
-        }
-
         await prisma.menu.update({
             where: { id },
             data: {
@@ -50,7 +39,15 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
                 categoryId,
                 image: image || '/placeholder.svg',
                 isAvailable: isAvailable ?? true,
-                price: resolvedPrice
+                // A missing price keeps the item's current price rather than
+                // silently zeroing it out — unlike category/isAvailable above,
+                // a dropped price is a real financial change, not just a
+                // fallback. `undefined` here is simply omitted from the SQL
+                // UPDATE, so this is an atomic "leave price alone" with no
+                // read-then-write race against a concurrent price update.
+                // Explicit 0 is a real, settable price ("not priced yet"),
+                // so this stays a strict undefined/null check, not truthy.
+                price: price !== undefined && price !== null ? parseFloat(price.toString()) : undefined
             }
         })
 
