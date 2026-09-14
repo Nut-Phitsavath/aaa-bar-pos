@@ -494,9 +494,6 @@ export default function ReportsPage() {
                           </div>
                           <div>
                             <p className="font-bold text-slate-900 leading-tight">{p.productName}</p>
-                            <div className="flex gap-1.5 mt-1">
-                              <Badge variant="outline" className="text-[10px] py-0 px-1.5 bg-slate-50 border-slate-200 font-medium text-slate-500 uppercase">{p.variantType}</Badge>
-                            </div>
                           </div>
                         </div>
                         <div className="text-right">
@@ -540,7 +537,6 @@ export default function ReportsPage() {
                           </div>
                           <div>
                             <p className="font-bold text-sm text-slate-800 leading-tight">{p.productName}</p>
-                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">{p.variantType}</span>
                           </div>
                         </div>
                         <div className="text-right">
@@ -602,57 +598,6 @@ export default function ReportsPage() {
                   </CardContent>
                 </Card>
               </div>
-
-            {/* Performance by Attributes */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-amber-800 flex items-center gap-2">
-                    <TrendingUp className="w-5 h-5" />
-                    {t.variation_performance}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-3">
-                    {data?.variationStats.map((v: any, i: number) => (
-                      <div key={i} className="flex justify-between items-center p-3 rounded-xl border bg-white shadow-sm">
-                        <div className="flex items-center gap-3">
-                          <Badge variant="outline" className="border-amber-200 text-amber-700 bg-amber-50 font-bold px-3 py-1 uppercase">{v.name}</Badge>
-                        </div>
-                        <div className="text-right">
-                          <p className="font-bold text-slate-900">{v.sold} items</p>
-                          <p className="text-xs text-muted-foreground">{formatTHB(v.revenue)}</p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-amber-800 flex items-center gap-2">
-                    <Package className="w-5 h-5" />
-                    {t.choice_performance}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-3">
-                    {data?.sizeStats.map((s: any, i: number) => (
-                      <div key={i} className="flex justify-between items-center p-3 rounded-xl border bg-white shadow-sm">
-                        <div className="flex items-center gap-3">
-                          <Badge className="bg-amber-600 text-white w-8 h-8 rounded-full flex items-center justify-center p-0">{s.name}</Badge>
-                          <span className="font-bold text-slate-700">{s.name}</span>
-                        </div>
-                        <div className="text-right">
-                          <p className="font-bold text-slate-900">{s.sold} items</p>
-                          <p className="text-xs text-muted-foreground">{formatTHB(s.revenue)}</p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
 
             {/* Customization Stats */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">

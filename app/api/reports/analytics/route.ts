@@ -108,7 +108,8 @@ export async function GET(request: Request) {
                             }
                         }
                     }
-                }
+                },
+                menu: true
             }
         })
 
@@ -178,21 +179,19 @@ export async function GET(request: Request) {
 
         const paymentMethods = Array.from(payMap.values())
 
-        // 5. Product Performance (Refined Grouping)
+        // 5. Product Performance
         const bestSellerMap = new Map()
         const lowPerfMap = new Map()
 
         orderItems.forEach(item => {
-            const vs = item.variationSize
-            const menuName = vs?.variation.menu.name || item.name.split(' - ')[0]
-            const varType = vs?.variation.type || ""
+            const menuName = item.menu?.name || item.name.split(' - ')[0]
 
-            // Best Seller Key: Menu + Variation (e.g., Latte (COLD)) - Normalized for grouping
-            const bestSellerKey = `${menuName.trim()} (${varType.trim()})`.toUpperCase()
-            const bestSellerDisplayName = `${menuName} (${varType})`
+            // Best Seller Key: menu name alone. There's one price per item now,
+            // so there's nothing left to vary the key by.
+            const bestSellerKey = menuName
 
             if (!bestSellerMap.has(bestSellerKey)) {
-                bestSellerMap.set(bestSellerKey, { name: bestSellerDisplayName, productName: menuName, variantType: varType, sold: 0, revenue: 0 })
+                bestSellerMap.set(bestSellerKey, { name: menuName, productName: menuName, sold: 0, revenue: 0 })
             }
             const bsEntry = bestSellerMap.get(bestSellerKey)
             bsEntry.sold += item.quantity
@@ -218,12 +217,7 @@ export async function GET(request: Request) {
 
         // Zero Sales / Trash Items: Count by Menu (Only for ACTIVE/AVAILABLE menus)
         const allAvailableMenus = await prisma.menu.findMany({
-            where: { isAvailable: true },
-            include: {
-                variations: {
-                    include: { sizes: true }
-                }
-            }
+            where: { isAvailable: true }
         })
 
         const soldMenuNames = new Set(Array.from(lowPerfMap.keys()))
@@ -233,31 +227,6 @@ export async function GET(request: Request) {
                 name: m.name,
                 price: 0 // Price varies
             }))
-
-        // 6. Size & Variation Type Stats
-        const sizeMap = new Map()
-        const varTypeMap = new Map()
-
-        orderItems.forEach(item => {
-            const vs = item.variationSize
-            const size = (vs?.size?.trim() || "Unknown").toUpperCase()
-            const sizeDisplayName = vs?.size || "Unknown"
-            const type = (vs?.variation.type?.trim() || "Other").toUpperCase()
-            const typeDisplayName = vs?.variation.type || "Other"
-
-            if (!sizeMap.has(size)) sizeMap.set(size, { name: sizeDisplayName, sold: 0, revenue: 0 })
-            const sEntry = sizeMap.get(size)
-            sEntry.sold += item.quantity
-            sEntry.revenue += item.total
-
-            if (!varTypeMap.has(type)) varTypeMap.set(type, { name: typeDisplayName, sold: 0, revenue: 0 })
-            const vEntry = varTypeMap.get(type)
-            vEntry.sold += item.quantity
-            vEntry.revenue += item.total
-        })
-
-        const sizeStats = Array.from(sizeMap.values()).sort((a, b) => b.sold - a.sold)
-        const variationStats = Array.from(varTypeMap.values()).sort((a, b) => b.sold - a.sold)
 
         // 7. Takeaway vs Dine-in
         const takeawayMap = new Map()
@@ -598,8 +567,6 @@ export async function GET(request: Request) {
             productPerformance,
             worstProducts,
             zeroSales: trashItems,
-            sizeStats,
-            variationStats,
             takeawayStats,
             serviceStats,
             sugarStats,
