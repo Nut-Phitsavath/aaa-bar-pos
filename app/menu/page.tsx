@@ -1,7 +1,6 @@
 "use client"
 
 import { useState, useEffect, useMemo } from "react"
-import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
@@ -11,7 +10,7 @@ import { Header } from "@/components/header"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Switch } from "@/components/ui/switch"
-import { Plus, Edit, Trash2, Search, ImageIcon, X, Check, Minus, GripVertical, ClipboardList } from "lucide-react"
+import { Plus, Edit, Trash2, Search, ImageIcon, X, Check, GripVertical, ClipboardList } from "lucide-react"
 import Link from "next/link"
 import Image from "next/image"
 import { useTranslation } from "@/hooks/use-translation"
@@ -24,40 +23,18 @@ import { PriceInput } from "@/components/ui/PriceInput"
 import { RecipeEditor, type RecipeRow, type EditorIngredient } from "@/components/menu/recipe-editor"
 
 // --- Types ---
-type SizeItem = {
-  id?: string
-  size: string
-  price: number
-  isAvailable: boolean
-  displayOrder: number
-}
-
-type VariationItem = {
-  id?: string
-  type: string // e.g., HOT, COLD, FRAPPE, BOTTLE (Editable)
-  isEnabled: boolean
-  displayOrder: number
-  sizes: SizeItem[]
-}
-
 type MenuItem = {
   id: string
   name: string
   localName?: string
   description: string
-  // price is removed from top level in DB, but UI might still have it in type definition for legacy, ignoring it.
   category: string
   isAvailable: boolean
   image?: string
-  variations: VariationItem[]
+  price: number
   /** How many recipe rows this item has. Zero means it deducts no stock. */
   _count?: { recipes: number }
 }
-
-const DEFAULT_SIZES = [
-  { size: "Standard", price: 0, isAvailable: true, displayOrder: 1 },
-  { size: "0 Cal Sweetener", price: 0, isAvailable: true, displayOrder: 2 },
-]
 
 export default function MenuPage() {
   const { t } = useTranslation()
@@ -79,14 +56,10 @@ export default function MenuPage() {
   const [newCatSugar, setNewCatSugar] = useState(false)
   const [newCatShot, setNewCatShot] = useState(false)
   const [editingCategory, setEditingCategory] = useState<{ id: string, name: string, hasSugarLevel: boolean, hasShotType: boolean } | null>(null)
-  const [newVariationType, setNewVariationType] = useState("")
   const [activeCategory, setActiveCategory] = useState<string>("All")
 
   // Form states
   const [formData, setFormData] = useState<Partial<MenuItem>>({})
-
-  // Variation form state
-  const [formVariations, setFormVariations] = useState<VariationItem[]>([])
 
   /**
    * The item's base recipe, buffered until Save.
@@ -249,20 +222,9 @@ export default function MenuPage() {
       description: item.description,
       category: item.category,
       isAvailable: item.isAvailable,
-      image: item.image
+      image: item.image,
+      price: item.price
     })
-
-    // Load existing variations directly
-    // If no variations exist (legacy item), maybe initialize with empty or standard? 
-    // Let's just load what is there.
-    if (!item.variations || item.variations.length === 0) {
-      // Option: Initialize with standard types for convenience if empty? 
-      // User asked for dynamic, so maybe start empty or with just one default?
-      // Let's start with empty and let them add.
-      setFormVariations([])
-    } else {
-      setFormVariations(item.variations.map(v => ({ ...v })))
-    }
 
     setIsDialogOpen(true)
   }
@@ -275,12 +237,10 @@ export default function MenuPage() {
       description: "",
       category: categories[0]?.name || "Coffee",
       isAvailable: true,
-      image: ""
+      image: "",
+      price: 0
     })
 
-    // Start with empty variations or maybe a default "Regular"?
-    // User requested dynamic. Let's start empty and provide "Add Variation" UI.
-    setFormVariations([])
     setFormRecipe([])
     setOriginalRecipe([])
     setIsDialogOpen(true)
@@ -332,17 +292,9 @@ export default function MenuPage() {
   const handleSubmit = async () => {
     setIsLoading(true)
 
-    const finalVariations = formVariations.map(v => ({
-      ...v,
-      sizes: v.sizes.map(s => ({
-        ...s,
-        price: Number(s.price)
-      }))
-    }))
-
     const payload = {
       ...formData,
-      variations: finalVariations
+      price: Number(formData.price ?? 0)
     }
 
     try {
@@ -386,72 +338,6 @@ export default function MenuPage() {
     } finally {
       setIsLoading(false)
     }
-  }
-
-  // --- Variation Helpers ---
-  const addVariationType = () => {
-    if (!newVariationType) return;
-    setFormVariations([...formVariations, {
-      type: newVariationType,
-      isEnabled: true,
-      displayOrder: formVariations.length + 1,
-      sizes: DEFAULT_SIZES.map(s => ({ ...s }))
-    }])
-    setNewVariationType("")
-  }
-
-  const removeVariationType = (index: number) => {
-    const next = [...formVariations]
-    next.splice(index, 1)
-    setFormVariations(next)
-  }
-
-  const toggleVariation = (index: number) => {
-    const next = [...formVariations]
-    next[index].isEnabled = !next[index].isEnabled
-    setFormVariations(next)
-  }
-
-  const updateSizePrice = (varIndex: number, sizeIndex: number, newPrice: number) => {
-    const next = [...formVariations]
-    next[varIndex].sizes[sizeIndex].price = newPrice
-    setFormVariations(next)
-  }
-
-
-
-  const addSize = (varIndex: number) => {
-    const next = [...formVariations]
-    next[varIndex].sizes.push({
-      size: "XL",
-      price: 0,
-      isAvailable: true,
-      displayOrder: next[varIndex].sizes.length + 1
-    })
-    setFormVariations(next)
-  }
-
-  const removeSize = (varIndex: number, sizeIndex: number) => {
-    const next = [...formVariations]
-    next[varIndex].sizes.splice(sizeIndex, 1)
-    setFormVariations(next)
-  }
-
-  const updateSizeLabel = (varIndex: number, sizeIndex: number, newLabel: string) => {
-    const next = [...formVariations]
-    next[varIndex].sizes[sizeIndex].size = newLabel
-    setFormVariations(next)
-  }
-
-  const updateOrder = (type: 'variation' | 'size', vIndex: number, value: string, sIndex?: number) => {
-    const next = [...formVariations]
-    const val = Math.max(1, parseInt(value) || 1)
-    if (type === 'variation') {
-      next[vIndex].displayOrder = val
-    } else if (type === 'size' && sIndex !== undefined) {
-      next[vIndex].sizes[sIndex].displayOrder = val
-    }
-    setFormVariations(next)
   }
 
   return (
@@ -650,6 +536,14 @@ export default function MenuPage() {
                         </select>
                       </div>
                       <div className="space-y-2">
+                        <Label htmlFor="price">{t.price}</Label>
+                        <PriceInput
+                          id="price"
+                          value={formData.price ?? 0}
+                          onChange={(value) => setFormData({ ...formData, price: value })}
+                        />
+                      </div>
+                      <div className="space-y-2">
                         <Label htmlFor="description">{t.description}</Label>
                         <Textarea
                           id="description"
@@ -735,143 +629,6 @@ export default function MenuPage() {
                     </div>
                   </div>
 
-                  {/* Variations & Pricing Section */}
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between">
-                      <h3 className="text-lg font-semibold">{t.variations_pricing}</h3>
-                    </div>
-
-                    {/* Dynamic Variation Adder */}
-                    <div className="flex gap-2">
-                      <Input
-                        placeholder={t.variation_name_placeholder}
-
-                        value={newVariationType}
-                        onChange={(e) => setNewVariationType(e.target.value.toUpperCase())}
-                        className="max-w-[300px]"
-                      />
-                      <Button type="button" onClick={addVariationType} disabled={!newVariationType}>
-                        <Plus className="w-4 h-4 mr-2" /> {t.add_variation_type}
-                      </Button>
-                    </div>
-
-                    <div className="space-y-4">
-                      {formVariations.map((variation, vIndex) => (
-                        <Card key={vIndex} className={`p-4 border ${variation.isEnabled ? 'border-amber-200 bg-amber-50/10' : 'border-slate-200 opacity-70'}`}>
-                          <div className="flex items-center justify-between mb-4">
-                            <div className="flex items-center gap-3">
-                              <Switch
-                                checked={variation.isEnabled}
-                                onCheckedChange={() => { markDirty(); toggleVariation(vIndex) }}
-                              />
-                              <Label className="text-base font-bold">{variation.type}</Label>
-                            </div>
-                            <div className="flex gap-2 items-center">
-                              {variation.isEnabled && (
-                                <>
-                                  <div className="flex items-center gap-1">
-                                    <Button
-                                      type="button"
-                                      variant="outline"
-                                      size="sm"
-                                      className="h-11 w-11 p-0 text-amber-600 border-amber-200"
-                                      onClick={() => updateOrder("variation", vIndex, (variation.displayOrder - 1).toString())}
-                                      disabled={variation.displayOrder <= 1}
-                                    >
-                                      <Minus className="w-3 h-3" />
-                                    </Button>
-                                    <div className="w-8 h-8 flex items-center justify-center bg-white border rounded font-bold text-xs">
-                                      {variation.displayOrder}
-                                    </div>
-                                    <Button
-                                      type="button"
-                                      variant="outline"
-                                      size="sm"
-                                      className="h-11 w-11 p-0 text-amber-600 border-amber-200"
-                                      onClick={() => updateOrder("variation", vIndex, (variation.displayOrder + 1).toString())}
-                                    >
-                                      <Plus className="w-3 h-3" />
-                                    </Button>
-                                  </div>
-                                  <Button type="button" variant="ghost" size="sm" onClick={() => addSize(vIndex)} className="text-amber-600">
-                                    <Plus className="w-4 h-4 mr-2" /> {t.add_choice}
-                                  </Button>
-                                </>
-                              )}
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="sm"
-                                className="text-red-500 hover:text-red-700 hover:bg-red-50"
-                                onClick={() => removeVariationType(vIndex)}
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </Button>
-                            </div>
-                          </div>
-
-                          {variation.isEnabled && (
-                            <div className="grid grid-cols-1 gap-3">
-                              {variation.sizes.map((size, sIndex) => (
-                                <div key={sIndex} className="flex items-center gap-2 bg-white p-2 rounded border shadow-sm">
-                                  <div className="flex items-center gap-1">
-                                    <Button
-                                      type="button"
-                                      variant="outline"
-                                      size="sm"
-                                      className="h-10 w-10 p-0 text-slate-500 border-slate-200"
-                                      onClick={() => updateOrder("size", vIndex, (size.displayOrder - 1).toString(), sIndex)}
-                                      disabled={size.displayOrder <= 1}
-                                    >
-                                      <Minus className="w-5 h-5" />
-                                    </Button>
-                                    <div className="w-10 h-10 flex items-center justify-center bg-white border rounded font-bold text-sm">
-                                      {size.displayOrder}
-                                    </div>
-                                    <Button
-                                      type="button"
-                                      variant="outline"
-                                      size="sm"
-                                      className="h-10 w-10 p-0 text-slate-500 border-slate-200"
-                                      onClick={() => updateOrder("size", vIndex, (size.displayOrder + 1).toString(), sIndex)}
-                                    >
-                                      <Plus className="w-5 h-5" />
-                                    </Button>
-                                  </div>
-                                  <div className="flex-[2]">
-                                    <Input
-                                      value={size.size}
-                                      onChange={(e) => updateSizeLabel(vIndex, sIndex, e.target.value)}
-                                      className="h-10 text-left font-bold"
-                                      placeholder={t.size_label}
-                                    />
-                                  </div>
-                                  <div className="w-32">
-                                    <PriceInput
-                                      value={size.price}
-                                      onChange={(num) => updateSizePrice(vIndex, sIndex, num)}
-                                      className="h-10 text-right font-mono"
-                                      placeholder={t.price_lak}
-                                      currency="₭"
-                                    />
-                                  </div>
-                                  <Button
-                                    type="button"
-                                    variant="ghost"
-                                    size="icon"
-                                    className="h-9 w-9 text-red-400 hover:text-red-600"
-                                    onClick={() => removeSize(vIndex, sIndex)}
-                                  >
-                                    <Trash2 className="w-4 h-4" />
-                                  </Button>
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                        </Card>
-                      ))}
-                    </div>
-                  </div>
                 </div>
 
                 {/* Sits with the price it has to justify. Creating the item and
@@ -882,7 +639,7 @@ export default function MenuPage() {
                     value={formRecipe}
                     onChange={setFormRecipe}
                     ingredients={editorIngredients}
-                    price={formVariations.flatMap((v) => v.sizes)[0]?.price ?? 0}
+                    price={formData.price ?? 0}
                     categoryName={formData.category}
                   />
                 </div>
@@ -951,7 +708,7 @@ export default function MenuPage() {
               id: i.id,
               name: i.name,
               localName: i.localName,
-              price: i.variations?.[0]?.sizes?.[0]?.price,
+              price: i.price,
               category: i.category,
             }))}
             activeCategory={activeCategory === "All" ? null : activeCategory}
@@ -975,7 +732,13 @@ export default function MenuPage() {
           {filteredItems.map((item, index) => (
             <MenuItemCard
               key={item.id}
-              item={item}
+              // MenuItemCard still reads its price through the old
+              // variations/sizes shape (components/menu-item-card.tsx is
+              // Task 10's file, not this one) -- synthesised here at the
+              // boundary so the card keeps showing a real price instead of
+              // crashing on `item.variations` being gone from the API
+              // response.
+              item={{ ...item, variations: [{ sizes: [{ price: item.price }] }] }}
               index={index}
               // Press and hold to rearrange. The card has no tap action of its
               // own - edit and delete are their own buttons - so a long press
