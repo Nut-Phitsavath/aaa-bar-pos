@@ -1061,7 +1061,6 @@ export default function ReportsPage() {
                         <div className="flex justify-between items-start mb-2">
                           <div>
                             <p className="font-bold text-slate-800">{item.menuName}</p>
-                            <p className="text-[10px] text-muted-foreground uppercase">{item.variation} - {item.size}</p>
                           </div>
                           <Badge variant={item.marginPercent < 20 ? "destructive" : "outline"} className="text-[10px] font-black">
                             {item.marginPercent.toFixed(1)}% {t.margin}
