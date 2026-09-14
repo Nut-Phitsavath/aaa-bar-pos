@@ -6,24 +6,14 @@ export async function GET(request: Request) {
     const availableOnly = searchParams.get('availableOnly') === 'true'
 
     try {
-        // Fetch all menus with their variations and sizes
+        // Fetch all menus
         const menus = await prisma.menu.findMany({
             where: availableOnly ? { isAvailable: true } : {},
             include: {
                 category: true,
                 // So a screen can say when an item sells but deducts no stock,
                 // without pulling every recipe row to find out.
-                _count: { select: { recipes: true } },
-                variations: {
-                    where: availableOnly ? { isEnabled: true } : {},
-                    include: {
-                        sizes: {
-                            where: availableOnly ? { isAvailable: true } : {},
-                            orderBy: { displayOrder: 'asc' }
-                        }
-                    },
-                    orderBy: { displayOrder: 'asc' }
-                }
+                _count: { select: { recipes: true } }
             },
             // Category order first, then the item's own place inside it: the
             // till renders its chips from the order menus arrive in, so both
@@ -54,19 +44,7 @@ export async function GET(request: Request) {
             // flattened rather than passed through, so this has to be carried
             // explicitly or the screens never see it.
             _count: menu._count,
-            variations: menu.variations.map(variation => ({
-                id: variation.id,
-                type: variation.type,
-                isEnabled: variation.isEnabled,
-                displayOrder: variation.displayOrder,
-                sizes: variation.sizes.map(size => ({
-                    id: size.id,
-                    size: size.size,
-                    price: size.price,
-                    isAvailable: size.isAvailable,
-                    displayOrder: size.displayOrder
-                }))
-            }))
+            price: menu.price,
         }))
 
         return NextResponse.json(transformed)
@@ -79,7 +57,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
     try {
         const body = await request.json()
-        const { name, localName, description, category, image, isAvailable, variations } = body
+        const { name, localName, description, category, image, isAvailable, price } = body
 
         if (!name) {
             return NextResponse.json({ error: 'Name is required' }, { status: 400 })
@@ -106,7 +84,7 @@ export async function POST(request: Request) {
             categoryId = firstCat.id
         }
 
-        // Create menu with variations and sizes
+        // Create menu
         const menu = await prisma.menu.create({
             data: {
                 name,
@@ -115,28 +93,10 @@ export async function POST(request: Request) {
                 categoryId,
                 image: image || '/placeholder.svg',
                 isAvailable: isAvailable ?? true,
-                variations: {
-                    create: variations?.map((v: any) => ({
-                        type: v.type,
-                        isEnabled: v.isEnabled ?? true,
-                        displayOrder: parseInt(v.displayOrder?.toString() || "0"),
-                        sizes: {
-                            create: v.sizes?.map((s: any) => ({
-                                size: s.size,
-                                price: parseFloat(s.price.toString()),
-                                isAvailable: s.isAvailable ?? true,
-                                displayOrder: parseInt(s.displayOrder?.toString() || "0")
-                            })) || []
-                        }
-                    })) || []
-                }
-            },
-            include: {
-                variations: {
-                    include: {
-                        sizes: true
-                    }
-                }
+                // A missing price on create means "not priced yet" — same as
+                // the column's own default — rather than silently rejecting
+                // the request or coercing NaN into the database.
+                price: price !== undefined && price !== null ? parseFloat(price.toString()) : 0
             }
         })
 
