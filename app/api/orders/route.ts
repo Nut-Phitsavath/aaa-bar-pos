@@ -406,11 +406,10 @@ export async function POST(request: Request) {
                 // (variationSizeId), which only ever meant anything when one
                 // item had several sizes to price differently. It doesn't any
                 // more, and no override row was ever written.
-                //
-                // The guard is load-bearing: menuId undefined in a findMany
-                // where-clause means "no filter" to Prisma, which would match
-                // every recipe in the database and drain the whole shelf.
                 for (const item of preparedItems) {
+                    // Delete this line and one malformed cart line empties the
+                    // whole bar: an undefined menuId is "no filter" to findMany,
+                    // so it matches every recipe. findUnique used to throw here.
                     if (!item.menuId) continue
 
                     const recipes = await tx.recipe.findMany({
@@ -462,10 +461,12 @@ export async function POST(request: Request) {
             if (previousOrder && wasActive && isCancelled) {
                 // 1. Revert Stock
                 const oldItems = previousOrder.items
+                // Same single-tier lookup as the deduction above, so a void
+                // gives back exactly what the sale took.
                 for (const item of oldItems) {
-                    // Same single-tier lookup and the same load-bearing guard as
-                    // the deduction above, so a void gives back exactly what the
-                    // sale took.
+                    // Delete this line and voiding one line credits stock the
+                    // bar never sold: an undefined menuId filters nothing, so
+                    // findMany returns every recipe. Not defensive - load-bearing.
                     if (!item.menuId) continue
 
                     const recipes = await tx.recipe.findMany({
