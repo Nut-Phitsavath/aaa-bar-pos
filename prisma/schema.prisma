@@ -62,6 +62,11 @@ model Menu {
   name        String
   description String?
   isAvailable Boolean         @default(true)
+  /// What this item sells for. One item, one price: the bar names the serving
+  /// in the item itself ("Whisky (glass)", "Beer Lao Bucket (5)") rather than
+  /// carrying a size axis. 0 means not priced yet, which is what the old
+  /// filter(n => n > 0) meant when the price lived two tables away.
+  price        Float   @default(0)
   /// Where this sits inside its category on the till (0 = first).
   displayOrder Int            @default(0)
   image       String?         @default("/placeholder.svg")
@@ -72,6 +77,7 @@ model Menu {
   category    Category        @relation(fields: [categoryId], references: [id])
   variations  MenuVariation[]
   recipes     Recipe[]
+  orderItems   OrderItem[]
 
   @@index([categoryId, displayOrder])
 }
@@ -447,6 +453,11 @@ model OrderItem {
   id              String         @id @default(uuid())
   orderId         String
   variationSizeId String?
+  /// The menu item this line sold. Nullable and SetNull for the same reason
+  /// variationSizeId was: deleting a drink must not delete the night it sold.
+  /// name and price stay snapshotted on this row regardless.
+  menuId          String?
+  menu            Menu?          @relation(fields: [menuId], references: [id], onDelete: SetNull)
   name            String
   price           Float
   quantity        Int
