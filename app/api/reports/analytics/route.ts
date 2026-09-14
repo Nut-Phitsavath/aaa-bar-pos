@@ -98,24 +98,15 @@ export async function GET(request: Request) {
                 }
             },
             include: {
-                variationSize: {
-                    include: {
-                        variation: {
-                            include: {
-                                menu: {
-                                    include: { category: true }
-                                }
-                            }
-                        }
-                    }
-                },
-                menu: true
+                menu: {
+                    include: { category: true }
+                }
             }
         })
 
         const categoryMap = new Map()
         orderItems.forEach(item => {
-            const catName = item.variationSize?.variation.menu.category.name || "Other"
+            const catName = item.menu?.category.name || "Other"
 
             if (!categoryMap.has(catName)) categoryMap.set(catName, { category: catName, revenue: 0, quantity: 0 })
             const entry = categoryMap.get(catName)
@@ -268,42 +259,27 @@ export async function GET(request: Request) {
             include: {
                 recipes: {
                     include: { ingredient: { select: { cost: true } } }
-                },
-                variations: {
-                    include: { sizes: true }
                 }
             }
         })
 
         const marginData: any[] = []
         menuRecipes.forEach(menu => {
-            // Tier 1: Base Cost (not size-specific)
-            const baseCost = menu.recipes
-                .filter(r => r.variationSizeId === null)
+            // One recipe list per item now - no base/override split, since
+            // there's no size axis left to override by.
+            const itemCost = menu.recipes
                 .reduce((sum, r) => sum + (r.quantity * r.ingredient.cost), 0)
 
-            menu.variations.forEach(v => {
-                v.sizes.forEach(s => {
-                    // Tier 2: Specific Choice Cost
-                    const specificCost = menu.recipes
-                        .filter(r => r.variationSizeId === s.id)
-                        .reduce((sum, r) => sum + (r.quantity * r.ingredient.cost), 0)
+            const price = menu.price
+            const margin = price - itemCost
+            const marginPercent = price > 0 ? (margin / price) * 100 : 0
 
-                    const itemCost = baseCost + specificCost
-                    const price = s.price
-                    const margin = price - itemCost
-                    const marginPercent = price > 0 ? (margin / price) * 100 : 0
-
-                    marginData.push({
-                        menuName: menu.name,
-                        variation: v.type,
-                        size: s.size,
-                        price,
-                        cost: itemCost,
-                        margin,
-                        marginPercent
-                    })
-                })
+            marginData.push({
+                menuName: menu.name,
+                price,
+                cost: itemCost,
+                margin,
+                marginPercent
             })
         })
 
@@ -316,15 +292,12 @@ export async function GET(request: Request) {
         // a. From Sales
         let salesCost = 0
         orderItems.forEach(item => {
-            const vsId = item.variationSizeId
-            const menuRecord = menuRecipes.find(m => m.id === item.variationSize?.variation.menuId)
-            
+            const menuRecord = menuRecipes.find(m => m.id === item.menuId)
+
             if (menuRecord) {
-                // Tier 1 + Tier 2 summation
                 const itemCost = menuRecord.recipes
-                    .filter(r => r.variationSizeId === null || r.variationSizeId === vsId)
                     .reduce((sum, r) => sum + (r.quantity * r.ingredient.cost), 0)
-                
+
                 salesCost += itemCost * item.quantity
             }
         })
