@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input"
 import { useState, useEffect } from "react"
 import { createPortal } from "react-dom"
 import { useTranslation } from "@/hooks/use-translation"
+import { notify } from "@/components/ui/sonner"
 import { formatTHB } from "@/lib/currency"
 import {
     Droplet,
@@ -93,6 +94,17 @@ export function CustomizationDialog({
     const finalPrice = price + shotPrice
 
     const handleConfirm = (event: React.MouseEvent<HTMLButtonElement>) => {
+        // A menu item created without a price sits at 0, which means "not
+        // priced yet", not "on the house". Adding it would ring the drink up
+        // free, so the cart refuses it here and /api/orders refuses it again
+        // at the boundary. Checked on `price`, not `finalPrice`: a double
+        // shot's +10,000 would otherwise disguise an unpriced item as a
+        // priced one.
+        if (!(price > 0)) {
+            notify.warn(t.set_price_before_selling)
+            return
+        }
+
         onConfirm({
             menuId,
             name: menuName, // Keep name as the base product name

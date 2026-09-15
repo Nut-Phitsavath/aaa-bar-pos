@@ -182,9 +182,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         const addedMenus = await prisma.menu.findMany({
             where: { id: { in: adding.map((a) => a.menuId) } },
         })
+        // An item still sitting at price 0 has not been priced yet, so swapping
+        // it in would price the exchange against nothing and let a dearer drink
+        // leave the shelf for free. The dialog hides these; this refuses them.
         const inLines = adding.map((a) => {
             const added = addedMenus.find((m) => m.id === a.menuId)
             if (!added) throw new Error('UNKNOWN_ITEM')
+            if (!(added.price > 0)) throw new Error('UNPRICED_ITEM')
             return {
                 direction: 'IN', menuId: added.id,
                 name: added.localName ? `${added.localName} (${added.name})` : added.name,
@@ -262,6 +266,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     } catch (error: any) {
         if (error?.message === 'UNKNOWN_ITEM') {
             return NextResponse.json({ error: 'UNKNOWN_ITEM' }, { status: 400 })
+        }
+        if (error?.message === 'UNPRICED_ITEM') {
+            return NextResponse.json({ error: 'UNPRICED_ITEM' }, { status: 400 })
         }
         console.error('[package swap] POST failed', error)
         return NextResponse.json({ error: 'Failed to swap' }, { status: 500 })

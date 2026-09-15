@@ -423,9 +423,12 @@ model Shift {
 model OrderItem {
   id              String         @id @default(uuid())
   orderId         String
-  /// The menu item this line sold. Nullable and SetNull so that deleting a
-  /// drink does not delete the night it sold; name and price stay snapshotted
-  /// on this row regardless.
+  /// The menu item this line sold. The relation is declared for querying only:
+  /// SQLite carries no foreign key on menuId (PRAGMA foreign_key_list(OrderItem)
+  /// lists orderId and voidedById and nothing else), so deleting a drink leaves
+  /// this column pointing at an id that is gone rather than nulling it. Either
+  /// way the night it sold survives: name and price are snapshotted onto this
+  /// row at sale time, and every read site guards for a missing menu.
   menuId          String?
   menu            Menu?          @relation(fields: [menuId], references: [id], onDelete: SetNull)
   name            String

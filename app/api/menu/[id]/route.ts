@@ -67,8 +67,12 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
             return NextResponse.json({ error: 'Menu not found' }, { status: 404 })
         }
 
-        // Recipes cascade from Menu; OrderItem.menuId is nullable and SetNull so
-        // historical orders keep their name/price snapshots after menu deletion.
+        // Recipes are deleted explicitly because they are the menu item's own
+        // rows. OrderItem is left alone: menuId carries no database-level
+        // foreign key, so deleting a menu item leaves that column pointing at
+        // an id that is gone rather than nulling it. Historical lines survive
+        // either way -- name and price are snapshotted onto the row at sale
+        // time, and every read site guards for a missing menu.
         await prisma.$transaction(async (tx) => {
             await tx.recipe.deleteMany({ where: { menuId: id } })
             await tx.menu.delete({ where: { id } })

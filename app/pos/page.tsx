@@ -58,8 +58,6 @@ type CartItem = {
   quantity: number
   sugar?: string
   shot?: string
-  variation?: string
-  size?: string
   category?: string
   image?: string
   isTakeaway?: boolean
@@ -498,8 +496,6 @@ function POSPageInner() {
             quantity: i.quantity,
             sugarLevel: i.sugar,
             shotType: i.shot,
-            variation: i.variation,
-            size: i.size,
             isTakeaway: i.isTakeaway,
             note: i.note
           })),
@@ -546,8 +542,6 @@ function POSPageInner() {
             quantity: i.quantity,
             sugarLevel: i.sugar,
             shotType: i.shot,
-            variation: i.variation,
-            size: i.size,
             isTakeaway: i.isTakeaway,
             note: i.note
           })),
@@ -747,7 +741,7 @@ function POSPageInner() {
         const found = all.find((o: any) => o.id === resumeId)
         if (found) {
           setCart(found.items.map((i: any) => {
-            const compositeId = `${i.menuId}-${i.sugarLevel || ''}-${i.shotType || ''}-${i.variation || ''}-${i.isTakeaway || false}-${i.note || ''}`
+            const compositeId = `${i.menuId}-${i.sugarLevel || ''}-${i.shotType || ''}-${i.isTakeaway || false}-${i.note || ''}`
             return {
               id: compositeId,
               menuId: i.menuId,
@@ -756,8 +750,6 @@ function POSPageInner() {
               quantity: i.quantity,
               sugar: i.sugarLevel,
               shot: i.shotType,
-              variation: i.variation,
-              size: i.size,
               isTakeaway: i.isTakeaway,
               note: i.note || undefined
             }
@@ -813,8 +805,6 @@ function POSPageInner() {
                 quantity: i.quantity,
                 sugarLevel: i.sugar,
                 shotType: i.shot,
-                variation: i.variation,
-                size: i.size,
                 isTakeaway: i.isTakeaway,
                 note: i.note
               })),
@@ -1075,9 +1065,7 @@ function POSPageInner() {
             price: i.price,
             quantity: i.quantity,
             sugarLevel: i.sugar,
-            shotType: i.shot,
-            variation: i.variation,
-            size: i.size
+            shotType: i.shot
           })),
           total, subtotal, tax, discount,
           promoId: appliedPromo?.id,
@@ -1171,8 +1159,6 @@ function POSPageInner() {
             quantity: i.quantity,
             sugarLevel: i.sugar,
             shotType: i.shot,
-            variation: i.variation,
-            size: i.size,
             isTakeaway: i.isTakeaway,
             note: i.note
           })),
@@ -1276,8 +1262,6 @@ function POSPageInner() {
       name: i.name,
       quantity: i.quantity,
       total: i.price * i.quantity,
-      variation: i.variation ?? null,
-      size: i.size ?? null,
       sugar: i.sugar ?? null,
       shot: i.shot ?? null,
       isTakeaway: i.isTakeaway,
@@ -1436,16 +1420,6 @@ function POSPageInner() {
                         {item.localName && <span className="text-[10px] text-slate-400 truncate">({item.name})</span>}
                       </div>
                       <div className="flex flex-wrap gap-1 mt-0.5">
-                        {item.variation && !item.variation.toLowerCase().includes('normal') && !item.variation.toLowerCase().includes('standard') && (
-                          <span className="text-[10px] bg-amber-50 px-1.5 py-0.5 rounded-full text-amber-700 border border-amber-100 font-bold uppercase">
-                            {item.variation === 'HOT' ? t.hot : item.variation === 'ICE' ? t.ice : item.variation === 'BLEND' ? t.blend : item.variation}
-                          </span>
-                        )}
-                        {item.size && !item.size.toLowerCase().includes('normal') && !item.size.toLowerCase().includes('standard') && (
-                          <span className="text-[10px] bg-slate-100 px-1.5 py-0.5 rounded-full text-slate-600 border border-slate-200 font-bold">
-                            {item.size === 'S' ? t.s_size : item.size === 'M' ? t.m_size : item.size === 'L' ? t.l_size : item.size}
-                          </span>
-                        )}
                         {item.sugar && item.sugar !== '100%' && !item.sugar.toLowerCase().includes('normal') && !item.sugar.toLowerCase().includes('standard') && (
                           <span className="flex items-center gap-0.5 text-[10px] bg-slate-50 px-1.5 py-0.5 rounded text-slate-500 border border-slate-100">
                             {item.sugar === "No Sweet" && <CandyOff className="w-3 h-3" />}

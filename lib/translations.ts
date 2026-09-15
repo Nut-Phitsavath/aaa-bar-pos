@@ -466,7 +466,9 @@ export const translations = {
         wipe_success: "System wiped. All transactions cleared",
         wipe_failed: "Could not wipe the data",
         wipe_error: "Could not finish wiping",
-        please_select_customization: "Please select a customization",
+        // price = 0 on a menu row means "nobody has priced this yet", never
+        // "free", so the till says what to go and do about it.
+        set_price_before_selling: "This item has no price yet. Set its price in Menu before selling it.",
         please_select_user_first: "Please select a user first",
         vs_yesterday: "vs yesterday",
         orders_found: "orders found",
@@ -1488,7 +1490,7 @@ export const translations = {
         wipe_success: "ລົບຂໍ້ມູນລະບົບສຳເລັດ. ລ້າງທຸລະກຳທັງໝົດແລ້ວ.",
         wipe_failed: "ລົບຂໍ້ມູນບໍ່ສຳເລັດ",
         wipe_error: "ລົບຂໍ້ມູນບໍ່ສຳເລັດ",
-        please_select_customization: "ກະລຸນາເລືອກການປັບແຕ່ງ",
+        set_price_before_selling: "ລາຍການນີ້ຍັງບໍ່ມີລາຄາ. ກະລຸນາຕັ້ງລາຄາໃນໜ້າເມນູກ່ອນຂາຍ.",
         please_select_user_first: "ກະລຸນາເລືອກຜູ້ໃຊ້ກ່ອນ",
         vs_yesterday: "ທຽບກັບມື້ວານ",
         orders_found: "ລາຍການອໍເດີ້",

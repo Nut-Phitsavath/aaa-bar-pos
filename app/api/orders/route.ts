@@ -173,6 +173,25 @@ export async function POST(request: Request) {
         let serverTax = 0
         let effectivePromoId: string | null = promoId || null
 
+        // 4a. Refuse an unpriced line. A menu row sitting at 0 has not been
+        //     priced yet - it is not a free drink - so selling it would hand
+        //     the stock away and book nothing. The till warns before it gets
+        //     here; this is the boundary that actually decides, because a
+        //     second device or a stale tab can post straight past the screen.
+        //     Cancellations are exempt: they replay an order already rung up,
+        //     and their lines are priced from the stored snapshot, not the menu.
+        if (status !== 'CANCELLED') {
+            const unpriced = existingMenuItems.filter(m => !(m.price > 0))
+            if (unpriced.length > 0) {
+                console.error("Order Validation Failed: Unpriced items", unpriced.map(m => m.id))
+                return NextResponse.json({
+                    error: `These items have no price yet and cannot be sold: ${unpriced.map(m => m.name).join(', ')}. Set a price in Menu first.`,
+                    code: 'UNPRICED_ITEM',
+                    unpricedIds: unpriced.map(m => m.id)
+                }, { status: 400 })
+            }
+        }
+
         if (status !== 'CANCELLED') {
             for (const it of items) {
                 const unit = priceById.get(it.menuId) ?? 0

@@ -98,13 +98,18 @@ export function ExchangeDialog({
             .then((r) => (r.ok ? r.json() : []))
             .then((rows: any[]) => {
                 // One row per menu item, each already carrying its own price.
-                const flat: MenuItem[] = (Array.isArray(rows) ? rows : []).map((m) => ({
-                    id: m.id,
-                    name: m.name,
-                    localName: m.localName,
-                    category: m.category?.name ?? null,
-                    price: m.price,
-                }))
+                // An item still at 0 has not been priced yet, not given away:
+                // swapping one in would value the exchange at nothing, so it
+                // never reaches this column. The API refuses it too.
+                const flat: MenuItem[] = (Array.isArray(rows) ? rows : [])
+                    .filter((m) => m.price > 0)
+                    .map((m) => ({
+                        id: m.id,
+                        name: m.name,
+                        localName: m.localName,
+                        category: m.category?.name ?? null,
+                        price: m.price,
+                    }))
                 setMenu(flat)
             })
             .catch(() => setMenu([]))
@@ -178,6 +183,7 @@ export function ExchangeDialog({
                 : code === "SESSION_ALREADY_CLOSED" ? t.session_already_closed
                     : code === "NO_OPEN_SHIFT" ? t.no_open_shift_exchange
                             : code === "REPLACEMENT_REQUIRED" ? t.replacement_required
+                                : code === "UNPRICED_ITEM" ? t.set_price_before_selling
                         : t.save_failed
 
     const visible = query
