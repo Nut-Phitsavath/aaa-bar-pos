@@ -36,28 +36,45 @@ test('sessionTotal of an empty session is zero', () => {
     assert.equal(sessionTotal([]), 0)
 })
 
-test('formatDuration renders hours and padded minutes', () => {
-    const opened = new Date('2026-09-02T21:14:00Z')
-    const now = new Date('2026-09-02T23:19:00Z')
-    assert.equal(formatDuration(opened, now), '2:05')
-})
+// A table card is read at a glance from across a room, so the figure has to mean
+// one thing at every duration. h:mm printed a one-minute-old table as "0:01",
+// which reads as one second to anyone who has ever seen a stopwatch - and every
+// table spends its first hour in exactly that range.
 
-test('formatDuration renders under an hour as 0:mm', () => {
+test('formatDuration renders under an hour as plain minutes', () => {
     const opened = new Date('2026-09-02T21:14:00Z')
     const now = new Date('2026-09-02T21:48:00Z')
-    assert.equal(formatDuration(opened, now), '0:34')
+    assert.equal(formatDuration(opened, now), '34m')
+})
+
+test('formatDuration renders a fresh table as minutes, never as 0:01', () => {
+    const opened = new Date('2026-09-02T21:14:00Z')
+    const now = new Date('2026-09-02T21:15:00Z')
+    assert.equal(formatDuration(opened, now), '1m')
+})
+
+test('formatDuration renders an hour or more as hours and padded minutes', () => {
+    const opened = new Date('2026-09-02T21:14:00Z')
+    const now = new Date('2026-09-02T23:19:00Z')
+    assert.equal(formatDuration(opened, now), '2h 05m')
+})
+
+test('formatDuration pads the minutes on a whole hour', () => {
+    const opened = new Date('2026-09-02T21:14:00Z')
+    const now = new Date('2026-09-02T22:14:00Z')
+    assert.equal(formatDuration(opened, now), '1h 00m')
 })
 
 test('formatDuration accepts an ISO string, as the API returns', () => {
-    assert.equal(formatDuration('2026-09-02T21:14:00.000Z', new Date('2026-09-02T21:48:00Z')), '0:34')
+    assert.equal(formatDuration('2026-09-02T21:14:00.000Z', new Date('2026-09-02T21:48:00Z')), '34m')
 })
 
 test('formatDuration clamps a backwards clock to zero', () => {
     // Three devices, three system clocks. A tablet running a minute fast must
-    // not render "-0:01" on every card.
+    // not render "-1m" on every card.
     const opened = new Date('2026-09-02T21:14:00Z')
     const now = new Date('2026-09-02T21:13:00Z')
-    assert.equal(formatDuration(opened, now), '0:00')
+    assert.equal(formatDuration(opened, now), '0m')
 })
 
 test('canCloseSession allows an open session with orders', () => {
