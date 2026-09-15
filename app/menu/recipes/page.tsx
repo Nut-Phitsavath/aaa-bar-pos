@@ -221,8 +221,7 @@ export default function RecipesPage() {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     ingredientId: newRecipeItem.ingredientId,
-                    quantity: newRecipeItem.quantity,
-                    variationSizeId: null
+                    quantity: newRecipeItem.quantity
                 })
             })
             if (res.ok) {
@@ -241,7 +240,7 @@ export default function RecipesPage() {
         if (!selectedProduct) return
         if (!(await confirm({ title: t.delete_confirm_title, description: t.cannot_be_undone, confirmLabel: t.delete, destructive: true }))) return
         try {
-            const res = await fetch(`/api/recipes/${selectedProduct.id}?ingredientId=${ingredientId}&variationSizeId=null`, {
+            const res = await fetch(`/api/recipes/${selectedProduct.id}?ingredientId=${ingredientId}`, {
                 method: 'DELETE'
             })
             if (res.ok) {

@@ -21,8 +21,6 @@ export async function GET(
 
     try {
         const { productId } = await params
-        const { searchParams } = new URL(request.url)
-        const variationSizeId = searchParams.get('variationSizeId')
 
         const menu = await prisma.menu.findUnique({
             where: { id: productId },
@@ -32,15 +30,10 @@ export async function GET(
         })
         if (!menu) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
-        // The same base-plus-size rule the order path deducts by, so the cost
-        // shown is the cost of what actually leaves the shelf.
+        // The same rule the order path deducts by, so the cost shown is the
+        // cost of what actually leaves the shelf.
         const recipes = await prisma.recipe.findMany({
-            where: {
-                OR: [
-                    { menuId: productId, variationSizeId: null },
-                    ...(variationSizeId ? [{ variationSizeId }] : []),
-                ],
-            },
+            where: { menuId: productId },
             include: {
                 ingredient: { select: { name: true, cost: true, purchaseMultiplier: true, baseUnit: true } },
             },

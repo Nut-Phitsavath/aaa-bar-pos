@@ -17,7 +17,7 @@ export const EXCHANGE_CHARGE = 'ສ່ວນຕ່າງການແລກປ່
 /** The recipe rule swaps use: the menu item's base lines. */
 async function recipeFor(tx: any, menuId: string) {
     return tx.recipe.findMany({
-        where: { menuId, variationSizeId: null },
+        where: { menuId },
     })
 }
 

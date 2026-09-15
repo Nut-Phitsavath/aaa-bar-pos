@@ -154,8 +154,6 @@ async function main() {
     await prisma.recipe.deleteMany({})
     await prisma.stockCount.deleteMany({})
     await prisma.stockTransaction.deleteMany({})
-    await prisma.variationSize.deleteMany({})
-    await prisma.menuVariation.deleteMany({})
     await prisma.menu.deleteMany({})
     await prisma.category.deleteMany({})
     await prisma.ingredient.deleteMany({})

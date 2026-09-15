@@ -199,16 +199,13 @@ export default function MenuPage() {
   const handleEdit = (item: MenuItem) => {
     setEditingItem(item)
 
-    // Load the base recipe into the buffer so Save can diff against it. Only
-    // base rows: a per-size recipe belongs to the recipes screen, and silently
-    // dropping one here would delete work this dialog never showed.
+    // Load the recipe into the buffer so Save can diff against it.
     setFormRecipe([])
     setOriginalRecipe([])
     fetch(`/api/recipes/${item.id}`)
       .then((r) => (r.ok ? r.json() : []))
-      .then((rows: { ingredientId: string; quantity: number; variationSizeId: string | null }[]) => {
+      .then((rows: { ingredientId: string; quantity: number }[]) => {
         const base = (Array.isArray(rows) ? rows : [])
-          .filter((r) => !r.variationSizeId)
           .map((r) => ({ ingredientId: r.ingredientId, quantity: r.quantity }))
         setFormRecipe(base)
         setOriginalRecipe(base)
@@ -279,11 +276,11 @@ export default function MenuPage() {
       await fetch(`/api/recipes/${productId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ingredientId: row.ingredientId, quantity: row.quantity, variationSizeId: null })
+        body: JSON.stringify({ ingredientId: row.ingredientId, quantity: row.quantity })
       })
     }
     for (const row of removed) {
-      await fetch(`/api/recipes/${productId}?ingredientId=${row.ingredientId}&variationSizeId=null`, {
+      await fetch(`/api/recipes/${productId}?ingredientId=${row.ingredientId}`, {
         method: 'DELETE'
       })
     }

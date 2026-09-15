@@ -173,7 +173,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
                 const item = available.find((a) => a.menuId === line.menuId)!
 
                 const recipes = await tx.recipe.findMany({
-                    where: { menuId: item.menuId, variationSizeId: null },
+                    where: { menuId: item.menuId },
                 })
                 for (const recipe of recipes) {
                     // Negative decrement: the same rounded path a sale takes.
