@@ -14,8 +14,9 @@
 
 - **Stop the dev server before any `prisma migrate` or `prisma generate`.** A running `next dev` holds the SQLite file (`database is locked`) and the query-engine DLL (`EPERM` on rename). This has already bitten this project twice.
 - **`prisma migrate dev` fails in a non-interactive shell.** Hand-write `prisma/migrations/<timestamp>_<name>/migration.sql` following the existing folders, then run `npx prisma migrate deploy` followed by `npx prisma generate`.
+- **`npm run build` does NOT type-check.** `next.config.mjs` sets `typescript: { ignoreBuildErrors: true }`, so a green build proves only that the bundler ran. The type gate is `npx tsc --noEmit`. At Task 6 the count was 12 errors, all in files later tasks own (10 in `table-sessions/[id]/returns`, 2 in `order-items/[id]/swap`) plus an unrelated `prisma.config.ts` resolution error that is not ours and never goes away. Each task must report the count before and after its change and account for every difference.
 - **Test command is `npm test`** — that is `node --experimental-strip-types --test lib/*.test.ts`. Only files matching `lib/*.test.ts` run. There is no DOM, jsdom, or browser harness in this repo: UI changes cannot be tested automatically and must be verified by a human.
-- **Baseline is 252 passing tests.** Any task that ends below 252 is not done.
+- **The suite must never lose a test and never end red.** The baseline was 252 at Task 2; tasks that add tests raise the total (Task 3 took it to 253). The rule is: 0 failing, and the count never drops below what the previous task left. Each task states its own expected total.
 - **New translation keys go in both `en` and `lo`** in `lib/translations.ts`. `lib/translations.test.ts` fails on a key present in one language only, and on duplicates.
 - **`price = 0` means "not priced yet"**, matching today's `filter((n) => n > 0)`. It is not a free item.
 - **Commit your own task, on this branch only.** The repo owner authorised commits on `refactor/flatten-menu-price` for this execution (2026-09-14). Run the commit step as written. NEVER `git push`, never merge, never commit on another branch.
@@ -427,7 +428,7 @@ All 47 recipe rows in the database are tier 1 and zero are tier 2, and with one 
 - [ ] **Step 5: Tests and build**
 
 Run: `npm test` — expected 252 passing.
-Run: `npm run build` — expected `Compiled successfully`. Type errors here are the point: they name every remaining caller.
+Run: `npx tsc --noEmit` — expected no NEW errors versus the count before your change. Type errors here are the point: they name every remaining caller.
 
 - [ ] **Step 6: Propose the commit**
 
@@ -454,7 +455,10 @@ git commit -m "refactor: orders are created and priced from the menu item"
 
 - [ ] **Step 1: Let the compiler produce the list**
 
-Run: `npm run build 2>&1 | grep -E "error|Type error" | head -40`
+Run: `npx tsc --noEmit 2>&1 | grep "error TS" | head -40`
+
+(`npm run build` is useless for this — `next.config.mjs` sets
+`ignoreBuildErrors: true`, so it compiles cleanly over broken types.)
 
 Work the list top to bottom. Every error is a real caller of a field that no longer exists.
 
@@ -487,8 +491,8 @@ columns still exist until Task 13, so untouched code continues to compile.
 
 - [ ] **Step 4: Build clean**
 
-Run: `npm run build`
-Expected: `Compiled successfully`, no type errors.
+Run: `npx tsc --noEmit` (npm run build does NOT type-check — see Global Constraints)
+Expected: no NEW errors versus the count you recorded before starting, no type errors.
 
 Run: `npm test` — expected 252 passing.
 
@@ -524,8 +528,8 @@ In `app/pos/page.tsx` and `CustomizationDialog.tsx`, replace `variationSizeId` w
 
 - [ ] **Step 4: Build**
 
-Run: `npm run build`
-Expected: `Compiled successfully`.
+Run: `npx tsc --noEmit` (npm run build does NOT type-check — see Global Constraints)
+Expected: no NEW errors versus the count you recorded before starting.
 
 - [ ] **Step 5: Propose the commit**
 
@@ -570,8 +574,8 @@ Delete the `DEFAULT_SIZES` constant near line 58 (it still contains cafe leftove
 
 - [ ] **Step 4: Build**
 
-Run: `npm run build`
-Expected: `Compiled successfully`.
+Run: `npx tsc --noEmit` (npm run build does NOT type-check — see Global Constraints)
+Expected: no NEW errors versus the count you recorded before starting.
 
 - [ ] **Step 5: Propose the commit**
 
@@ -590,6 +594,8 @@ git commit -m "refactor: a menu item has one price field"
 - Modify: `components/pos/returns-dialog.tsx`
 - Modify: `components/menu-item-card.tsx`
 - Modify: `app/receipt/page.tsx`
+- Modify: `app/pos/page.tsx` — ONLY to delete the shim described below
+- Modify: `app/menu/page.tsx` — ONLY to delete the second shim described below
 
 - [ ] **Step 1: Simplify the card**
 
@@ -601,9 +607,24 @@ const price = Math.min(
 )
 ```
 
-Replace with `const price = item.price`. Change the `MenuCardItem` type's `variations` field to `price: number`. The render already guards with `Number.isFinite(price)`; keep that guard — it now catches a missing price rather than an empty array, and `0` still suppresses the line via the existing check.
+Replace with `const price = item.price`. Change the `MenuCardItem` type's `variations` field to `price: number`. The render guards with `Number.isFinite(price)`. That guard is NOT sufficient on its own: `Number.isFinite(0)` is `true`. The old code hid an unpriced item only by accident, because `Math.min(...[].filter(n => n > 0))` returns `Infinity` when the array empties. Reading `item.price` directly removes that accident, so the guard must become `Number.isFinite(price) && price > 0` or an unpriced item renders "฿0" and reads as free.
 
-- [ ] **Step 2: Sweep the other four**
+- [ ] **Step 2: Delete the shim Task 8 left behind**
+
+`app/pos/page.tsx:87-93` synthesizes a fake one-size `variations` shape at the
+`MenuCard` call boundary — `item={{ ...item, variations: [{ sizes: [{ price: item.price }] }] }}`
+— purely so this component kept working while Task 8 ran. Step 1 makes that a
+hard `TS2353` excess-property error, so it cannot be skipped, but delete it
+deliberately rather than letting the type checker force it: pass `item` straight
+through. Task 9 then set the same precedent a second time in `app/menu/page.tsx`, at the
+`<MenuItemCard>` call boundary. Delete that one too, the same way. Those two
+files are in scope for THIS DELETION ONLY — change nothing else in either.
+
+After both are gone, run `grep -rn "variations" app/pos/page.tsx app/menu/page.tsx`
+and expect no hits. Two shims were created because each task needed the shared
+card to keep rendering; a third would mean this task has not finished its job.
+
+- [ ] **Step 3: Sweep the other four**
 
 Run: `grep -n "variationSize\|variations" app/menu/recipes/page.tsx components/pos/exchange-dialog.tsx components/pos/returns-dialog.tsx app/receipt/page.tsx`
 
@@ -622,12 +643,12 @@ item.variationSize?.variation?.menu
 
 The recipes page is the largest of these at 15 references: it selects a product, then a variation, then a size to attach a recipe to. The variation and size selectors both disappear; a recipe now attaches to the product directly.
 
-- [ ] **Step 3: Build and test**
+- [ ] **Step 4: Build and test**
 
-Run: `npm run build` — expected `Compiled successfully`.
+Run: `npx tsc --noEmit` — expected no NEW errors versus the count before your change.
 Run: `npm test` — expected 252 passing.
 
-- [ ] **Step 4: Propose the commit**
+- [ ] **Step 5: Propose the commit**
 
 ```bash
 git add app/menu/recipes components/pos components/menu-item-card.tsx app/receipt
@@ -649,6 +670,7 @@ removal in the whole plan.
 - Modify: `app/reports/page.tsx:612`
 - Modify: `app/monitor/page.tsx:277`
 - Modify: `lib/translations.ts`
+- Check: `app/api/reports/export/route.ts:56` — same reporting family, never named in any earlier exemption list. Judge it and either migrate it or say why it is fine.
 
 **Interfaces:**
 - Produces: the analytics response no longer carries `sizeStats` or `variationStats`.
@@ -700,7 +722,7 @@ and not the other.
 
 - [ ] **Step 5: Build and test**
 
-Run: `npm run build` — expected `Compiled successfully`.
+Run: `npx tsc --noEmit` — expected no NEW errors versus the count before your change.
 Run: `npm test` — expected 252 passing.
 
 - [ ] **Step 6: Propose the commit**
@@ -783,13 +805,34 @@ In `prisma/schema.prisma`: delete `model MenuVariation` and `model VariationSize
 
 - [ ] **Step 3: Write the migration and read what Prisma generates**
 
-Generate it, then **read the SQL before running it**:
+**DO NOT use `prisma migrate diff`.** The controller ran it on 2026-09-15 and it
+generates a rebuild of `Ingredient`, `OrderItem` and `PackageSwap` plus dropped
+`Payment` indexes — almost all of it from PRE-EXISTING drift, not from this
+refactor. `prisma/migrations/` never captured a migration for
+`Ingredient.measureType` / `baseUnit` / `purchaseUnit` / `purchaseMultiplier`
+(added to schema.prisma in commit a02687b). Applying that generated SQL would
+rebuild unrelated tables at the one-way door.
 
-```bash
-npx prisma migrate diff --from-schema-datasource prisma/schema.prisma --to-schema-datamodel prisma/schema.prisma --script
-```
+Hand-write the migration instead, exactly like Task 2 did. The controller
+verified the following against a throwaway copy of the real database:
 
-`DROP COLUMN` needs SQLite 3.35+; below that Prisma emits a create-copy-rename table rebuild which silently redefines every constraint on the table. If you see a rebuild of `OrderItem`, check the recreated table still has its `orderId` foreign key and its indexes before you run it.
+- SQLite here is **3.45.0**, so `DROP COLUMN` is available.
+- `PackageSwapLine.variationSizeId` drops cleanly with `ALTER TABLE ... DROP COLUMN`.
+- `OrderItem.variationSizeId` and `Recipe.variationSizeId` do **NOT**. Both tables
+  carry a `FOREIGN KEY ("variationSizeId") REFERENCES "VariationSize"` clause, and
+  SQLite refuses the drop with *error in table X after drop column: unknown column*.
+  These two need a create-copy-drop-rename rebuild that omits both the column and
+  its FK clause. Preserve every other column, index and foreign key on those two
+  tables exactly — a rebuild silently redefines whatever you do not restate.
+- Drop `OrderItem_variationSizeId_idx` before rebuilding, and recreate
+  `OrderItem_orderId_idx`, `OrderItem_menuId_idx` and `OrderItem_voidedAt_idx` after.
+- Replace `Recipe_menuId_variationSizeId_ingredientId_key` with a unique index on
+  `(menuId, ingredientId)`.
+- Drop `VariationSize` then `MenuVariation` last, after the columns referencing
+  them are gone.
+
+Wrap the whole thing in `PRAGMA foreign_keys=OFF;` ... `PRAGMA foreign_keys=ON;`
+as Prisma's own generated rebuilds do, and run it inside one transaction.
 
 - [ ] **Step 4: Apply**
 
@@ -852,7 +895,7 @@ Expected: `IDENTICAL`. Anything else means a historical bill changed, which this
 - [ ] **Step 2: Automated checks**
 
 Run: `npm test` — expected 252 passing.
-Run: `npm run build` — expected `Compiled successfully`.
+Run: `npx tsc --noEmit` — expected no NEW errors versus the count before your change.
 
 - [ ] **Step 3: Hand the manual pass to a human**
 
