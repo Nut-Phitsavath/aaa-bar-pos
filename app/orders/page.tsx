@@ -15,7 +15,7 @@ import { ManagerApproval } from "@/components/manager-approval"
 import { toast } from "sonner"
 import {
     ChevronRight, Clock, Receipt as ReceiptIcon, Users, Ban, Search,
-    Calendar as CalendarIcon, PackageOpen,
+    Calendar as CalendarIcon, PackageOpen, StickyNote, ShoppingBag,
 } from "lucide-react"
 import { formatTHB } from "@/lib/currency"
 import { SwapSummary } from "@/components/pos/swap-summary"
@@ -32,6 +32,10 @@ type Line = {
     voidReason: string | null
     voidNote: string | null
     voidedBy: string | null
+    /** What the bar was told to do with this line, kept with the line so a
+     *  disputed bill can be read back exactly as it was served. */
+    note: string | null
+    isTakeaway: boolean
 }
 
 type Round = {
@@ -476,6 +480,26 @@ export default function BillsPage() {
                                                                         {formatTHB(i.total)}
                                                                     </span>
                                                                 </div>
+                                                                {/* Under the line, aligned to the name
+                                                                    rather than the quantity: what the bar
+                                                                    was asked to do, kept beside what was
+                                                                    charged so a disputed bill reads back
+                                                                    as it was served. */}
+                                                                {(i.note || i.isTakeaway) && (
+                                                                    <div className={`ps-9 flex items-center gap-3 flex-wrap text-[11px] mt-0.5 ${struck ? "opacity-50" : ""}`}>
+                                                                        {i.isTakeaway && (
+                                                                            <span className="flex items-center gap-1 font-bold text-blue-700">
+                                                                                <ShoppingBag className="w-3 h-3 shrink-0" /> {t.takeaway}
+                                                                            </span>
+                                                                        )}
+                                                                        {i.note && (
+                                                                            <span className="flex items-center gap-1 text-amber-800 min-w-0">
+                                                                                <StickyNote className="w-3 h-3 shrink-0" />
+                                                                                <span className="truncate">{i.note}</span>
+                                                                            </span>
+                                                                        )}
+                                                                    </div>
+                                                                )}
                                                                 {/* The same two lines the ticket and
                                                                     the printed slip showed (req #9). */}
                                                                 <div className="ps-9">
