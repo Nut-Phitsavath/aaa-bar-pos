@@ -17,6 +17,7 @@ import {
     ShoppingBag
 } from "lucide-react"
 import { Switch } from "@/components/ui/switch"
+import { flyToCart } from "./fly-to-cart"
 
 interface CustomizationDialogProps {
     isOpen: boolean
@@ -40,6 +41,17 @@ interface CustomizationDialogProps {
     hasSugarLevel?: boolean
     hasShotType?: boolean
     imageUrl?: string
+    /**
+     * Editing a line already in the cart rather than adding a new one. The
+     * dialog is the same; only its verb changes, and it opens holding what the
+     * line already says instead of a blank form.
+     */
+    editing?: {
+        sugar?: string
+        shot?: string
+        isTakeaway?: boolean
+        note?: string
+    } | null
 }
 
 
@@ -53,7 +65,8 @@ export function CustomizationDialog({
     price,
     hasSugarLevel = true,
     hasShotType = true,
-    imageUrl
+    imageUrl,
+    editing = null
 }: CustomizationDialogProps) {
     const { t } = useTranslation()
     const [sugar, setSugar] = useState("Normal Sweet")
@@ -64,14 +77,18 @@ export function CustomizationDialog({
     // bar by being shouted across it.
     const [note, setNote] = useState("")
 
-    // Reset defaults when opening
+    // Opening on an existing line starts from what that line already says, so
+    // a bartender adding "no ice" to a drink that is already takeaway does not
+    // silently clear the takeaway by saving.
     useEffect(() => {
-        if (isOpen) {
-            setSugar("Normal Sweet")
-            setShot("Normal Shot")
-            setIsTakeaway(false)
-            setNote("")
-        }
+        if (!isOpen) return
+        setSugar(editing?.sugar ?? "Normal Sweet")
+        setShot(editing?.shot ?? "Normal Shot")
+        setIsTakeaway(editing?.isTakeaway ?? false)
+        setNote(editing?.note ?? "")
+        // `editing` is read at open. Re-running on its identity would reset the
+        // form under someone mid-type, because the parent rebuilds the object.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isOpen])
 
     const sugarOptions = [
@@ -116,44 +133,9 @@ export function CustomizationDialog({
             note: note.trim(),
         })
 
-        // Flying animation
-        const btn = event.currentTarget
-        const rect = btn.getBoundingClientRect()
-        const cartIcon = document.getElementById('cart-icon-header')
-        let targetX = window.innerWidth - 100
-        let targetY = 100
-
-        if (cartIcon) {
-            const cartRect = cartIcon.getBoundingClientRect()
-            targetX = cartRect.left
-            targetY = cartRect.top
-        }
-
-        const flyingImg = document.createElement('img')
-        flyingImg.src = imageUrl && imageUrl !== "/placeholder.svg" ? imageUrl : "/placeholder-logo.png"
-        flyingImg.className = 'fixed z-[10000] rounded-md shadow-2xl object-cover pointer-events-none transition-all duration-700 ease-in-out'
-        flyingImg.style.width = `100px`
-        flyingImg.style.height = `100px`
-        flyingImg.style.top = `${rect.top - 50}px`
-        flyingImg.style.left = `${rect.left + rect.width / 2 - 50}px`
-        document.body.appendChild(flyingImg)
-
-        requestAnimationFrame(() => {
-            flyingImg.style.top = `${targetY}px`
-            flyingImg.style.left = `${targetX}px`
-            flyingImg.style.width = '20px'
-            flyingImg.style.height = '20px'
-            flyingImg.style.opacity = '0.2'
-            flyingImg.style.transform = 'scale(0.1) rotate(180deg)'
-        })
-
-        setTimeout(() => {
-            flyingImg.remove()
-            if (cartIcon) {
-                cartIcon.classList.add('scale-125', 'text-amber-500')
-                setTimeout(() => cartIcon.classList.remove('scale-125', 'text-amber-500'), 200)
-            }
-        }, 700)
+        // Editing a line that is already in the cart moves nothing across the
+        // screen - there is no journey to show. Only a new drink flies.
+        if (!editing) flyToCart(event.currentTarget.getBoundingClientRect(), imageUrl)
 
         onClose()
     }
@@ -162,8 +144,10 @@ export function CustomizationDialog({
         // modal={false} on purpose. Radix's modal mode locks body scroll and
         // marks the entire page aria-hidden on every open; measured at 4x CPU
         // that machinery alone costs ~257ms, against ~35ms for the same dialog
-        // non-modal. This dialog opens for every line of every order, so that
-        // is the single most repeated delay in the app.
+        // non-modal. It used to open for every line of every order, which made
+        // that the single most repeated delay in the app; now it opens only for
+        // an item with real choices, or when somebody edits a line. Kept
+        // non-modal anyway - 257ms is worth avoiding whenever it does open.
         //
         // The cost of turning it off is that Radix stops rendering its overlay
         // (Dialog.Overlay returns null when non-modal) and the menu grid behind
@@ -282,7 +266,7 @@ export function CustomizationDialog({
                 <DialogFooter>
                     <Button variant="outline" onClick={onClose}>{t.cancel || "Cancel"}</Button>
                     <Button onClick={handleConfirm}>
-                        {t.add_to_cart || "Add to Cart"} - {formatTHB(finalPrice)}
+                        {editing ? t.save : `${t.add_to_cart || "Add to Cart"} - ${formatTHB(finalPrice)}`}
                     </Button>
                 </DialogFooter>
             </DialogContent>
