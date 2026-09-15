@@ -75,41 +75,10 @@ model Menu {
   updatedAt    DateTime        @updatedAt
   localName    String?
   category     Category        @relation(fields: [categoryId], references: [id])
-  variations   MenuVariation[]
   recipes      Recipe[]
   orderItems   OrderItem[]
 
   @@index([categoryId, displayOrder])
-}
-
-model MenuVariation {
-  id           String          @id @default(uuid())
-  menuId       String
-  type         String
-  isEnabled    Boolean         @default(true)
-  createdAt    DateTime        @default(now())
-  updatedAt    DateTime        @updatedAt
-  displayOrder Int             @default(0)
-  menu         Menu            @relation(fields: [menuId], references: [id], onDelete: Cascade)
-  sizes        VariationSize[]
-
-  @@unique([menuId, type])
-}
-
-model VariationSize {
-  id           String        @id @default(uuid())
-  variationId  String
-  size         String
-  price        Float
-  isAvailable  Boolean       @default(true)
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
-  displayOrder Int           @default(0)
-  orderItems   OrderItem[]
-  recipes      Recipe[]
-  variation    MenuVariation @relation(fields: [variationId], references: [id], onDelete: Cascade)
-
-  @@unique([variationId, size])
 }
 
 model IngredientCategory {
@@ -189,18 +158,20 @@ model StockTransaction {
 }
 
 model Recipe {
-  id              String         @id @default(uuid())
-  menuId          String
-  variationSizeId String? // For e.g. "Standard" or "Large" deduction
-  ingredientId    String
-  quantity        Float
-  createdAt       DateTime       @default(now())
-  updatedAt       DateTime       @updatedAt
-  variationSize   VariationSize? @relation(fields: [variationSizeId], references: [id], onDelete: Cascade)
-  menu            Menu           @relation(fields: [menuId], references: [id], onDelete: Cascade)
-  ingredient      Ingredient     @relation(fields: [ingredientId], references: [id])
+  id           String     @id @default(uuid())
+  menuId       String
+  ingredientId String
+  quantity     Float
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  menu         Menu       @relation(fields: [menuId], references: [id], onDelete: Cascade)
+  ingredient   Ingredient @relation(fields: [ingredientId], references: [id])
 
-  @@unique([menuId, variationSizeId, ingredientId])
+  /// One row per ingredient per menu item. This used to span a third column,
+  /// variationSizeId, for per-size deductions; with variationSizeId NULL on
+  /// every row SQLite counted those NULLs as distinct, so the old index never
+  /// actually constrained this pair. It does now.
+  @@unique([menuId, ingredientId])
 }
 
 model Customer {
@@ -452,10 +423,9 @@ model Shift {
 model OrderItem {
   id              String         @id @default(uuid())
   orderId         String
-  variationSizeId String?
-  /// The menu item this line sold. Nullable and SetNull for the same reason
-  /// variationSizeId was: deleting a drink must not delete the night it sold.
-  /// name and price stay snapshotted on this row regardless.
+  /// The menu item this line sold. Nullable and SetNull so that deleting a
+  /// drink does not delete the night it sold; name and price stay snapshotted
+  /// on this row regardless.
   menuId          String?
   menu            Menu?          @relation(fields: [menuId], references: [id], onDelete: SetNull)
   name            String
@@ -479,16 +449,12 @@ model OrderItem {
   cupSize         String?
   isTakeaway      Boolean        @default(false)
   order           Order          @relation(fields: [orderId], references: [id])
-  // Nullable so menu items can be deleted without wiping historical order lines
-  // (name/price snapshots remain on the order item).
-  variationSize   VariationSize? @relation(fields: [variationSizeId], references: [id], onDelete: SetNull)
   voidedBy        User?          @relation("OrderItemVoidedBy", fields: [voidedById], references: [id])
   /// Swaps made against this line when it is a package (req #8).
   swaps           PackageSwap[]
 
   // orderId is looked up once per order on any query that includes items.
   @@index([orderId])
-  @@index([variationSizeId])
   @@index([menuId])
   // The void report filters on this across a date range.
   @@index([voidedAt])
@@ -539,7 +505,6 @@ model PackageSwapLine {
   /// OUT left the package, IN replaced it.
   direction       String
   menuId          String?
-  variationSizeId String?
   /// Snapshotted, like an order line: the report must still read correctly
   /// after a drink is renamed or removed from the menu.
   name            String

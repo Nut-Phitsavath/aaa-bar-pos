@@ -67,7 +67,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
             return NextResponse.json({ error: 'Menu not found' }, { status: 404 })
         }
 
-        // Recipes cascade from Menu; OrderItem.variationSizeId is SetNull so
+        // Recipes cascade from Menu; OrderItem.menuId is nullable and SetNull so
         // historical orders keep their name/price snapshots after menu deletion.
         await prisma.$transaction(async (tx) => {
             await tx.recipe.deleteMany({ where: { menuId: id } })
