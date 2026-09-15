@@ -232,13 +232,7 @@ async function main() {
 
     for (const item of MENU) {
         const menu = await prisma.menu.create({
-            data: { name: item.name, localName: item.lao, categoryId: categoryId[item.cat] },
-        })
-        const variation = await prisma.menuVariation.create({
-            data: { menuId: menu.id, type: "STANDARD", displayOrder: 1 },
-        })
-        await prisma.variationSize.create({
-            data: { variationId: variation.id, size: "Standard", price: item.price, displayOrder: 1 },
+            data: { name: item.name, localName: item.lao, categoryId: categoryId[item.cat], price: item.price },
         })
         for (const [ing, qty] of Object.entries(item.recipe)) {
             await prisma.recipe.create({
