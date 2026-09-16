@@ -680,6 +680,24 @@ export const translations = {
         void_note: "Note",
         no_voids: "No voids in this period.",
         by_reason: "By reason",
+        // The notes report. "Most asked for" rather than "top notes": the list
+        // answers what the bar is repeatedly being told to do, and a request
+        // near the top of it is a candidate for becoming a one-tap choice.
+        // The Z-report's missing accounting lines. "Included" is doing real
+        // work in the VAT label: the tax is inside net sales, not added to it,
+        // and a reader who assumes otherwise books the day twice.
+        // The healthy band for this category, shown beside the actual.
+        target: "target",
+        tax_included: "VAT included",
+        tickets: "Tickets",
+        average: "avg",
+        taken_back: "Taken back",
+        prep_notes: "Notes to the bar",
+        no_prep_notes: "No notes in this period.",
+        most_asked: "Most asked for",
+        distinct_requests: "Different requests",
+        details: "Every note",
+        showing_latest_500: "Showing the latest 500. Narrow the dates to see the rest.",
         by_staff: "By staff",
         remove: "Remove",
         round_no: "Order",
@@ -1699,6 +1717,17 @@ export const translations = {
         void_note: "ໝາຍເຫດ",
         no_voids: "ບໍ່ມີການຍົກເລີກໃນຊ່ວງນີ້.",
         by_reason: "ຕາມເຫດຜົນ",
+        target: "ເປົ້າໝາຍ",
+        tax_included: "ລວມ VAT ແລ້ວ",
+        tickets: "ໃບບິນ",
+        average: "ສະເລ່ຍ",
+        taken_back: "ຄືນ / ຍົກເລີກ",
+        prep_notes: "ໝາຍເຫດເຖິງບາ",
+        no_prep_notes: "ບໍ່ມີໝາຍເຫດໃນຊ່ວງນີ້.",
+        most_asked: "ຖືກຂໍຫຼາຍທີ່ສຸດ",
+        distinct_requests: "ຄຳຂໍທີ່ແຕກຕ່າງ",
+        details: "ໝາຍເຫດທັງໝົດ",
+        showing_latest_500: "ສະແດງ 500 ລາຍການລ້າສຸດ. ຫຍໍ້ຊ່ວງວັນທີເພື່ອເບິ່ງສ່ວນທີ່ເຫຼືອ.",
         by_staff: "ຕາມພະນັກງານ",
         remove: "ລຶບ",
         round_no: "ອໍເດີ",

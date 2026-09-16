@@ -7,6 +7,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ZReport } from "@/components/reports/z-report"
 import { ServerPerformance } from "@/components/reports/server-performance"
 import { VoidAudit } from "@/components/reports/void-audit"
+import { NotesReport } from "@/components/reports/notes-report"
 import { VarianceReport } from "@/components/reports/variance"
 import { ExchangeAudit } from "@/components/reports/exchange-audit"
 import {
@@ -317,6 +318,17 @@ export default function ReportsPage() {
             </TabsList>
           </div>
 
+          {/* Holds a screenful open while a tab swaps.
+
+              Radix unmounts the old panel, and every report here renders a
+              128-256px skeleton before its data arrives. Switching tabs from
+              part-way down a long report therefore collapsed the document from
+              thousands of pixels to a few hundred, the browser clamped the
+              scroll position to whatever was left, and the reader was thrown to
+              the top - which is exactly what making the tab strip sticky was
+              meant to avoid. */}
+          <div className="min-h-[calc(100vh-10rem)]">
+
           <TabsContent value="servers">
             {dateRange?.from && dateRange?.to && (
               <ServerPerformance
@@ -326,12 +338,22 @@ export default function ReportsPage() {
             )}
           </TabsContent>
 
-          <TabsContent value="voids">
+          {/* Voids and notes share a tab because they are the same kind of
+              question: what did staff do during service that nobody stopped
+              them doing? One is a line struck off, the other a line annotated,
+              and both are read the morning after rather than at the till. */}
+          <TabsContent value="voids" className="space-y-6">
             {dateRange?.from && dateRange?.to && (
-              <VoidAudit
-                startDate={startOfDay(dateRange.from).toISOString()}
-                endDate={endOfDay(dateRange.to).toISOString()}
-              />
+              <>
+                <VoidAudit
+                  startDate={startOfDay(dateRange.from).toISOString()}
+                  endDate={endOfDay(dateRange.to).toISOString()}
+                />
+                <NotesReport
+                  startDate={startOfDay(dateRange.from).toISOString()}
+                  endDate={endOfDay(dateRange.to).toISOString()}
+                />
+              </>
             )}
           </TabsContent>
 
@@ -1080,6 +1102,31 @@ export default function ReportsPage() {
                             <p className="font-bold text-emerald-600">{formatTHB(item.margin)}</p>
                           </div>
                         </div>
+
+                        {/* Pour cost, which is the number a bar actually runs
+                            on. Margin says what is left; pour cost says whether
+                            the pour itself is right, against a band that
+                            differs by category - a beer at 30% is healthy where
+                            a spirit at 30% is being given away. The verdict is
+                            the same one the recipe editor shows, so a manager
+                            reading a report and a manager editing a recipe are
+                            looking at one number. */}
+                        {typeof item.pourCostPct === "number" && item.band && (
+                          <div className="flex items-center justify-between gap-2 border-t pt-2 mt-2">
+                            <span className="text-[10px] text-muted-foreground uppercase">{t.pour_cost}</span>
+                            <span className="flex items-baseline gap-1.5">
+                              <span className={`font-black tabular-nums ${item.verdict === "OK" ? "text-emerald-600"
+                                : item.verdict === "BELOW_COST" ? "text-rose-600"
+                                  : "text-amber-600"
+                                }`}>
+                                {item.pourCostPct.toFixed(1)}%
+                              </span>
+                              <span className="text-[10px] text-slate-400 tabular-nums">
+                                {t.target} {item.band[0]}–{item.band[1]}%
+                              </span>
+                            </span>
+                          </div>
+                        )}
                       </div>
                     ))}
                     {(!data?.advanced?.lowMarginItems || data.advanced.lowMarginItems.length === 0) && (
@@ -1197,6 +1244,7 @@ export default function ReportsPage() {
               </CardContent>
             </Card>
           </TabsContent>
+          </div>
         </Tabs>
       </div>
     </div>
