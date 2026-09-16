@@ -14,7 +14,8 @@
     "db:demo": "node prisma/seedDemoHistory.js",
     "db:migrate-units": "node prisma/migrateToBaseUnits.js",
     "check:pourcost": "node prisma/checkPourCost.js",
-    "check:reports": "node prisma/checkReports.js"
+    "check:reports": "node prisma/checkReports.js",
+    "db:counts": "node prisma/seedStockCounts.js"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
