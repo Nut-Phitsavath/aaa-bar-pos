@@ -16,7 +16,7 @@ import {
 } from "recharts"
 import {
   Calendar as CalendarIcon, Download, TrendingUp, DollarSign, ShoppingBag,
-  CreditCard, TrendingDown, Clock, Tag, Package, AlertTriangle, Search, Filter, Target, ArrowRightLeft, ShoppingCart, History, Droplets, Coffee
+  CreditCard, TrendingDown, Clock, Tag, Package, AlertTriangle, Search, Filter, Target, ArrowRightLeft, ShoppingCart, History
 } from "lucide-react"
 import Link from "next/link"
 import { formatTHB } from "@/lib/currency"
@@ -621,46 +621,11 @@ export default function ReportsPage() {
                 </Card>
               </div>
 
-            {/* Customization Stats */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-indigo-800 flex items-center gap-2">
-                    <Droplets className="w-5 h-5 text-blue-500" />
-                    {t.sugar_levels_usage}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-3">
-                    {data?.sugarStats?.map((s: any, i: number) => (
-                      <div key={i} className="flex justify-between items-center p-3 rounded-xl border bg-white shadow-sm">
-                        <span className="font-bold text-slate-700">{s.name}</span>
-                        <Badge variant="secondary" className="font-black text-blue-700 bg-blue-50">{s.count} orders</Badge>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-purple-800 flex items-center gap-2">
-                    <Coffee className="w-5 h-5 text-purple-500" />
-                    {t.extra_shot_usage}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-3">
-                    {data?.shotStats?.map((s: any, i: number) => (
-                      <div key={i} className="flex justify-between items-center p-3 rounded-xl border bg-white shadow-sm">
-                        <span className="font-bold text-slate-700">{s.name}</span>
-                        <Badge variant="secondary" className="font-black text-purple-700 bg-purple-50">{s.count} orders</Badge>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
+            {/* Sugar level and extra shot used to be reported here. They are a
+                cafe's modifier axis - one drink sold four ways - and this bar
+                sells four drinks. Across the whole database they hold a single
+                value each, "Normal Sweet" and "Normal Shot", on the 50 lines
+                that carry them at all: the defaults, never chosen by anyone. */}
           </TabsContent>
 
           <TabsContent value="customers" className="space-y-6">
@@ -825,13 +790,19 @@ export default function ReportsPage() {
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
                     <TrendingUp className="w-5 h-5 text-indigo-600" />
-                    {t.staff_sales_performance}
+                    {t.server_sales_performance}
                   </CardTitle>
-                  <CardDescription>{t.revenue_per_staff}</CardDescription>
+                  {/* Credited to the waiter who worked the table, not the
+                      person who keyed it in. Three staff rotating on the till
+                      made this a chart of the roster - three near-identical
+                      bars - where the servers behind the same sales differ by
+                      almost threefold. Counter sales have no waiter and are
+                      nobody's performance, so they are not in here. */}
+                  <CardDescription>{t.revenue_per_server}</CardDescription>
                 </CardHeader>
                 <CardContent className="h-[350px]">
                   <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={data?.staffSales || []}>
+                    <BarChart data={data?.serverSales || []}>
                       <XAxis dataKey="name" />
                       <YAxis fontSize={11} tickFormatter={(v) => `${(v / 1000)}k`} />
                       <Tooltip formatter={(v) => formatTHB(v as number)} />

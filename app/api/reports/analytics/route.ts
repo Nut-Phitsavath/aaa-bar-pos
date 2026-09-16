@@ -53,7 +53,10 @@ export async function GET(request: Request) {
                 createdAt: true,
                 discount: true,
                 sessionId: true,
-                user: { select: { name: true } }
+                user: { select: { name: true } },
+                // Who served it. In a bar this is the person who sold the round;
+                // the one at the till keyed it in afterwards.
+                waiter: { select: { name: true } }
             }
         })
 
@@ -71,16 +74,27 @@ export async function GET(request: Request) {
         })
         const dailyTrend = Array.from(trendMap.values()).sort((a, b) => a.date.localeCompare(b.date))
 
-        // Staff Sales Performance
-        const staffMap = new Map()
+        // Who sold it.
+        //
+        // This credited `o.user` - whoever was standing at the till - which in a
+        // bar is not the person who sold anything. Three staff taking turns on
+        // the POS produced three near-identical bars: a chart of the roster, not
+        // of performance. The waiter who worked the table is whose revenue this
+        // is, and measured that way the same sales show a 2.7x spread between
+        // the best server and the weakest.
+        //
+        // A counter sale has no waiter and is nobody's performance, so it is
+        // left out rather than lumped under "Unknown".
+        const serverMap = new Map()
         orders.forEach(o => {
-            const staffName = o.user?.name || "Unknown Staff"
-            if (!staffMap.has(staffName)) staffMap.set(staffName, { name: staffName, revenue: 0, orders: 0 })
-            const entry = staffMap.get(staffName)
+            const name = o.waiter?.name
+            if (!name) return
+            if (!serverMap.has(name)) serverMap.set(name, { name, revenue: 0, orders: 0 })
+            const entry = serverMap.get(name)
             entry.revenue += o.total
             entry.orders += 1
         })
-        const staffSales = Array.from(staffMap.values()).sort((a, b) => b.revenue - a.revenue)
+        const serverSales = Array.from(serverMap.values()).sort((a, b) => b.revenue - a.revenue)
 
         // Table service vs the walk-in counter. For a bar this is the split
         // that matters; takeaway vs dine-in is a cafe question - a bar is dine
@@ -240,39 +254,19 @@ export async function GET(request: Request) {
                 price: 0 // Price varies
             }))
 
-        // 7. Takeaway vs Dine-in
-        const takeawayMap = new Map()
-        takeawayMap.set("Take Away", { name: "Take Away", sold: 0, revenue: 0 })
-        takeawayMap.set("Dine In", { name: "Dine In", sold: 0, revenue: 0 })
+        // Takeaway, sugar level and shot type used to be computed here. All
+        // three were the cafe's questions and none of them has an answer in a
+        // bar, measured across the whole database: 0 of 1,030 order lines were
+        // takeaway, and sugar and shot each hold exactly one value on the 50
+        // lines that carry them at all - "Normal Sweet" and "Normal Shot", the
+        // defaults nobody chose. Takeaway vs dine-in could only ever draw
+        // 100/0, which the route already said in a comment, and it was returned
+        // to a page that never rendered it.
+        //
+        // The modifier axis they belong to is the one the menu flatten removed:
+        // a cafe sells one drink four ways, a bar sells four drinks.
 
-        orderItems.forEach(item => {
-            const key = (item as any).isTakeaway ? "Take Away" : "Dine In"
-            const entry = takeawayMap.get(key)
-            entry.sold += item.quantity
-            entry.revenue += item.total
-        })
-        const takeawayStats = Array.from(takeawayMap.values())
-
-        // 8. Sugar & Shot Stats
-        const sugarMap = new Map()
-        const shotMap = new Map()
-
-        orderItems.forEach(item => {
-            if (item.sugarLevel) {
-                const key = item.sugarLevel.trim().toUpperCase()
-                if (!sugarMap.has(key)) sugarMap.set(key, { name: item.sugarLevel, count: 0 })
-                sugarMap.get(key).count += item.quantity
-            }
-            if (item.shotType) {
-                const key = item.shotType.trim().toUpperCase()
-                if (!shotMap.has(key)) shotMap.set(key, { name: item.shotType, count: 0 })
-                shotMap.get(key).count += item.quantity
-            }
-        })
-        const sugarStats = Array.from(sugarMap.values()).sort((a, b) => b.count - a.count)
-        const shotStats = Array.from(shotMap.values()).sort((a, b) => b.count - a.count)
-
-        // --- NEW: Advanced Analytics (Margin, COGS, Shrinkage) ---
+        // --- Advanced Analytics (Margin, COGS, Shrinkage) ---
 
         // 1. Margin Analysis
         // Get all menu items with recipes and ingredient costs
@@ -594,12 +588,9 @@ export async function GET(request: Request) {
             productPerformance,
             worstProducts,
             zeroSales: trashItems,
-            takeawayStats,
             serviceStats,
-            sugarStats,
-            shotStats,
             promoImpact,
-            staffSales,
+            serverSales,
             complimentaryDetails,
             customerStats: {
                 memberVsGuest,
