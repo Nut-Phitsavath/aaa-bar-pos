@@ -16,7 +16,7 @@ import {
 } from "recharts"
 import {
   Calendar as CalendarIcon, Download, TrendingUp, DollarSign, ShoppingBag,
-  CreditCard, TrendingDown, Clock, Package, AlertTriangle, Search, Filter, Target, ArrowRightLeft, ShoppingCart, History
+  CreditCard, TrendingDown, Clock, Tag, Package, AlertTriangle, Search, Filter, Target, ArrowRightLeft, ShoppingCart, History
 } from "lucide-react"
 import Link from "next/link"
 import { formatTHB } from "@/lib/currency"
@@ -81,6 +81,16 @@ export default function ReportsPage() {
     }
   }
 
+  // Which hours a deal ran. Indices into hourlySales, which the route already
+  // returns in trading-day order - so a window that crosses midnight is just a
+  // contiguous slice and needs no wrap-around arithmetic.
+  //
+  // Null until somebody picks, so the card can fall back to a window derived
+  // from the data. Deriving it rather than seeding state in an effect keeps
+  // this a plain render and avoids a second pass.
+  const [windowFrom, setWindowFrom] = useState<number | null>(null)
+  const [windowTo, setWindowTo] = useState<number | null>(null)
+
   const [refunds, setRefunds] = useState<any>(null)
   const [isLoadingRefunds, setIsLoadingRefunds] = useState(false)
 
@@ -135,6 +145,51 @@ export default function ReportsPage() {
 
     return t.selected_period_sales
   }
+
+  /**
+   * Did the deal work?
+   *
+   * Compares the hours a promotion ran against the rest of the night, on ALL
+   * sales - table bills included. That matters because the promo engine can
+   * only attach a code to a counter order, so the promotions report can never
+   * see the 87% of trade that goes through a table. A clock does not have that
+   * problem: whatever the deal was, it ran between two hours, and those hours
+   * either sold better than the others or they did not.
+   *
+   * Revenue per hour is the figure to read, not the total. A four-hour window
+   * will always out-sell a two-hour one, and comparing the raw totals of
+   * unequal windows is how a bad deal looks like a good one.
+   */
+  const hours: any[] = data?.hourlySales ?? []
+
+  // Where to point the card before anyone touches it. The trading day starts
+  // at 06:00, so indices 0-2 are the dead morning and a fixed default opened
+  // this card reading "-96%" on three empty hours - which looks like a broken
+  // report rather than an honest one. The busiest hour and its neighbours is
+  // both meaningful and true of any bar, whatever hours it keeps.
+  const peak = hours.reduce((best, h, i) => (h.revenue > (hours[best]?.revenue ?? -1) ? i : best), 0)
+  const lo = Math.min(windowFrom ?? Math.max(0, peak - 1), windowTo ?? Math.min(hours.length - 1, peak + 1))
+  const hi = Math.max(windowFrom ?? Math.max(0, peak - 1), windowTo ?? Math.min(hours.length - 1, peak + 1))
+  const inWindow = hours.slice(lo, hi + 1)
+  const outWindow = hours.filter((_, i) => i < lo || i > hi)
+
+  const band = (rows: any[]) => {
+    const revenue = rows.reduce((n, h) => n + (h.revenue || 0), 0)
+    const rounds = rows.reduce((n, h) => n + (h.orders || 0), 0)
+    return {
+      revenue,
+      rounds,
+      hours: rows.length,
+      perHour: rows.length ? revenue / rows.length : 0,
+      avgRound: rounds ? revenue / rounds : 0,
+    }
+  }
+  const inside = band(inWindow)
+  const outside = band(outWindow)
+  // Percent difference in the per-hour rate. Null rather than Infinity when
+  // there is nothing to compare against, so the card says "—" instead of a
+  // number that means nothing.
+  const lift = outside.perHour > 0 ? ((inside.perHour - outside.perHour) / outside.perHour) * 100 : null
 
   if (isLoading && !data) return <div className="p-10 text-center">{t.loading_analytics}</div>
 
@@ -338,6 +393,7 @@ export default function ReportsPage() {
             <TabsTrigger value="inventory">{t.inventory}</TabsTrigger>
             <TabsTrigger value="advanced" onClick={fetchRefunds}>{t.advanced_and_refunds}</TabsTrigger>
             <TabsTrigger value="operations">{t.operations_payments}</TabsTrigger>
+            <TabsTrigger value="promotions">{t.promotions_roi}</TabsTrigger>
             <TabsTrigger value="servers">{t.server_staff}</TabsTrigger>
             <TabsTrigger value="voids">{t.void_audit}</TabsTrigger>
             <TabsTrigger value="exchanges">{t.exchange_log}</TabsTrigger>
@@ -748,6 +804,59 @@ export default function ReportsPage() {
                 that carry them at all: the defaults, never chosen by anyone. */}
           </TabsContent>
 
+          <TabsContent value="promotions" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>{t.promotions_roi}</CardTitle>
+                {/* The limitation is stated on the card rather than left for
+                    someone to deduce from an empty grid. A report that under-
+                    counts silently is worse than one that says what it cannot
+                    see: promotions only attach to counter orders, and this bar
+                    sells through tables. */}
+                <CardDescription>{t.promo_counter_only}</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {(data?.promoImpact || []).map((p: any, i: number) => (
+                    <Card key={i} className="p-4 bg-muted/50">
+                      <div className="flex items-center gap-2 mb-3">
+                        <Tag className="w-5 h-5 text-rose-600 shrink-0" />
+                        <h4 className="font-bold text-amber-900 truncate">{p.name}</h4>
+                        {p.code && (
+                          <Badge variant="outline" className="ms-auto font-mono text-[10px]">{p.code}</Badge>
+                        )}
+                      </div>
+                      <div className="space-y-2">
+                        <div className="flex justify-between text-sm">
+                          <span className="text-muted-foreground">{t.times_used}</span>
+                          <span className="font-bold tabular-nums">{p.usageCount}</span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-muted-foreground">{t.revenue_gained}</span>
+                          <span className="font-bold text-green-600 tabular-nums">{formatTHB(p.totalRevenue)}</span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-muted-foreground">{t.total_discount_cost}</span>
+                          <span className="font-bold text-rose-600 tabular-nums">−{formatTHB(p.totalDiscount)}</span>
+                        </div>
+                        {/* What the deal actually left behind, which is the
+                            question "ROI" is asking and the old card made you
+                            work out in your head. */}
+                        <div className="flex justify-between text-sm border-t pt-2">
+                          <span className="font-semibold">{t.net_after_promo}</span>
+                          <span className="font-black tabular-nums">{formatTHB(p.totalRevenue - p.totalDiscount)}</span>
+                        </div>
+                      </div>
+                    </Card>
+                  ))}
+                  {(!data?.promoImpact || data.promoImpact.length === 0) && (
+                    <p className="text-center py-10 text-muted-foreground w-full col-span-full italic">{t.no_promo_usage}</p>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
           <TabsContent value="operations" className="space-y-6">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <Card>
@@ -795,6 +904,86 @@ export default function ReportsPage() {
                 </CardContent>
               </Card>
             </div>
+
+            {/* Did the deal work?
+                Deliberately keyed on the clock rather than on a promo code.
+                A promotion can only attach to a counter order, so the ROI tab
+                cannot see a table bill - but every deal ran between two hours,
+                and the hours are on every sale the bar makes. */}
+            <Card>
+              <CardHeader className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 space-y-0">
+                <div>
+                  <CardTitle className="flex items-center gap-2">
+                    <Clock className="w-5 h-5 text-amber-600" />
+                    {t.happy_hour_check}
+                  </CardTitle>
+                  <CardDescription>{t.happy_hour_desc}</CardDescription>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <label className="text-xs text-muted-foreground" htmlFor="hh-from">{t.window_from}</label>
+                  <select
+                    id="hh-from"
+                    value={lo}
+                    onChange={(e) => setWindowFrom(Number(e.target.value))}
+                    className="h-10 rounded-md border border-slate-200 bg-white px-2 text-sm tabular-nums"
+                  >
+                    {hours.map((h: any, i: number) => (
+                      <option key={i} value={i}>{h.hour}:00</option>
+                    ))}
+                  </select>
+                  <label className="text-xs text-muted-foreground" htmlFor="hh-to">{t.window_to}</label>
+                  <select
+                    id="hh-to"
+                    value={hi}
+                    onChange={(e) => setWindowTo(Number(e.target.value))}
+                    className="h-10 rounded-md border border-slate-200 bg-white px-2 text-sm tabular-nums"
+                  >
+                    {hours.map((h: any, i: number) => (
+                      <option key={i} value={i}>{h.hour}:59</option>
+                    ))}
+                  </select>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {hours.length === 0 ? (
+                  <p className="py-10 text-center italic text-muted-foreground">{t.no_hourly_data}</p>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+                      <p className="text-[11px] font-black uppercase tracking-widest text-amber-700">{t.in_window}</p>
+                      <p className="mt-1 text-2xl font-black tabular-nums text-amber-900">{formatTHB(inside.perHour)}</p>
+                      <p className="text-[11px] uppercase text-amber-700/70">{t.per_hour}</p>
+                      <div className="mt-3 space-y-0.5 text-xs text-slate-600 tabular-nums">
+                        <p>{formatTHB(inside.revenue)} · {inside.rounds} {t.rounds_label}</p>
+                        <p>{t.avg_round} {formatTHB(inside.avgRound)}</p>
+                      </div>
+                    </div>
+
+                    <div className="rounded-xl border border-slate-200 bg-white p-4">
+                      <p className="text-[11px] font-black uppercase tracking-widest text-slate-500">{t.outside_window}</p>
+                      <p className="mt-1 text-2xl font-black tabular-nums text-slate-800">{formatTHB(outside.perHour)}</p>
+                      <p className="text-[11px] uppercase text-slate-400">{t.per_hour}</p>
+                      <div className="mt-3 space-y-0.5 text-xs text-slate-600 tabular-nums">
+                        <p>{formatTHB(outside.revenue)} · {outside.rounds} {t.rounds_label}</p>
+                        <p>{t.avg_round} {formatTHB(outside.avgRound)}</p>
+                      </div>
+                    </div>
+
+                    {/* The whole point of the card, so it gets the big number. */}
+                    <div className="rounded-xl border border-slate-200 bg-white p-4 flex flex-col justify-center">
+                      <p className="text-[11px] font-black uppercase tracking-widest text-slate-500">{t.vs_rest}</p>
+                      <p className={`mt-1 text-3xl font-black tabular-nums ${lift === null ? "text-slate-400"
+                        : lift > 0 ? "text-emerald-700" : "text-rose-600"}`}>
+                        {lift === null ? "—" : `${lift > 0 ? "+" : ""}${lift.toFixed(0)}%`}
+                      </p>
+                      <p className="mt-1 text-xs text-slate-500 tabular-nums">
+                        {inside.hours}h {t.vs_rest} {outside.hours}h
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
 
             {/* Staff Sales Performance */}
             <div className="grid grid-cols-1 gap-6">

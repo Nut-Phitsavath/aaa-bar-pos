@@ -438,11 +438,39 @@ export async function GET(request: Request) {
         let shrinkageCost = 0
         let shrinkageDetails: any[] = []
 
-        // Promotion ROI used to be computed here. The promotions engine is the
-        // cafe's and this bar has never run one: 0 promotions exist, and 0 of
-        // 570 orders carry a promo id. A bar discounts a table, by hand, with a
-        // manager's name against it - that is req #15, and it is reported as
-        // totalDiscounts below. The tab this fed drew an empty grid.
+        // 6. Promo Impact
+        //
+        // What a promotion cost and what it brought in. Removed for a day on
+        // the grounds that the bar had never run one and the tab drew an empty
+        // grid, which was the wrong call twice over: the engine already carries
+        // a bar-shaped deal ("15 Free 5" is a beer crate, not a cafe offer),
+        // and an empty report is how you find out a feature is not being used.
+        //
+        // What it can see is limited by something upstream: Order.promoId is
+        // only written on the walk-in counter path, so a promotion cannot
+        // currently attach to a table bill at all. Until it can, this chart is
+        // counter sales only - which on this bar is 30 orders against 204
+        // table bills. That gap is the thing to fix, not this report.
+        const promoOrders = await prisma.order.findMany({
+            where: {
+                createdAt: { gte: startDate, lte: endDate },
+                ...COUNTED_ORDER,
+                promoId: { not: null }
+            },
+            include: { promotion: { select: { name: true, code: true } } }
+        })
+        const promoMap = new Map()
+        promoOrders.forEach(o => {
+            const name = o.promotion?.name || "Unknown"
+            if (!promoMap.has(name)) {
+                promoMap.set(name, { name, code: o.promotion?.code ?? null, usageCount: 0, totalDiscount: 0, totalRevenue: 0 })
+            }
+            const entry = promoMap.get(name)
+            entry.usageCount += 1
+            entry.totalDiscount += o.discount
+            entry.totalRevenue += o.total
+        })
+        const promoImpact = Array.from(promoMap.values()).sort((a, b) => b.totalRevenue - a.totalRevenue)
 
         // 7. Summary
 
@@ -723,6 +751,7 @@ export async function GET(request: Request) {
             zeroSales: trashItems,
             serviceStats,
             areaStats,
+            promoImpact,
             serverSales,
             complimentaryDetails,
             inventoryStats: {
