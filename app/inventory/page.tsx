@@ -32,7 +32,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useTranslation } from "@/hooks/use-translation"
 import { notify } from "@/components/ui/sonner"
-import { useConfirm } from "@/components/confirm-provider"
+import { useConfirm, useDiscardGuard } from "@/components/confirm-provider"
 
 type Ingredient = {
   id: string
@@ -71,6 +71,8 @@ export default function InventoryPage() {
   const [ingredients, setIngredients] = useState<Ingredient[]>([])
   const [categories, setCategories] = useState<Category[]>([])
   const [isDialogOpen, setIsDialogOpen] = useState(false)
+  // Overlay, Escape, × and Cancel all ask before throwing away typing.
+  const { requestClose, markDirty } = useDiscardGuard(isDialogOpen, (open) => { setIsDialogOpen(open); if (!open) resetForm() })
   const [isCatDialogOpen, setIsCatDialogOpen] = useState(false)
   const [newCatName, setNewCatName] = useState("")
   // Which category row is currently being renamed in place, and the draft.
@@ -642,14 +644,14 @@ export default function InventoryPage() {
               </Dialog>
 
               {(activeTab == "MAIN" || activeTab == "SUB") ? (
-                <Dialog open={isDialogOpen} onOpenChange={(open) => { setIsDialogOpen(open); if (!open) resetForm(); }}>
+                <Dialog open={isDialogOpen} onOpenChange={requestClose}>
                   <DialogTrigger asChild>
                     <Button className="bg-amber-600 hover:bg-amber-700">
                       <Plus className="w-4 h-4 mr-2" />
                       {t.add_ingredient}
                     </Button>
                   </DialogTrigger>
-                  <DialogContent>
+                  <DialogContent onInput={markDirty}>
                     <DialogHeader>
                       <DialogTitle>{editingItem ? t.edit : t.add_item} {t.inventory}</DialogTitle>
                     </DialogHeader>
@@ -722,7 +724,7 @@ export default function InventoryPage() {
                       </div>
                     </div>
                     <DialogFooter>
-                      <Button variant="outline" onClick={() => setIsDialogOpen(false)}>{t.cancel}</Button>
+                      <Button variant="outline" onClick={() => requestClose(false)}>{t.cancel}</Button>
                       <Button className="bg-amber-600 hover:bg-amber-700" onClick={handleSubmit}>
                         {editingItem ? t.update : t.save}
                       </Button>

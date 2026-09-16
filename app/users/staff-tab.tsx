@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useTranslation } from "@/hooks/use-translation"
 import { notify } from "@/components/ui/sonner"
 import { canManageUser, isTillRole, ROLES } from "@/lib/roles"
+import { useDiscardGuard } from "@/components/confirm-provider"
 
 type Staff = {
     id: string
@@ -26,6 +27,8 @@ export function StaffTab({ actorRole }: { actorRole?: string }) {
     const { t } = useTranslation()
     const [searchQuery, setSearchQuery] = useState("")
     const [isDialogOpen, setIsDialogOpen] = useState(false)
+    // Overlay, Escape, × and Cancel all ask before throwing away typing.
+    const { requestClose, markDirty } = useDiscardGuard(isDialogOpen, setIsDialogOpen)
     const [selectedStaff, setSelectedStaff] = useState<Staff | null>(null)
     const [staffList, setStaffList] = useState<Staff[]>([])
     const [isLoading, setIsLoading] = useState(false)
@@ -230,14 +233,14 @@ export function StaffTab({ actorRole }: { actorRole?: string }) {
                         className="pl-10 h-11"
                     />
                 </div>
-                <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+                <Dialog open={isDialogOpen} onOpenChange={requestClose}>
                     <DialogTrigger asChild>
                         <Button className="h-11 bg-amber-600 hover:bg-amber-700 font-bold" onClick={() => openNew("STAFF")}>
                             <Plus className="w-4 h-4 mr-2" />
                             {t.add_person}
                         </Button>
                     </DialogTrigger>
-                    <DialogContent>
+                    <DialogContent onInput={markDirty}>
                         <DialogHeader>
                             <DialogTitle>{selectedStaff ? t.edit_staff_member : t.add_new_staff_member}</DialogTitle>
                         </DialogHeader>
@@ -248,7 +251,7 @@ export function StaffTab({ actorRole }: { actorRole?: string }) {
                                 <Label htmlFor="staffRole">{t.role}</Label>
                                 <Select
                                     value={formData.role}
-                                    onValueChange={(val) => setFormData({ ...formData, role: val })}
+                                    onValueChange={(val) => { markDirty(); setFormData({ ...formData, role: val }) }}
                                 >
                                     <SelectTrigger id="staffRole" className="h-11">
                                         <SelectValue placeholder={t.select_a_role} />
@@ -314,7 +317,7 @@ export function StaffTab({ actorRole }: { actorRole?: string }) {
                             </div>
                         </div>
                         <DialogFooter>
-                            <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
+                            <Button variant="outline" onClick={() => requestClose(false)}>
                                 {t.cancel}
                             </Button>
                             <Button className="bg-amber-600 hover:bg-amber-700 font-bold" onClick={handleSave} disabled={isLoading || !canSave}>

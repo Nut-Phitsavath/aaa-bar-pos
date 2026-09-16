@@ -23,6 +23,19 @@ export const DEFAULT_RATE_LAK = 680
 /** 1 USD = this many THB. Reads the way a rate board does. */
 export const DEFAULT_RATE_USD = 32
 
+/** Thai VAT, and what the order path already falls back to. Owner can set 0. */
+export const DEFAULT_TAX_RATE = 10
+
+/**
+ * Reads a VAT rate out of settings. Separate from the FX readers because 0 is a
+ * real answer here - a bar not registered for VAT charges none - so this only
+ * rejects a missing or unparseable value, not a zero one.
+ */
+export function taxRateOf(value: string | undefined): number {
+    const parsed = Number(value)
+    return Number.isFinite(parsed) && parsed >= 0 ? parsed : DEFAULT_TAX_RATE
+}
+
 const group = (n: number, decimals = 0) =>
     new Intl.NumberFormat('en-US', {
         minimumFractionDigits: decimals,
@@ -90,4 +103,28 @@ export function calculateInclusiveTax(total: number, rate: number = 10): number 
     if (rate <= 0) return 0
     const net = safe(total) / (1 + rate / 100)
     return Math.round(safe(total) - net)
+}
+
+/**
+ * Which rates a bill is shown at. Closed bills read the rates stamped on them
+ * at settle; only an open bill quotes today's. Resolved in one place so no
+ * screen can render a settled bill at live rates (req #18).
+ *
+ * VAT rides along with FX because it is the same fact: what the customer was
+ * charged, on a night that is over. The tax is inclusive, so a stale rate does
+ * not move the total - it misstates the VAT split, which is the figure the
+ * books are built from.
+ *
+ * A closed bill with no stamped rate predates the columns: it returns null and
+ * the bill prints no conversion and no VAT line, rather than quoting rates
+ * nobody was charged. Null is "unknown"; 0 is a real rate and is kept.
+ */
+export function billRates(
+    bill: { status: string; fxRateLAK: number | null; fxRateUSD: number | null; taxRate: number | null },
+    live: { lak: number; usd: number; tax: number }
+): { lak: number | null; usd: number | null; tax: number | null } {
+    if (bill.status === 'CLOSED') {
+        return { lak: bill.fxRateLAK, usd: bill.fxRateUSD, tax: bill.taxRate }
+    }
+    return { lak: live.lak, usd: live.usd, tax: live.tax }
 }

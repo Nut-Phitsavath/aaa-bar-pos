@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { barHour, tradingDay, tradingHours } from '@/lib/trading-day'
+import { recipeCost, pourCost, verdictFor, bandFor } from '@/lib/pour-cost'
 import { startOfDay, endOfDay } from 'date-fns'
-import { calculateInclusiveTax } from '@/lib/currency'
 
 export async function GET(request: Request) {
     try {
@@ -52,7 +53,10 @@ export async function GET(request: Request) {
                 createdAt: true,
                 discount: true,
                 sessionId: true,
-                user: { select: { name: true } }
+                user: { select: { name: true } },
+                // Who served it. In a bar this is the person who sold the round;
+                // the one at the till keyed it in afterwards.
+                waiter: { select: { name: true } }
             }
         })
 
@@ -60,7 +64,9 @@ export async function GET(request: Request) {
 
         const trendMap = new Map()
         orders.forEach(o => {
-            const date = o.createdAt.toISOString().split('T')[0]
+            // The night it belonged to, not the calendar date. Friday's
+            // takings run past midnight and stay Friday's.
+            const date = tradingDay(o.createdAt)
             if (!trendMap.has(date)) trendMap.set(date, { date, revenue: 0, orders: 0 })
             const entry = trendMap.get(date)
             entry.revenue += o.total
@@ -68,16 +74,27 @@ export async function GET(request: Request) {
         })
         const dailyTrend = Array.from(trendMap.values()).sort((a, b) => a.date.localeCompare(b.date))
 
-        // Staff Sales Performance
-        const staffMap = new Map()
+        // Who sold it.
+        //
+        // This credited `o.user` - whoever was standing at the till - which in a
+        // bar is not the person who sold anything. Three staff taking turns on
+        // the POS produced three near-identical bars: a chart of the roster, not
+        // of performance. The waiter who worked the table is whose revenue this
+        // is, and measured that way the same sales show a 2.7x spread between
+        // the best server and the weakest.
+        //
+        // A counter sale has no waiter and is nobody's performance, so it is
+        // left out rather than lumped under "Unknown".
+        const serverMap = new Map()
         orders.forEach(o => {
-            const staffName = o.user?.name || "Unknown Staff"
-            if (!staffMap.has(staffName)) staffMap.set(staffName, { name: staffName, revenue: 0, orders: 0 })
-            const entry = staffMap.get(staffName)
+            const name = o.waiter?.name
+            if (!name) return
+            if (!serverMap.has(name)) serverMap.set(name, { name, revenue: 0, orders: 0 })
+            const entry = serverMap.get(name)
             entry.revenue += o.total
             entry.orders += 1
         })
-        const staffSales = Array.from(staffMap.values()).sort((a, b) => b.revenue - a.revenue)
+        const serverSales = Array.from(serverMap.values()).sort((a, b) => b.revenue - a.revenue)
 
         // Table service vs the walk-in counter. For a bar this is the split
         // that matters; takeaway vs dine-in is a cafe question - a bar is dine
@@ -99,23 +116,15 @@ export async function GET(request: Request) {
                 }
             },
             include: {
-                variationSize: {
-                    include: {
-                        variation: {
-                            include: {
-                                menu: {
-                                    include: { category: true }
-                                }
-                            }
-                        }
-                    }
+                menu: {
+                    include: { category: true }
                 }
             }
         })
 
         const categoryMap = new Map()
         orderItems.forEach(item => {
-            const catName = item.variationSize?.variation.menu.category.name || "Other"
+            const catName = item.menu?.category.name || "Other"
 
             if (!categoryMap.has(catName)) categoryMap.set(catName, { category: catName, revenue: 0, quantity: 0 })
             const entry = categoryMap.get(catName)
@@ -127,13 +136,30 @@ export async function GET(request: Request) {
         // 3. Hourly Sales
         const hourMap = new Map()
         orders.forEach(o => {
-            const hour = o.createdAt.getHours().toString().padStart(2, '0')
+            // The clock behind the bar, not the one the server is set to.
+            const hour = barHour(o.createdAt).toString().padStart(2, '0')
             if (!hourMap.has(hour)) hourMap.set(hour, { hour, revenue: 0, orders: 0 })
             const entry = hourMap.get(hour)
             entry.revenue += o.total
             entry.orders += 1
         })
-        const hourlySales = Array.from(hourMap.values()).sort((a, b) => a.hour.localeCompare(b.hour))
+        // Ordered as the night runs, not 00 to 23.
+        //
+        // Sorting the hour as a string put this bar's busiest stretch - 21:00
+        // through 02:00 - at opposite ends of the chart with its quietest hours
+        // in the middle, so one continuous evening was drawn as two mountains
+        // and a valley. Starting the axis at the trading-day boundary makes the
+        // night one unbroken run.
+        //
+        // All 24 hours, always, including the empty ones. Two reasons: a quiet
+        // hour reads as a gap rather than a column that silently closes up, and
+        // the axis stays the same width whatever range is selected, so two
+        // periods can be compared by eye. Trimming the dead hours was tried and
+        // removed - it made the chart's width depend on its data, and the
+        // afternoon being empty is itself worth seeing.
+        const hourlySales = tradingHours().map(
+            (hour) => hourMap.get(hour) ?? { hour, revenue: 0, orders: 0 }
+        )
 
         // 4. Payment Methods
         // How bills were actually settled.
@@ -179,21 +205,19 @@ export async function GET(request: Request) {
 
         const paymentMethods = Array.from(payMap.values())
 
-        // 5. Product Performance (Refined Grouping)
+        // 5. Product Performance
         const bestSellerMap = new Map()
         const lowPerfMap = new Map()
 
         orderItems.forEach(item => {
-            const vs = item.variationSize
-            const menuName = vs?.variation.menu.name || item.name.split(' - ')[0]
-            const varType = vs?.variation.type || ""
+            const menuName = item.menu?.name || item.name.split(' - ')[0]
 
-            // Best Seller Key: Menu + Variation (e.g., Latte (COLD)) - Normalized for grouping
-            const bestSellerKey = `${menuName.trim()} (${varType.trim()})`.toUpperCase()
-            const bestSellerDisplayName = `${menuName} (${varType})`
+            // Best Seller Key: menu name alone. There's one price per item now,
+            // so there's nothing left to vary the key by.
+            const bestSellerKey = menuName
 
             if (!bestSellerMap.has(bestSellerKey)) {
-                bestSellerMap.set(bestSellerKey, { name: bestSellerDisplayName, productName: menuName, variantType: varType, sold: 0, revenue: 0 })
+                bestSellerMap.set(bestSellerKey, { name: menuName, productName: menuName, sold: 0, revenue: 0 })
             }
             const bsEntry = bestSellerMap.get(bestSellerKey)
             bsEntry.sold += item.quantity
@@ -219,12 +243,7 @@ export async function GET(request: Request) {
 
         // Zero Sales / Trash Items: Count by Menu (Only for ACTIVE/AVAILABLE menus)
         const allAvailableMenus = await prisma.menu.findMany({
-            where: { isAvailable: true },
-            include: {
-                variations: {
-                    include: { sizes: true }
-                }
-            }
+            where: { isAvailable: true }
         })
 
         const soldMenuNames = new Set(Array.from(lowPerfMap.keys()))
@@ -235,107 +254,73 @@ export async function GET(request: Request) {
                 price: 0 // Price varies
             }))
 
-        // 6. Size & Variation Type Stats
-        const sizeMap = new Map()
-        const varTypeMap = new Map()
+        // Takeaway, sugar level and shot type used to be computed here. All
+        // three were the cafe's questions and none of them has an answer in a
+        // bar, measured across the whole database: 0 of 1,030 order lines were
+        // takeaway, and sugar and shot each hold exactly one value on the 50
+        // lines that carry them at all - "Normal Sweet" and "Normal Shot", the
+        // defaults nobody chose. Takeaway vs dine-in could only ever draw
+        // 100/0, which the route already said in a comment, and it was returned
+        // to a page that never rendered it.
+        //
+        // The modifier axis they belong to is the one the menu flatten removed:
+        // a cafe sells one drink four ways, a bar sells four drinks.
 
-        orderItems.forEach(item => {
-            const vs = item.variationSize
-            const size = (vs?.size?.trim() || "Unknown").toUpperCase()
-            const sizeDisplayName = vs?.size || "Unknown"
-            const type = (vs?.variation.type?.trim() || "Other").toUpperCase()
-            const typeDisplayName = vs?.variation.type || "Other"
-
-            if (!sizeMap.has(size)) sizeMap.set(size, { name: sizeDisplayName, sold: 0, revenue: 0 })
-            const sEntry = sizeMap.get(size)
-            sEntry.sold += item.quantity
-            sEntry.revenue += item.total
-
-            if (!varTypeMap.has(type)) varTypeMap.set(type, { name: typeDisplayName, sold: 0, revenue: 0 })
-            const vEntry = varTypeMap.get(type)
-            vEntry.sold += item.quantity
-            vEntry.revenue += item.total
-        })
-
-        const sizeStats = Array.from(sizeMap.values()).sort((a, b) => b.sold - a.sold)
-        const variationStats = Array.from(varTypeMap.values()).sort((a, b) => b.sold - a.sold)
-
-        // 7. Takeaway vs Dine-in
-        const takeawayMap = new Map()
-        takeawayMap.set("Take Away", { name: "Take Away", sold: 0, revenue: 0 })
-        takeawayMap.set("Dine In", { name: "Dine In", sold: 0, revenue: 0 })
-
-        orderItems.forEach(item => {
-            const key = (item as any).isTakeaway ? "Take Away" : "Dine In"
-            const entry = takeawayMap.get(key)
-            entry.sold += item.quantity
-            entry.revenue += item.total
-        })
-        const takeawayStats = Array.from(takeawayMap.values())
-
-        // 8. Sugar & Shot Stats
-        const sugarMap = new Map()
-        const shotMap = new Map()
-
-        orderItems.forEach(item => {
-            if (item.sugarLevel) {
-                const key = item.sugarLevel.trim().toUpperCase()
-                if (!sugarMap.has(key)) sugarMap.set(key, { name: item.sugarLevel, count: 0 })
-                sugarMap.get(key).count += item.quantity
-            }
-            if (item.shotType) {
-                const key = item.shotType.trim().toUpperCase()
-                if (!shotMap.has(key)) shotMap.set(key, { name: item.shotType, count: 0 })
-                shotMap.get(key).count += item.quantity
-            }
-        })
-        const sugarStats = Array.from(sugarMap.values()).sort((a, b) => b.count - a.count)
-        const shotStats = Array.from(shotMap.values()).sort((a, b) => b.count - a.count)
-
-        // --- NEW: Advanced Analytics (Margin, COGS, Shrinkage) ---
+        // --- Advanced Analytics (Margin, COGS, Shrinkage) ---
 
         // 1. Margin Analysis
         // Get all menu items with recipes and ingredient costs
         const menuRecipes = await prisma.menu.findMany({
             include: {
+                // Pour-cost bands are per category - what is healthy for a beer
+                // is not what is healthy for a spirit - so the verdict needs it.
+                category: { select: { name: true } },
                 recipes: {
-                    include: { ingredient: { select: { cost: true } } }
-                },
-                variations: {
-                    include: { sizes: true }
+                    // purchaseMultiplier is not optional here: Ingredient.cost
+                    // is per purchase unit and Recipe.quantity is in base units,
+                    // so without the divisor a 30ml pour is priced as a whole
+                    // bottle.
+                    include: { ingredient: { select: { cost: true, purchaseMultiplier: true } } }
                 }
             }
         })
 
         const marginData: any[] = []
         menuRecipes.forEach(menu => {
-            // Tier 1: Base Cost (not size-specific)
-            const baseCost = menu.recipes
-                .filter(r => r.variationSizeId === null)
-                .reduce((sum, r) => sum + (r.quantity * r.ingredient.cost), 0)
+            // One recipe list per item now - no base/override split, since
+            // there's no size axis left to override by.
+            //
+            // Through lib/pour-cost rather than multiplied by hand. This read
+            // `quantity * cost` since before the base-units migration, which
+            // was right when quantity was a fraction of a bottle and became
+            // wrong the moment it became millilitres: a Chivas set costed at
+            // 817,040 baht to sell for 3,500, and every margin figure in these
+            // reports was overstated by the ingredient's purchase multiplier.
+            // The recipe editor has been using the correct function all along.
+            const itemCost = recipeCost(menu.recipes.map((r) => ({
+                quantity: r.quantity,
+                costPerPurchaseUnit: r.ingredient.cost,
+                purchaseMultiplier: r.ingredient.purchaseMultiplier,
+            })))
 
-            menu.variations.forEach(v => {
-                v.sizes.forEach(s => {
-                    // Tier 2: Specific Choice Cost
-                    const specificCost = menu.recipes
-                        .filter(r => r.variationSizeId === s.id)
-                        .reduce((sum, r) => sum + (r.quantity * r.ingredient.cost), 0)
+            const price = menu.price
+            const margin = price - itemCost
+            const marginPercent = price > 0 ? (margin / price) * 100 : 0
+            const pourCostPct = pourCost(itemCost, price)
 
-                    const itemCost = baseCost + specificCost
-                    const price = s.price
-                    const margin = price - itemCost
-                    const marginPercent = price > 0 ? (margin / price) * 100 : 0
-
-                    marginData.push({
-                        menuName: menu.name,
-                        variation: v.type,
-                        size: s.size,
-                        price,
-                        cost: itemCost,
-                        margin,
-                        marginPercent
-                    })
-                })
+            marginData.push({
+                menuName: menu.name,
+                category: menu.category?.name ?? null,
+                price,
+                cost: itemCost,
+                margin,
+                marginPercent,
+                // The bar's own measure, with the verdict the recipe editor
+                // already shows: a spirit at 15% is underpoured or underpriced,
+                // one at 45% is being given away.
+                pourCostPct,
+                band: bandFor(menu.category?.name),
+                verdict: verdictFor(menu.category?.name, pourCostPct),
             })
         })
 
@@ -348,15 +333,19 @@ export async function GET(request: Request) {
         // a. From Sales
         let salesCost = 0
         orderItems.forEach(item => {
-            const vsId = item.variationSizeId
-            const menuRecord = menuRecipes.find(m => m.id === item.variationSize?.variation.menuId)
-            
+            const menuRecord = menuRecipes.find(m => m.id === item.menuId)
+
             if (menuRecord) {
-                // Tier 1 + Tier 2 summation
-                const itemCost = menuRecord.recipes
-                    .filter(r => r.variationSizeId === null || r.variationSizeId === vsId)
-                    .reduce((sum, r) => sum + (r.quantity * r.ingredient.cost), 0)
-                
+                // Same correction as the margin table above: per base unit, not
+                // per bottle. This figure feeds totalCOGS and grossProfit, so
+                // while it was wrong the reports showed a bar losing money on
+                // every round it poured.
+                const itemCost = recipeCost(menuRecord.recipes.map((r) => ({
+                    quantity: r.quantity,
+                    costPerPurchaseUnit: r.ingredient.cost,
+                    purchaseMultiplier: r.ingredient.purchaseMultiplier,
+                })))
+
                 salesCost += itemCost * item.quantity
             }
         })
@@ -599,14 +588,9 @@ export async function GET(request: Request) {
             productPerformance,
             worstProducts,
             zeroSales: trashItems,
-            sizeStats,
-            variationStats,
-            takeawayStats,
             serviceStats,
-            sugarStats,
-            shotStats,
             promoImpact,
-            staffSales,
+            serverSales,
             complimentaryDetails,
             customerStats: {
                 memberVsGuest,

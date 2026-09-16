@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { useTranslation } from "@/hooks/use-translation"
 import { Button } from "@/components/ui/button"
-import { Printer, Plus, Minus, Trash2, Ban, Repeat, ArrowRightLeft } from "lucide-react"
+import { Printer, Plus, Minus, Trash2, Ban, Repeat, ArrowRightLeft, StickyNote, ShoppingBag } from "lucide-react"
 import { formatTHB } from "@/lib/currency"
 import { VoidDialog, type VoidTarget } from "@/components/pos/void-dialog"
 import { ExchangeDialog } from "@/components/pos/exchange-dialog"
@@ -50,6 +50,11 @@ export type PendingLine = {
     localName?: string
     price: number
     quantity: number
+    /** Both carried here so the ticket can show what the bar was told, and so
+     *  tapping the line can edit it. A table order is the common case; the
+     *  walk-in cart is not the only place these exist. */
+    isTakeaway?: boolean
+    note?: string
 }
 
 /**
@@ -69,6 +74,7 @@ export function TicketPanel({
     cart,
     onQtyChange,
     onRemove,
+    onEditLine,
     onSend,
     onPrint,
     onVoided,
@@ -78,6 +84,9 @@ export function TicketPanel({
     cart: PendingLine[]
     onQtyChange: (lineId: string, delta: number) => void
     onRemove: (lineId: string) => void
+    /** Open the note / takeaway editor on an unsent line. Omitted, the line is
+     *  not tappable and nothing about it suggests it would be. */
+    onEditLine?: (lineId: string) => void
     onSend: () => void
     onPrint: () => void
     /** Reload the bill after a void: the round is worth less than it was. */
@@ -221,13 +230,52 @@ export function TicketPanel({
                             {t.state_new}
                         </div>
                         {cart.map((line) => (
-                            <div key={line.id} className="flex items-center gap-3 px-4 py-2.5 border-b border-amber-100 bg-amber-50/40">
-                                <div className="flex-1 min-w-0">
+                            <div key={line.id} className="group/pending flex items-center gap-3 px-4 py-2.5 border-b border-amber-100 bg-amber-50/40">
+                                {/* Tapping the name opens the note and takeaway
+                                    for this line. Adding a drink no longer asks
+                                    those questions up front, so this is where
+                                    they live - and it is where a bartender
+                                    already looks when a customer says "no ice"
+                                    after the round is on the ticket. The qty and
+                                    remove controls keep their own hit areas, so
+                                    a mis-tap edits a note, never a total. */}
+                                <button
+                                    type="button"
+                                    onClick={() => onEditLine?.(line.id)}
+                                    disabled={!onEditLine}
+                                    aria-label={`${t.edit} ${line.localName || line.name}`}
+                                    className="flex-1 min-w-0 text-left rounded-lg px-2 py-1 -mx-2 transition-colors duration-150
+                                               enabled:hover:bg-white focus-visible:outline-none focus-visible:ring-2
+                                               focus-visible:ring-amber-500 disabled:cursor-default"
+                                >
                                     <p className="text-base text-slate-900 leading-snug truncate">
                                         {line.localName || line.name}
                                     </p>
-                                    <p className="text-[11px] font-bold tracking-wide text-amber-700 mt-0.5">{t.state_new}</p>
-                                </div>
+                                    <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                                        <span className="text-[11px] font-bold tracking-wide text-amber-700">{t.state_new}</span>
+                                        {line.isTakeaway && (
+                                            <span className="flex items-center gap-1 text-[11px] font-bold text-blue-700">
+                                                <ShoppingBag className="w-3.5 h-3.5 shrink-0" /> {t.takeaway}
+                                            </span>
+                                        )}
+                                        {line.note && (
+                                            <span className="flex items-center gap-1 text-[11px] font-bold text-amber-900 min-w-0">
+                                                <StickyNote className="w-3.5 h-3.5 shrink-0" />
+                                                <span className="truncate">{line.note}</span>
+                                            </span>
+                                        )}
+                                        {/* Nothing set yet, so say the capability is
+                                            there. Always visible on the till's touch
+                                            screen; on a mouse only on hover, where it
+                                            would otherwise repeat down every row. */}
+                                        {onEditLine && !line.note && !line.isTakeaway && (
+                                            <span className="flex items-center gap-1 text-[11px] text-slate-400 transition-opacity duration-150
+                                                             pointer-fine:opacity-0 pointer-fine:group-hover/pending:opacity-100">
+                                                <StickyNote className="w-3.5 h-3.5 shrink-0" /> {t.prep_note}
+                                            </span>
+                                        )}
+                                    </div>
+                                </button>
                                 <div className="flex items-center gap-1 shrink-0">
                                     <button
                                         onClick={() => onQtyChange(line.id, -1)}

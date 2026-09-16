@@ -7,6 +7,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ZReport } from "@/components/reports/z-report"
 import { ServerPerformance } from "@/components/reports/server-performance"
 import { VoidAudit } from "@/components/reports/void-audit"
+import { NotesReport } from "@/components/reports/notes-report"
 import { VarianceReport } from "@/components/reports/variance"
 import { ExchangeAudit } from "@/components/reports/exchange-audit"
 import {
@@ -15,7 +16,7 @@ import {
 } from "recharts"
 import {
   Calendar as CalendarIcon, Download, TrendingUp, DollarSign, ShoppingBag,
-  CreditCard, TrendingDown, Clock, Tag, Package, AlertTriangle, Search, Filter, Target, ArrowRightLeft, ShoppingCart, History, Droplets, Coffee
+  CreditCard, TrendingDown, Clock, Tag, Package, AlertTriangle, Search, Filter, Target, ArrowRightLeft, ShoppingCart, History
 } from "lucide-react"
 import Link from "next/link"
 import { formatTHB } from "@/lib/currency"
@@ -317,6 +318,17 @@ export default function ReportsPage() {
             </TabsList>
           </div>
 
+          {/* Holds a screenful open while a tab swaps.
+
+              Radix unmounts the old panel, and every report here renders a
+              128-256px skeleton before its data arrives. Switching tabs from
+              part-way down a long report therefore collapsed the document from
+              thousands of pixels to a few hundred, the browser clamped the
+              scroll position to whatever was left, and the reader was thrown to
+              the top - which is exactly what making the tab strip sticky was
+              meant to avoid. */}
+          <div className="min-h-[calc(100vh-10rem)]">
+
           <TabsContent value="servers">
             {dateRange?.from && dateRange?.to && (
               <ServerPerformance
@@ -326,12 +338,22 @@ export default function ReportsPage() {
             )}
           </TabsContent>
 
-          <TabsContent value="voids">
+          {/* Voids and notes share a tab because they are the same kind of
+              question: what did staff do during service that nobody stopped
+              them doing? One is a line struck off, the other a line annotated,
+              and both are read the morning after rather than at the till. */}
+          <TabsContent value="voids" className="space-y-6">
             {dateRange?.from && dateRange?.to && (
-              <VoidAudit
-                startDate={startOfDay(dateRange.from).toISOString()}
-                endDate={endOfDay(dateRange.to).toISOString()}
-              />
+              <>
+                <VoidAudit
+                  startDate={startOfDay(dateRange.from).toISOString()}
+                  endDate={endOfDay(dateRange.to).toISOString()}
+                />
+                <NotesReport
+                  startDate={startOfDay(dateRange.from).toISOString()}
+                  endDate={endOfDay(dateRange.to).toISOString()}
+                />
+              </>
             )}
           </TabsContent>
 
@@ -494,9 +516,6 @@ export default function ReportsPage() {
                           </div>
                           <div>
                             <p className="font-bold text-slate-900 leading-tight">{p.productName}</p>
-                            <div className="flex gap-1.5 mt-1">
-                              <Badge variant="outline" className="text-[10px] py-0 px-1.5 bg-slate-50 border-slate-200 font-medium text-slate-500 uppercase">{p.variantType}</Badge>
-                            </div>
                           </div>
                         </div>
                         <div className="text-right">
@@ -540,7 +559,6 @@ export default function ReportsPage() {
                           </div>
                           <div>
                             <p className="font-bold text-sm text-slate-800 leading-tight">{p.productName}</p>
-                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">{p.variantType}</span>
                           </div>
                         </div>
                         <div className="text-right">
@@ -603,97 +621,11 @@ export default function ReportsPage() {
                 </Card>
               </div>
 
-            {/* Performance by Attributes */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-amber-800 flex items-center gap-2">
-                    <TrendingUp className="w-5 h-5" />
-                    {t.variation_performance}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-3">
-                    {data?.variationStats.map((v: any, i: number) => (
-                      <div key={i} className="flex justify-between items-center p-3 rounded-xl border bg-white shadow-sm">
-                        <div className="flex items-center gap-3">
-                          <Badge variant="outline" className="border-amber-200 text-amber-700 bg-amber-50 font-bold px-3 py-1 uppercase">{v.name}</Badge>
-                        </div>
-                        <div className="text-right">
-                          <p className="font-bold text-slate-900">{v.sold} items</p>
-                          <p className="text-xs text-muted-foreground">{formatTHB(v.revenue)}</p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-amber-800 flex items-center gap-2">
-                    <Package className="w-5 h-5" />
-                    {t.choice_performance}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-3">
-                    {data?.sizeStats.map((s: any, i: number) => (
-                      <div key={i} className="flex justify-between items-center p-3 rounded-xl border bg-white shadow-sm">
-                        <div className="flex items-center gap-3">
-                          <Badge className="bg-amber-600 text-white w-8 h-8 rounded-full flex items-center justify-center p-0">{s.name}</Badge>
-                          <span className="font-bold text-slate-700">{s.name}</span>
-                        </div>
-                        <div className="text-right">
-                          <p className="font-bold text-slate-900">{s.sold} items</p>
-                          <p className="text-xs text-muted-foreground">{formatTHB(s.revenue)}</p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-
-            {/* Customization Stats */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-indigo-800 flex items-center gap-2">
-                    <Droplets className="w-5 h-5 text-blue-500" />
-                    {t.sugar_levels_usage}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-3">
-                    {data?.sugarStats?.map((s: any, i: number) => (
-                      <div key={i} className="flex justify-between items-center p-3 rounded-xl border bg-white shadow-sm">
-                        <span className="font-bold text-slate-700">{s.name}</span>
-                        <Badge variant="secondary" className="font-black text-blue-700 bg-blue-50">{s.count} orders</Badge>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-purple-800 flex items-center gap-2">
-                    <Coffee className="w-5 h-5 text-purple-500" />
-                    {t.extra_shot_usage}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-3">
-                    {data?.shotStats?.map((s: any, i: number) => (
-                      <div key={i} className="flex justify-between items-center p-3 rounded-xl border bg-white shadow-sm">
-                        <span className="font-bold text-slate-700">{s.name}</span>
-                        <Badge variant="secondary" className="font-black text-purple-700 bg-purple-50">{s.count} orders</Badge>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
+            {/* Sugar level and extra shot used to be reported here. They are a
+                cafe's modifier axis - one drink sold four ways - and this bar
+                sells four drinks. Across the whole database they hold a single
+                value each, "Normal Sweet" and "Normal Shot", on the 50 lines
+                that carry them at all: the defaults, never chosen by anyone. */}
           </TabsContent>
 
           <TabsContent value="customers" className="space-y-6">
@@ -858,13 +790,19 @@ export default function ReportsPage() {
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
                     <TrendingUp className="w-5 h-5 text-indigo-600" />
-                    {t.staff_sales_performance}
+                    {t.server_sales_performance}
                   </CardTitle>
-                  <CardDescription>{t.revenue_per_staff}</CardDescription>
+                  {/* Credited to the waiter who worked the table, not the
+                      person who keyed it in. Three staff rotating on the till
+                      made this a chart of the roster - three near-identical
+                      bars - where the servers behind the same sales differ by
+                      almost threefold. Counter sales have no waiter and are
+                      nobody's performance, so they are not in here. */}
+                  <CardDescription>{t.revenue_per_server}</CardDescription>
                 </CardHeader>
                 <CardContent className="h-[350px]">
                   <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={data?.staffSales || []}>
+                    <BarChart data={data?.serverSales || []}>
                       <XAxis dataKey="name" />
                       <YAxis fontSize={11} tickFormatter={(v) => `${(v / 1000)}k`} />
                       <Tooltip formatter={(v) => formatTHB(v as number)} />
@@ -1116,7 +1054,6 @@ export default function ReportsPage() {
                         <div className="flex justify-between items-start mb-2">
                           <div>
                             <p className="font-bold text-slate-800">{item.menuName}</p>
-                            <p className="text-[10px] text-muted-foreground uppercase">{item.variation} - {item.size}</p>
                           </div>
                           <Badge variant={item.marginPercent < 20 ? "destructive" : "outline"} className="text-[10px] font-black">
                             {item.marginPercent.toFixed(1)}% {t.margin}
@@ -1136,6 +1073,31 @@ export default function ReportsPage() {
                             <p className="font-bold text-emerald-600">{formatTHB(item.margin)}</p>
                           </div>
                         </div>
+
+                        {/* Pour cost, which is the number a bar actually runs
+                            on. Margin says what is left; pour cost says whether
+                            the pour itself is right, against a band that
+                            differs by category - a beer at 30% is healthy where
+                            a spirit at 30% is being given away. The verdict is
+                            the same one the recipe editor shows, so a manager
+                            reading a report and a manager editing a recipe are
+                            looking at one number. */}
+                        {typeof item.pourCostPct === "number" && item.band && (
+                          <div className="flex items-center justify-between gap-2 border-t pt-2 mt-2">
+                            <span className="text-[10px] text-muted-foreground uppercase">{t.pour_cost}</span>
+                            <span className="flex items-baseline gap-1.5">
+                              <span className={`font-black tabular-nums ${item.verdict === "OK" ? "text-emerald-600"
+                                : item.verdict === "BELOW_COST" ? "text-rose-600"
+                                  : "text-amber-600"
+                                }`}>
+                                {item.pourCostPct.toFixed(1)}%
+                              </span>
+                              <span className="text-[10px] text-slate-400 tabular-nums">
+                                {t.target} {item.band[0]}–{item.band[1]}%
+                              </span>
+                            </span>
+                          </div>
+                        )}
                       </div>
                     ))}
                     {(!data?.advanced?.lowMarginItems || data.advanced.lowMarginItems.length === 0) && (
@@ -1253,6 +1215,7 @@ export default function ReportsPage() {
               </CardContent>
             </Card>
           </TabsContent>
+          </div>
         </Tabs>
       </div>
     </div>

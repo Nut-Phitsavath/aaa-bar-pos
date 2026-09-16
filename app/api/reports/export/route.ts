@@ -53,7 +53,7 @@ export async function GET(request: Request) {
         const flatItems = orderItems.map(item => ({
             id: item.id,
             orderId: item.orderId,
-            variationSizeId: item.variationSizeId,
+            menuId: item.menuId,
             name: item.name,
             price: item.price,
             quantity: item.quantity,

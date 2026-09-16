@@ -9,7 +9,6 @@ import { toast } from "sonner"
 
 type Item = {
     menuId: string
-    variationSizeId: string | null
     name: string
     localName?: string | null
     quantity: number

@@ -3,6 +3,7 @@ import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
 
 type PriceInputProps = {
+  id?: string
   value: number
   onChange: (num: number) => void
   placeholder?: string
@@ -11,6 +12,7 @@ type PriceInputProps = {
 }
 
 export function PriceInput({
+  id,
   value,
   onChange,
   placeholder,
@@ -37,6 +39,7 @@ export function PriceInput({
         </span>
       )}
       <Input
+        id={id}
         type="text"
         inputMode="numeric"
         value={display}

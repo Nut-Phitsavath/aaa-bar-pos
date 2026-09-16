@@ -45,13 +45,11 @@ async function main() {
     const tills = await prisma.user.findMany({ where: { role: { in: ["STAFF", "ADMIN"] } } })
     const tables = await prisma.table.findMany()
     const customers = await prisma.customer.findMany()
-    const sizes = await prisma.variationSize.findMany({
-        include: { variation: { include: { menu: true } } },
-    })
+    const menus = await prisma.menu.findMany({ where: { price: { gt: 0 } } })
     const recipes = await prisma.recipe.findMany()
     const ingredients = await prisma.ingredient.findMany()
 
-    if (!waiters.length || !sizes.length || !tables.length) {
+    if (!waiters.length || !menus.length || !tables.length) {
         console.error("Run `npm run db:seed` first - there is no menu or floor to trade against.")
         process.exit(1)
     }
@@ -107,7 +105,7 @@ async function main() {
 
                 const lines = []
                 for (let n = 0; n < between(1, 3); n++) {
-                    const vs = pick(sizes)
+                    const vs = pick(menus)
                     const qty = vs.price > 500 ? 1 : between(1, 6)
                     lines.push({ vs, qty })
                 }
@@ -135,8 +133,8 @@ async function main() {
                         shiftId: voided ? null : shift.id,
                         items: {
                             create: lines.map((l) => ({
-                                variationSizeId: l.vs.id,
-                                name: l.vs.variation.menu.name,
+                                menuId: l.vs.id,
+                                name: l.vs.name,
                                 price: l.vs.price,
                                 quantity: l.qty,
                                 total: l.vs.price * l.qty,
@@ -149,7 +147,7 @@ async function main() {
                 // Stock leaves the shelf when the drink is served.
                 if (!voided) {
                     for (const l of lines) {
-                        for (const rec of recipes.filter((x) => x.menuId === l.vs.variation.menuId)) {
+                        for (const rec of recipes.filter((x) => x.menuId === l.vs.id)) {
                             // Rounded in SQL for the same reason the till does
                             // it: 30ml out of a 700ml bottle is 0.042857... and
                             // subtracting that 500 times leaves fourteen
@@ -229,7 +227,7 @@ async function main() {
         // A few walk-in counter sales, so the service split is not 100% tables.
         for (let w = 0; w < between(0, 4); w++) {
             const when = tradingTime(d)
-            const vs = pick(sizes)
+            const vs = pick(menus)
             const qty = between(1, 3)
             const total = vs.price * qty
             await prisma.order.create({
@@ -242,7 +240,7 @@ async function main() {
                     userId: pick(tills).id,
                     shiftId: shift.id,
                     cashReceived: total,
-                    items: { create: [{ variationSizeId: vs.id, name: vs.variation.menu.name, price: vs.price, quantity: qty, total }] },
+                    items: { create: [{ menuId: vs.id, name: vs.name, price: vs.price, quantity: qty, total }] },
                 },
             })
             orderCount++

@@ -14,44 +14,44 @@ import {
     Candy,
     Coffee,
     Minus,
-    Trash2,
     ShoppingBag
 } from "lucide-react"
 import { Switch } from "@/components/ui/switch"
-
-interface MenuVariation {
-    id: string
-    type: string
-    displayOrder?: number
-    sizes: {
-        id: string
-        size: string
-        price: number
-        displayOrder?: number
-    }[]
-}
+import { flyToCart } from "./fly-to-cart"
 
 interface CustomizationDialogProps {
     isOpen: boolean
     onClose: () => void
     onConfirm: (selection: {
-        variationSizeId: string
+        menuId: string
         name: string
         localName?: string
         price: number
         sugar: string
         shot: string
-        variation: string
-        size: string
         isTakeaway: boolean
         note: string
     }) => void
     menuName: string
     localName?: string
-    variations: MenuVariation[]
+    /** The item being added. Price is a flat property on the menu item now —
+     * there is no variation/size table underneath it to look a price up in. */
+    menuId: string
+    price: number
     hasSugarLevel?: boolean
     hasShotType?: boolean
     imageUrl?: string
+    /**
+     * Editing a line already in the cart rather than adding a new one. The
+     * dialog is the same; only its verb changes, and it opens holding what the
+     * line already says instead of a blank form.
+     */
+    editing?: {
+        sugar?: string
+        shot?: string
+        isTakeaway?: boolean
+        note?: string
+    } | null
 }
 
 
@@ -61,39 +61,35 @@ export function CustomizationDialog({
     onConfirm,
     menuName,
     localName,
-    variations,
+    menuId,
+    price,
     hasSugarLevel = true,
     hasShotType = true,
-    imageUrl
+    imageUrl,
+    editing = null
 }: CustomizationDialogProps) {
     const { t } = useTranslation()
     const [sugar, setSugar] = useState("Normal Sweet")
     const [shot, setShot] = useState("Normal Shot")
-    const [selectedVariation, setSelectedVariation] = useState<string>("")
-    const [selectedSize, setSelectedSize] = useState<string>("")
     const [isTakeaway, setIsTakeaway] = useState(false)
     // Requirement #4's preparation note. OrderItem has carried the field all
     // along; nothing ever offered a way to type one, so "no ice" reached the
     // bar by being shouted across it.
     const [note, setNote] = useState("")
 
-    // Reset defaults when opening
+    // Opening on an existing line starts from what that line already says, so
+    // a bartender adding "no ice" to a drink that is already takeaway does not
+    // silently clear the takeaway by saving.
     useEffect(() => {
-        if (isOpen && variations.length > 0) {
-            setSugar("Normal Sweet")
-            setShot("Normal Shot")
-
-            // Set default variation (first available)
-            const defaultVar = variations[0]
-            setSelectedVariation(defaultVar.type)
-
-            // Set default size (M if available, otherwise first)
-            const mSize = defaultVar.sizes.find(s => s.size === "M")
-            setSelectedSize(mSize ? mSize.id : defaultVar.sizes[0]?.id || "")
-            setIsTakeaway(false)
-            setNote("")
-        }
-    }, [isOpen, variations])
+        if (!isOpen) return
+        setSugar(editing?.sugar ?? "Normal Sweet")
+        setShot(editing?.shot ?? "Normal Shot")
+        setIsTakeaway(editing?.isTakeaway ?? false)
+        setNote(editing?.note ?? "")
+        // `editing` is read at open. Re-running on its identity would reset the
+        // form under someone mid-type, because the parent rebuilds the object.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isOpen])
 
     const sugarOptions = [
         { label: "No Sweet", icon: CandyOff, key: "no_sweet" },
@@ -111,87 +107,35 @@ export function CustomizationDialog({
     const effectiveSugar = hasSugarLevel ? sugar : "Normal Sweet"
     const effectiveShot = hasShotType ? shot : "Normal Shot"
 
-    // Get current variation object
-    const currentVariation = variations.find(v => v.type === selectedVariation)
-
-    // Get selected size details
-    const selectedSizeObj = currentVariation?.sizes.find(s => s.id === selectedSize)
-    const basePrice = selectedSizeObj?.price || 0
     const shotPrice = shot === "Double Shot" ? 10000 : 0
-    const finalPrice = basePrice + shotPrice
-
-    const handleVariationChange = (varType: string) => {
-        setSelectedVariation(varType)
-        const newVar = variations.find(v => v.type === varType)
-        if (newVar) {
-            // Try to keep same size if available
-            const sameSize = newVar.sizes.find(s => s.size === selectedSizeObj?.size)
-            if (sameSize) {
-                setSelectedSize(sameSize.id)
-            } else {
-                // Default to first size
-                setSelectedSize(newVar.sizes[0]?.id || "")
-            }
-        }
-    }
+    const finalPrice = price + shotPrice
 
     const handleConfirm = (event: React.MouseEvent<HTMLButtonElement>) => {
-        if (!selectedSize || !selectedSizeObj) {
-            notify.warn(t.please_select_customization)
+        // A menu item created without a price sits at 0, which means "not
+        // priced yet", not "on the house". Adding it would ring the drink up
+        // free, so the cart refuses it here and /api/orders refuses it again
+        // at the boundary. Checked on `price`, not `finalPrice`: a double
+        // shot's +10,000 would otherwise disguise an unpriced item as a
+        // priced one.
+        if (!(price > 0)) {
+            notify.warn(t.set_price_before_selling)
             return
         }
 
         onConfirm({
-            variationSizeId: selectedSize,
+            menuId,
             name: menuName, // Keep name as the base product name
             localName: localName,
             price: finalPrice,
             sugar: effectiveSugar,
             shot: effectiveShot,
-            variation: selectedVariation,
-            size: selectedSizeObj.size,
             isTakeaway: isTakeaway,
             note: note.trim(),
         })
 
-        // Flying animation
-        const btn = event.currentTarget
-        const rect = btn.getBoundingClientRect()
-        const cartIcon = document.getElementById('cart-icon-header')
-        let targetX = window.innerWidth - 100
-        let targetY = 100
-
-        if (cartIcon) {
-            const cartRect = cartIcon.getBoundingClientRect()
-            targetX = cartRect.left
-            targetY = cartRect.top
-        }
-
-        const flyingImg = document.createElement('img')
-        flyingImg.src = imageUrl && imageUrl !== "/placeholder.svg" ? imageUrl : "/placeholder-logo.png"
-        flyingImg.className = 'fixed z-[10000] rounded-md shadow-2xl object-cover pointer-events-none transition-all duration-700 ease-in-out'
-        flyingImg.style.width = `100px`
-        flyingImg.style.height = `100px`
-        flyingImg.style.top = `${rect.top - 50}px`
-        flyingImg.style.left = `${rect.left + rect.width / 2 - 50}px`
-        document.body.appendChild(flyingImg)
-
-        requestAnimationFrame(() => {
-            flyingImg.style.top = `${targetY}px`
-            flyingImg.style.left = `${targetX}px`
-            flyingImg.style.width = '20px'
-            flyingImg.style.height = '20px'
-            flyingImg.style.opacity = '0.2'
-            flyingImg.style.transform = 'scale(0.1) rotate(180deg)'
-        })
-
-        setTimeout(() => {
-            flyingImg.remove()
-            if (cartIcon) {
-                cartIcon.classList.add('scale-125', 'text-amber-500')
-                setTimeout(() => cartIcon.classList.remove('scale-125', 'text-amber-500'), 200)
-            }
-        }, 700)
+        // Editing a line that is already in the cart moves nothing across the
+        // screen - there is no journey to show. Only a new drink flies.
+        if (!editing) flyToCart(event.currentTarget.getBoundingClientRect(), imageUrl)
 
         onClose()
     }
@@ -200,8 +144,10 @@ export function CustomizationDialog({
         // modal={false} on purpose. Radix's modal mode locks body scroll and
         // marks the entire page aria-hidden on every open; measured at 4x CPU
         // that machinery alone costs ~257ms, against ~35ms for the same dialog
-        // non-modal. This dialog opens for every line of every order, so that
-        // is the single most repeated delay in the app.
+        // non-modal. It used to open for every line of every order, which made
+        // that the single most repeated delay in the app; now it opens only for
+        // an item with real choices, or when somebody edits a line. Kept
+        // non-modal anyway - 257ms is worth avoiding whenever it does open.
         //
         // The cost of turning it off is that Radix stops rendering its overlay
         // (Dialog.Overlay returns null when non-modal) and the menu grid behind
@@ -234,47 +180,6 @@ export function CustomizationDialog({
                     </DialogDescription>
                 </DialogHeader>
                 <div className="grid gap-4 py-0">
-
-                    {/* Variation Type */}
-                    <div className="space-y-2">
-                        <Label className="text-md">{t.variation || "Variation"}</Label>
-                        <div className="flex flex-wrap gap-2">
-                            {[...variations]
-                                .sort((a, b) => (a.displayOrder || 0) - (b.displayOrder || 0))
-                                .map((variation) => (
-                                    <Button
-                                        key={variation.type}
-                                        variant={selectedVariation === variation.type ? "default" : "outline"}
-                                        onClick={() => handleVariationChange(variation.type)}
-                                        className="flex-1"
-                                    >
-                                        {variation.type === 'HOT' ? t.hot : variation.type === 'ICE' ? t.ice : variation.type === 'BLEND' ? t.blend : variation.type}
-                                    </Button>
-                                ))}
-                        </div>
-                    </div>
-
-                    {/* Size Selection */}
-                    <div className="space-y-2">
-                        <Label className="text-md">{t.choice || "Choice"}</Label>
-                        <div className="flex flex-wrap gap-2">
-                            {[...(currentVariation?.sizes || [])]
-                                .sort((a, b) => (a.displayOrder || 0) - (b.displayOrder || 0))
-                                .map((size) => (
-                                    <Button
-                                        key={size.id}
-                                        variant={selectedSize === size.id ? "default" : "outline"}
-                                        onClick={() => setSelectedSize(size.id)}
-                                        className="flex-1 h-12"
-                                    >
-                                        <div className="flex flex-col items-center">
-                                            <span className="text-lg font-bold">{size.size === 'S' ? t.s_size : size.size === 'M' ? t.m_size : size.size === 'L' ? t.l_size : size.size}</span>
-                                            <span className="text-xs">{formatTHB(size.price)}</span>
-                                        </div>
-                                    </Button>
-                                ))}
-                        </div>
-                    </div>
 
                     {/* Sugar Level */}
                     {hasSugarLevel && (
@@ -361,7 +266,7 @@ export function CustomizationDialog({
                 <DialogFooter>
                     <Button variant="outline" onClick={onClose}>{t.cancel || "Cancel"}</Button>
                     <Button onClick={handleConfirm}>
-                        {t.add_to_cart || "Add to Cart"} - {formatTHB(finalPrice)}
+                        {editing ? t.save : `${t.add_to_cart || "Add to Cart"} - ${formatTHB(finalPrice)}`}
                     </Button>
                 </DialogFooter>
             </DialogContent>

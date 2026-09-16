@@ -16,7 +16,6 @@
 export type Returnable = {
     /** The single-serve menu item, which is what a recipe restocks through. */
     menuId: string
-    variationSizeId: string | null
     name: string
     localName?: string | null
     /** How many of these the table had, less anything already handed back. */

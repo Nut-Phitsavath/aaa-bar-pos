@@ -271,43 +271,6 @@ export default function MonitorPage() {
                             </CardContent>
                         </Card>
 
-                        {/* 4. Variations & Choices (Restored) */}
-                        <div className="grid grid-cols-2 gap-4">
-                            <Card className="border-none shadow-sm bg-white p-4">
-                                <p className="text-[9px] font-black uppercase text-slate-400 tracking-widest mb-3">{t.variation_performance}</p>
-                                <div className="space-y-3">
-                                    {data?.variationStats?.slice(0, 4).map((v: any, i: number) => (
-                                        <div key={i}>
-                                            <div className="flex justify-between text-[10px] font-bold uppercase mb-1">
-                                                <span className="text-slate-700 truncate mr-2">{v.name}</span>
-                                                <span className="text-amber-700">{v.sold}</span>
-                                            </div>
-                                            <div className="w-full bg-slate-100 h-1 rounded-full overflow-hidden">
-                                                <div className="bg-amber-500 h-full" style={{ width: `${(v.sold / (data.variationStats[0]?.sold || 1)) * 100}%` }} />
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            </Card>
-
-                            <Card className="border-none shadow-sm bg-white p-4">
-                                <p className="text-[9px] font-black uppercase text-slate-400 tracking-widest mb-3">{t.choice_performance}</p>
-                                <div className="space-y-3">
-                                    {data?.sizeStats?.slice(0, 4).map((s: any, i: number) => (
-                                        <div key={i}>
-                                            <div className="flex justify-between text-[10px] font-bold uppercase mb-1">
-                                                <span className="text-slate-700 truncate mr-2">{s.name}</span>
-                                                <span className="text-blue-700">{s.sold}</span>
-                                            </div>
-                                            <div className="w-full bg-slate-100 h-1 rounded-full overflow-hidden">
-                                                <div className="bg-blue-500 h-full" style={{ width: `${(s.sold / (data.sizeStats[0]?.sold || 1)) * 100}%` }} />
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            </Card>
-                        </div>
-
                         {/* 5. 24H Activity Window */}
                         <Card className="border-none shadow-sm bg-white overflow-hidden">
                             <CardHeader className="p-5 pb-1">

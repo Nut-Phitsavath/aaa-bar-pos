@@ -11,15 +11,7 @@ export async function GET(
         const order = await prisma.order.findUnique({
             where: { id },
             include: {
-                items: {
-                    include: {
-                        variationSize: {
-                            include: {
-                                variation: true
-                            }
-                        }
-                    }
-                },
+                items: true,
                 customer: true,
                 promotion: true,
                 user: true

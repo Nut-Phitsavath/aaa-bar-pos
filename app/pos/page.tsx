@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation"
 import { toast } from "sonner"
 import { TicketPanel, type TicketBill } from "@/components/pos/ticket-panel"
 import { ReceiptDialog } from "@/components/receipt-dialog"
-import { cartKey } from "@/lib/cart-storage"
+import { cartKey, COUNTER_CART_KEY } from "@/lib/cart-storage"
 import { SessionBanner, type Waiter } from "@/components/session-banner"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -32,6 +32,7 @@ import { APP_NAME } from "@/lib/shop"
 import { notify } from "@/components/ui/sonner"
 import { Header } from "@/components/header"
 import { CustomizationDialog } from "@/app/pos/components/CustomizationDialog"
+import { flyToCart } from "@/app/pos/components/fly-to-cart"
 import { BillReceipt } from "@/components/bill-receipt"
 import { useShift } from "@/components/shift-provider"
 import { Switch } from "@/components/ui/switch"
@@ -45,28 +46,19 @@ type MenuItem = {
   image?: string
   hasSugarLevel?: boolean
   hasShotType?: boolean
-  variations: Array<{
-    id: string
-    type: string
-    sizes: Array<{
-      id: string
-      size: string
-      price: number
-    }>
-  }>
+  /** Flat now -- one item, one price. No variation/size table underneath it. */
+  price: number
 }
 
 type CartItem = {
   id: string
-  variationSizeId: string
+  menuId: string
   name: string
   localName?: string
   price: number
   quantity: number
   sugar?: string
   shot?: string
-  variation?: string
-  size?: string
   category?: string
   image?: string
   isTakeaway?: boolean
@@ -109,6 +101,8 @@ function POSPageInner() {
   }
 
   const [cart, setCart] = useState<CartItem[]>([])
+  /** The cart line the dialog is editing, or null when it is adding a new one. */
+  const [editingLine, setEditingLine] = useState<CartItem | null>(null)
   const [searchQuery, setSearchQuery] = useState("")
   const [tableNumber, setTableNumber] = useState("")
   const [menuItems, setMenuItems] = useState<MenuItem[]>([])
@@ -499,14 +493,12 @@ function POSPageInner() {
           waiterId,
           status: "SENT",
           items: cart.map((i) => ({
-            variationSizeId: i.variationSizeId,
+            menuId: i.menuId,
             name: i.localName ? `${i.localName} (${i.name})` : i.name,
             price: i.price,
             quantity: i.quantity,
             sugarLevel: i.sugar,
             shotType: i.shot,
-            variation: i.variation,
-            size: i.size,
             isTakeaway: i.isTakeaway,
             note: i.note
           })),
@@ -547,14 +539,12 @@ function POSPageInner() {
           pointsRedeemed,
           taxAmount: tax,
           items: cart.map(i => ({
-            variationSizeId: i.variationSizeId,
+            menuId: i.menuId,
             name: i.localName ? `${i.localName} (${i.name})` : i.name, // Snapshot both names
             price: i.price,
             quantity: i.quantity,
             sugarLevel: i.sugar,
             shotType: i.shot,
-            variation: i.variation,
-            size: i.size,
             isTakeaway: i.isTakeaway,
             note: i.note
           })),
@@ -619,7 +609,7 @@ function POSPageInner() {
           notify.error(t.order_create_failed, { description: t.order_stale_items })
           // IDs likely changed because of seeding. Clear cart to be safe or prune if we have missingIds.
           if (errorData.missingIds) {
-            setCart(prev => prev.filter(i => !errorData.missingIds.includes(i.variationSizeId)))
+            setCart(prev => prev.filter(i => !errorData.missingIds.includes(i.menuId)))
           }
         } else if (errorData.code === 'STALE_CUSTOMER_VIOLATION') {
           notify.error(t.order_create_failed, { description: t.order_stale_customer })
@@ -679,7 +669,7 @@ function POSPageInner() {
       const res = await fetch('/api/menu?availableOnly=true')
       if (res.ok) {
         const data = await res.json()
-        // Data already in correct hierarchical format from API
+        // Flat items straight from the API -- price lives on the item itself.
         setMenuItems(data)
 
         // Extract unique categories
@@ -687,11 +677,9 @@ function POSPageInner() {
         setCategories(["All", ...uniqueCategories])
 
         // Silent Validation: Remove cart items that no longer exist in the menu
-        const allVariationSizeIds = new Set(
-          data.flatMap((m: any) => m.variations.flatMap((v: any) => v.sizes.map((s: any) => s.id)))
-        )
+        const validMenuIds = new Set(data.map((m: any) => m.id))
         setCart((prev) => {
-          const valid = prev.filter(item => allVariationSizeIds.has(item.variationSizeId))
+          const valid = prev.filter(item => validMenuIds.has(item.menuId))
           if (valid.length !== prev.length) {
             console.warn("Pruned invalid/stale items from cart after seeding/update.")
           }
@@ -756,17 +744,15 @@ function POSPageInner() {
         const found = all.find((o: any) => o.id === resumeId)
         if (found) {
           setCart(found.items.map((i: any) => {
-            const compositeId = `${i.variationSizeId}-${i.sugarLevel || ''}-${i.shotType || ''}-${i.variation || ''}-${i.isTakeaway || false}-${i.note || ''}`
+            const compositeId = `${i.menuId}-${i.sugarLevel || ''}-${i.shotType || ''}-${i.isTakeaway || false}-${i.note || ''}`
             return {
               id: compositeId,
-              variationSizeId: i.variationSizeId,
+              menuId: i.menuId,
               name: i.name,
               price: i.price,
               quantity: i.quantity,
               sugar: i.sugarLevel,
               shot: i.shotType,
-              variation: i.variation,
-              size: i.size,
               isTakeaway: i.isTakeaway,
               note: i.note || undefined
             }
@@ -795,7 +781,7 @@ function POSPageInner() {
     const resumeId = params.get('resumeOrder')
 
     // Auto-Hold existing session if switching (this logic remains in the useEffect for initial load)
-    const existingCartStr = localStorage.getItem("pos_cart")
+    const existingCartStr = localStorage.getItem(COUNTER_CART_KEY)
     const existingCart = existingCartStr ? JSON.parse(existingCartStr) : []
     const existingResumedId = localStorage.getItem("pos_resumedOrderId")
 
@@ -816,14 +802,12 @@ function POSPageInner() {
             body: JSON.stringify({
               id: existingResumedId,
               items: existingCart.map((i: any) => ({
-                variationSizeId: i.variationSizeId,
+                menuId: i.menuId,
                 name: i.name,
                 price: i.price,
                 quantity: i.quantity,
                 sugarLevel: i.sugar,
                 shotType: i.shot,
-                variation: i.variation,
-                size: i.size,
                 isTakeaway: i.isTakeaway,
                 note: i.note
               })),
@@ -950,72 +934,23 @@ function POSPageInner() {
     }
   }
 
-  const triggerFlyingAnimation = (event: React.MouseEvent<HTMLDivElement>, imageUrl: string) => {
-    const card = event.currentTarget
-    const rect = card.getBoundingClientRect()
-
-    // Find cart icon element by ID or fallback to right side panel approximation
-    const cartIcon = document.getElementById('cart-icon-header')
-    let targetX = window.innerWidth - 100
-    let targetY = 100
-
-    if (cartIcon) {
-      const cartRect = cartIcon.getBoundingClientRect()
-      targetX = cartRect.left
-      targetY = cartRect.top
-    }
-
-    const flyingImg = document.createElement('img')
-    flyingImg.src = imageUrl
-    flyingImg.className = 'fixed z-[9999] rounded-md shadow-2xl object-cover pointer-events-none transition-all duration-700 ease-in-out'
-    flyingImg.style.width = `${rect.width * 0.5}px`
-    flyingImg.style.height = `${rect.height * 0.5}px`
-    flyingImg.style.top = `${rect.top + rect.height * 0.25}px`
-    flyingImg.style.left = `${rect.left + rect.width * 0.25}px`
-    document.body.appendChild(flyingImg)
-
-    // Trigger animation next frame
-    requestAnimationFrame(() => {
-      flyingImg.style.top = `${targetY}px`
-      flyingImg.style.left = `${targetX}px`
-      flyingImg.style.width = '20px'
-      flyingImg.style.height = '20px'
-      flyingImg.style.opacity = '0.2'
-      flyingImg.style.transform = 'scale(0.1) rotate(180deg)'
-    })
-
-    setTimeout(() => {
-      flyingImg.remove()
-      if (cartIcon) {
-        cartIcon.classList.add('scale-125', 'text-amber-500')
-        setTimeout(() => cartIcon.classList.remove('scale-125', 'text-amber-500'), 200)
-      }
-    }, 700)
-  }
-
-  const handleClickProduct = useCallback((item: MenuItem, event: React.MouseEvent<HTMLDivElement>) => {
-    setProductToCustomize(item)
-    setCustomizationOpen(true)
-  }, [])
 
   const handleAddToCartWithCustomization = (selection: {
-    variationSizeId: string
+    menuId: string
     name: string
     localName?: string
     price: number
     sugar: string
     shot: string
-    variation: string
-    size: string
     isTakeaway: boolean
     note: string
-  }) => {
+  }, source?: MenuItem) => {
     const finalPrice = selection.price
 
     setCart((prev) => {
-      // Unique ID based on variationSizeId + customizations. The note is part
-      // of it: two of the same drink, one "no ice", are two lines, not a qty 2.
-      const uniqueId = `${selection.variationSizeId}-${selection.sugar}-${selection.shot}-${selection.variation}-${selection.isTakeaway}-${selection.note}`
+      // Unique ID based on menuId + customizations. The note is part of it:
+      // two of the same drink, one "no ice", are two lines, not a qty 2.
+      const uniqueId = `${selection.menuId}-${selection.sugar}-${selection.shot}-${selection.isTakeaway}-${selection.note}`
 
       // Check existing similar item
       const existing = prev.find((item) => item.id === uniqueId)
@@ -1028,17 +963,17 @@ function POSPageInner() {
 
       return [...prev, {
         id: uniqueId,
-        variationSizeId: selection.variationSizeId,
+        menuId: selection.menuId,
         name: selection.name,
         localName: selection.localName,
         price: finalPrice,
         quantity: 1,
         sugar: selection.sugar,
         shot: selection.shot,
-        variation: selection.variation,
-        size: selection.size,
-        category: productToCustomize?.category || "Other",
-        image: productToCustomize?.image,
+        // `source` is the item when a tap added it straight to the cart, where
+        // no dialog ever held it in state.
+        category: (source ?? productToCustomize)?.category || "Other",
+        image: (source ?? productToCustomize)?.image,
         isTakeaway: selection.isTakeaway,
         note: selection.note || undefined
       }]
@@ -1046,9 +981,115 @@ function POSPageInner() {
     setProductToCustomize(null)
   }
 
+  /**
+   * A tap is an order.
+   *
+   * The customization dialog used to open for every item, asking two questions
+   * whose answer is almost always "no" and "nothing" - a modal plus a second
+   * tap, on every line of every round. It earns its place only when the item
+   * has something to actually choose, which here means a category with sugar
+   * or shot levels. A bar's categories have neither.
+   *
+   * Takeaway and the preparation note did not go away; they moved to the cart
+   * line, which is where a bartender goes when a customer actually asks.
+   */
+  const handleClickProduct = useCallback((item: MenuItem, _event: React.MouseEvent<HTMLDivElement>) => {
+    if (item.hasSugarLevel || item.hasShotType) {
+      setEditingLine(null)
+      setProductToCustomize(item)
+      setCustomizationOpen(true)
+      return
+    }
+
+    // The same refusal the dialog makes, because this path skips the dialog:
+    // 0 means "not priced yet", not "on the house".
+    if (!(item.price > 0)) {
+      notify.warn(t.set_price_before_selling)
+      return
+    }
+
+    handleAddToCartWithCustomization({
+      menuId: item.id,
+      name: item.name,
+      localName: item.localName,
+      price: item.price,
+      sugar: "Normal Sweet",
+      shot: "Normal Shot",
+      isTakeaway: false,
+      note: "",
+    }, item)
+
+    flyToCart(_event.currentTarget.getBoundingClientRect(), item.image)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [t])
+
+  /** Open the dialog on a line already in the cart, holding what it says. */
+  const handleEditCartLine = useCallback((line: CartItem) => {
+    const item = menuItems.find((m) => m.id === line.menuId)
+    if (!item) return
+    setEditingLine(line)
+    setProductToCustomize(item)
+    setCustomizationOpen(true)
+  }, [menuItems])
+
+  /**
+   * Save an edit back onto its line.
+   *
+   * The line's id encodes its customizations, so editing one changes its
+   * identity. If that lands on a line the cart already holds - two of the same
+   * drink, and someone adds "no ice" to the one that already had it - the two
+   * are the same thing now and merge, rather than sitting as duplicate rows a
+   * bartender has to reconcile.
+   */
+  const handleSaveCartLine = (line: CartItem, selection: { sugar: string; shot: string; isTakeaway: boolean; note: string; price: number }) => {
+    const nextId = `${line.menuId}-${selection.sugar}-${selection.shot}-${selection.isTakeaway}-${selection.note}`
+    setCart((prev) => {
+      // A different line that already carries the identity this one is moving
+      // to. Undefined when nothing about the line actually changed, because
+      // then nextId is still its own id.
+      const twin = prev.find((i) => i.id === nextId && i.id !== line.id)
+      return prev
+        .filter((i) => i.id !== twin?.id)
+        .map((i) =>
+          i.id === line.id
+            ? {
+              ...i,
+              id: nextId,
+              price: selection.price,
+              sugar: selection.sugar,
+              shot: selection.shot,
+              isTakeaway: selection.isTakeaway,
+              note: selection.note || undefined,
+              quantity: i.quantity + (twin?.quantity ?? 0),
+            }
+            : i
+        )
+    })
+    setEditingLine(null)
+    setProductToCustomize(null)
+  }
+
+  /** One confirm handler; which branch depends on whether a line is being edited. */
+  const handleDialogConfirm = (selection: {
+    menuId: string
+    name: string
+    localName?: string
+    price: number
+    sugar: string
+    shot: string
+    isTakeaway: boolean
+    note: string
+  }) => {
+    if (editingLine) {
+      handleSaveCartLine(editingLine, selection)
+      return
+    }
+    handleAddToCartWithCustomization(selection)
+  }
+
   const getCartSignature = () => {
     return JSON.stringify({
-      items: cart.map(i => ({ id: i.variationSizeId, qty: i.quantity, sugar: i.sugar, shot: i.shot, takeaway: i.isTakeaway })),
+      items: cart.map(i => ({ id: i.menuId, qty: i.quantity, sugar: i.sugar, shot: i.shot, takeaway: i.isTakeaway })),
       total,
       promoId: appliedPromo?.id,
       customerId: selectedCustomer?.id,
@@ -1083,14 +1124,12 @@ function POSPageInner() {
         body: JSON.stringify({
           id: resumedOrderId,
           items: cart.map(i => ({
-            variationSizeId: i.variationSizeId,
+            menuId: i.menuId,
             name: i.name,
             price: i.price,
             quantity: i.quantity,
             sugarLevel: i.sugar,
-            shotType: i.shot,
-            variation: i.variation,
-            size: i.size
+            shotType: i.shot
           })),
           total, subtotal, tax, discount,
           promoId: appliedPromo?.id,
@@ -1178,14 +1217,12 @@ function POSPageInner() {
         body: JSON.stringify({
           id: resumedOrderId,
           items: cart.map(i => ({
-            variationSizeId: i.variationSizeId,
+            menuId: i.menuId,
             name: i.localName ? `${i.localName} (${i.name})` : i.name,
             price: i.price,
             quantity: i.quantity,
             sugarLevel: i.sugar,
             shotType: i.shot,
-            variation: i.variation,
-            size: i.size,
             isTakeaway: i.isTakeaway,
             note: i.note
           })),
@@ -1241,7 +1278,7 @@ function POSPageInner() {
           id: resumedOrderId,
           items: cart.map(i => ({
             id: i.id,
-            variationSizeId: i.variationSizeId,
+            menuId: i.menuId,
             name: i.name,
             price: i.price,
             quantity: i.quantity
@@ -1289,8 +1326,6 @@ function POSPageInner() {
       name: i.name,
       quantity: i.quantity,
       total: i.price * i.quantity,
-      variation: i.variation ?? null,
-      size: i.size ?? null,
       sugar: i.sugar ?? null,
       shot: i.shot ?? null,
       isTakeaway: i.isTakeaway,
@@ -1394,7 +1429,13 @@ function POSPageInner() {
             localName: i.localName,
             price: i.price,
             quantity: i.quantity,
+            isTakeaway: i.isTakeaway,
+            note: i.note,
           }))}
+          onEditLine={(lineId) => {
+            const line = cart.find((i) => i.id === lineId)
+            if (line) handleEditCartLine(line)
+          }}
           onQtyChange={(lineId, delta) =>
             setCart((prev) =>
               prev
@@ -1438,10 +1479,23 @@ function POSPageInner() {
           ) : (
             <div className="space-y-1">
               {cart.map((item) => (
-                <Card key={item.id} className="px-2 py-1.5">
+                <Card key={item.id} className="px-2 py-1.5 group/line">
                   <div className="flex items-center gap-2">
-                    {/* Name + badges */}
-                    <div className="flex-1 min-w-0">
+                    {/* Name + badges. Tapping here opens the line: a note, or
+                        takeaway. Adding the drink no longer asks those
+                        questions, so this is where they live now, and this is
+                        where a bartender already looks when a customer says
+                        "no ice" after the round is rung up. The quantity and
+                        remove controls keep their own hit areas on the right,
+                        so a mis-tap changes a note rather than a total. */}
+                    <button
+                      type="button"
+                      onClick={() => handleEditCartLine(item)}
+                      aria-label={`${t.edit} ${item.localName || item.name}`}
+                      className="flex-1 min-w-0 text-left -mx-1 px-1 py-0.5 rounded
+                                 transition-colors duration-150 hover:bg-slate-50
+                                 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500"
+                    >
                       <div className="flex items-baseline gap-1 flex-wrap">
                         <h4 className="text-sm font-bold text-slate-800 leading-tight truncate">
                           {item.localName || item.name}
@@ -1449,16 +1503,6 @@ function POSPageInner() {
                         {item.localName && <span className="text-[10px] text-slate-400 truncate">({item.name})</span>}
                       </div>
                       <div className="flex flex-wrap gap-1 mt-0.5">
-                        {item.variation && !item.variation.toLowerCase().includes('normal') && !item.variation.toLowerCase().includes('standard') && (
-                          <span className="text-[10px] bg-amber-50 px-1.5 py-0.5 rounded-full text-amber-700 border border-amber-100 font-bold uppercase">
-                            {item.variation === 'HOT' ? t.hot : item.variation === 'ICE' ? t.ice : item.variation === 'BLEND' ? t.blend : item.variation}
-                          </span>
-                        )}
-                        {item.size && !item.size.toLowerCase().includes('normal') && !item.size.toLowerCase().includes('standard') && (
-                          <span className="text-[10px] bg-slate-100 px-1.5 py-0.5 rounded-full text-slate-600 border border-slate-200 font-bold">
-                            {item.size === 'S' ? t.s_size : item.size === 'M' ? t.m_size : item.size === 'L' ? t.l_size : item.size}
-                          </span>
-                        )}
                         {item.sugar && item.sugar !== '100%' && !item.sugar.toLowerCase().includes('normal') && !item.sugar.toLowerCase().includes('standard') && (
                           <span className="flex items-center gap-0.5 text-[10px] bg-slate-50 px-1.5 py-0.5 rounded text-slate-500 border border-slate-100">
                             {item.sugar === "No Sweet" && <CandyOff className="w-3 h-3" />}
@@ -1484,8 +1528,18 @@ function POSPageInner() {
                             <StickyNote className="w-3 h-3 shrink-0" /> {item.note}
                           </span>
                         )}
+                        {/* Nothing on this line yet, so say the capability
+                            exists. Always visible on the till's touch screen;
+                            a mouse only needs it on hover, where it would
+                            otherwise be clutter on every row of a long cart. */}
+                        {!item.note && !item.isTakeaway && (
+                          <span className="flex items-center gap-1 text-[10px] text-slate-400 transition-opacity duration-150
+                                           pointer-fine:opacity-0 pointer-fine:group-hover/line:opacity-100">
+                            <StickyNote className="w-3 h-3 shrink-0" /> {t.prep_note}
+                          </span>
+                        )}
                       </div>
-                    </div>
+                    </button>
 
                     {/* Qty controls + price */}
                     <div className="flex items-center gap-1.5 flex-shrink-0">
@@ -2289,14 +2343,16 @@ function POSPageInner() {
         {productToCustomize && (
           <CustomizationDialog
             isOpen={customizationOpen}
-            onClose={() => { setCustomizationOpen(false); setProductToCustomize(null); }}
-            onConfirm={handleAddToCartWithCustomization}
+            onClose={() => { setCustomizationOpen(false); setProductToCustomize(null); setEditingLine(null); }}
+            onConfirm={handleDialogConfirm}
             menuName={productToCustomize.name}
             localName={productToCustomize.localName}
-            variations={productToCustomize.variations || []}
+            menuId={productToCustomize.id}
+            price={productToCustomize.price}
             hasSugarLevel={productToCustomize.hasSugarLevel}
             hasShotType={productToCustomize.hasShotType}
             imageUrl={productToCustomize.image}
+            editing={editingLine}
           />
         )}
 

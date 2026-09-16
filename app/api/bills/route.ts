@@ -84,6 +84,12 @@ export async function GET(request: Request) {
             voidReason: i.voidReason,
             voidNote: i.voidNote,
             voidedBy: i.voidedBy?.name ?? null,
+            // What the bar was actually told to do with this line. The column
+            // has been filled since prep notes shipped, but this mapper picked
+            // its fields by hand and never listed it, so "no ice" was stored on
+            // every copy of the order and shown on none of them here.
+            note: i.note ?? null,
+            isTakeaway: Boolean(i.isTakeaway),
             // What a package actually delivered, so history reads the same as
             // the ticket and the printed slip did on the night (req #9).
             swaps: i.swaps ?? [],

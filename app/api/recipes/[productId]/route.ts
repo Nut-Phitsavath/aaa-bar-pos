@@ -43,19 +43,17 @@ export async function POST(
 ) {
     try {
         const { productId } = await params
-        const { ingredientId, quantity, variationSizeId } = await request.json()
+        const { ingredientId, quantity } = await request.json()
 
         if (!ingredientId || !quantity) {
             return NextResponse.json({ error: 'Ingredient and quantity are required' }, { status: 400 })
         }
 
-        // Avoid upsert with nulls in compound unique constraints (Prisma limitation on some DBs)
-        const targetSizeId = variationSizeId || null
-        
+        // Look up any existing row for this item/ingredient pair, then update
+        // or create - simpler than an upsert against a compound unique key.
         const existing = await prisma.recipe.findFirst({
             where: {
                 menuId: productId,
-                variationSizeId: targetSizeId,
                 ingredientId
             }
         })
@@ -70,7 +68,6 @@ export async function POST(
             recipe = await prisma.recipe.create({
                 data: {
                     menuId: productId,
-                    variationSizeId: targetSizeId,
                     ingredientId,
                     quantity: parseFloat(quantity.toString())
                 }
@@ -92,17 +89,14 @@ export async function DELETE(
         const { productId } = await params
         const { searchParams } = new URL(request.url)
         const ingredientId = searchParams.get('ingredientId')
-        const variationSizeId = searchParams.get('variationSizeId')
 
         if (!ingredientId) {
             return NextResponse.json({ error: 'Ingredient ID is required' }, { status: 400 })
         }
 
-        // Use deleteMany to avoid compound unique constraint 'must not be null' issue
         await prisma.recipe.deleteMany({
             where: {
                 menuId: productId,
-                variationSizeId: variationSizeId === 'null' ? null : (variationSizeId || null),
                 ingredientId
             }
         })

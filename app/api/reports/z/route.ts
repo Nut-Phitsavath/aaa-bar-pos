@@ -52,7 +52,7 @@ export async function GET(request: Request) {
             include: {
                 table: { select: { name: true } },
                 customer: { select: { name: true } },
-                orders: { select: { status: true, total: true } },
+                orders: { select: { status: true, total: true, tax: true, items: { select: { total: true, voidedAt: true } } } },
                 payments: true
             }
         })
@@ -65,6 +65,13 @@ export async function GET(request: Request) {
         let cashInDrawer = 0
         // Money taken today against bills that have not closed today.
         let onOpenBills = 0
+        // The three lines a Z-report is expected to carry and this one did not:
+        // the tax an accountant needs, and the two ways money leaves after a
+        // sale is rung up. All three read from what was already stored.
+        let tax = 0
+        let tickets = 0
+        let voidedCount = 0
+        let voidedValue = 0
         const byMethod: Record<string, { amount: number; count: number }> = {}
 
         const add = (method: string, amount: number) => {
@@ -87,6 +94,28 @@ export async function GET(request: Request) {
             if (closedToday) {
                 gross += rawGross
                 discounts += rawGross - total
+
+                // VAT as it was actually charged, read off the order rather
+                // than recomputed from today's rate. Same principle the receipt
+                // follows: a bill settled at 7% stays a bill settled at 7% even
+                // after the owner changes the setting.
+                for (const o of s.orders) {
+                    if (o.status === 'CANCELLED' || o.status === 'HOLD') continue
+                    tax += o.tax ?? 0
+                    tickets += 1
+                }
+                // Struck lines, counted off every round including cancelled
+                // ones - a whole round voided is still money that was rung up
+                // and taken back off, which is the thing a manager is looking
+                // for when they close the till.
+                for (const o of s.orders) {
+                    for (const i of o.items) {
+                        if (!i.voidedAt) continue
+                        voidedCount += 1
+                        voidedValue += i.total
+                    }
+                }
+
                 const balance = balanceOf(total, s.payments)
                 if (balance > 0 && s.customerId) {
                     owed += balance
@@ -123,6 +152,17 @@ export async function GET(request: Request) {
             }
         }
 
+        // Money handed back. Dated by when the refund happened rather than when
+        // the tender was taken: a bill settled last night and refunded this
+        // afternoon leaves the drawer today, and today is the day that has to
+        // account for it.
+        const refunded = await prisma.payment.findMany({
+            where: { voidedAt: { gte: start, lte: end } },
+            select: { amount: true },
+        })
+        const refundCount = refunded.length
+        const refundValue = refunded.reduce((sum, r) => sum + r.amount, 0)
+
         // Walk-in counter sales never touch a session, so they are counted from
         // orders. Without this the report misses every takeaway sale.
         const walkIns = await prisma.order.findMany({
@@ -132,10 +172,17 @@ export async function GET(request: Request) {
                 isReportable: true,
                 createdAt: { gte: start, lte: end }
             },
-            select: { total: true, paymentMethod: true }
+            select: { total: true, tax: true, paymentMethod: true, items: { select: { total: true, voidedAt: true } } }
         })
         for (const o of walkIns) {
             gross += o.total
+            tax += o.tax ?? 0
+            tickets += 1
+            for (const i of o.items) {
+                if (!i.voidedAt) continue
+                voidedCount += 1
+                voidedValue += i.total
+            }
             const method = o.paymentMethod === "BANK_NOTE" ? "CASH" : o.paymentMethod
             add(method, o.total)
             if (method === "CASH") cashInDrawer += o.total
@@ -168,6 +215,18 @@ export async function GET(request: Request) {
             // Should be 0. Anything else is a bill that closed without its
             // money accounted for, and is worth a manager's attention.
             unreconciled: net - received - comped - owed,
+            // VAT as it was charged, summed from the orders themselves. The
+            // line an accountant opens this report for, and the one it did not
+            // have.
+            tax,
+            // How many rounds went out, so an average ticket is derivable
+            // without exporting anything.
+            tickets,
+            // Money rung up then struck off, and money handed back afterwards.
+            // Both belong on the document you close the day with rather than a
+            // screen away in an audit tab.
+            voids: { count: voidedCount, value: voidedValue },
+            refunds: { count: refundCount, value: refundValue },
             byMethod,
             comps,
             tabs,

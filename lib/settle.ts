@@ -1,7 +1,7 @@
 import { prisma } from './prisma'
 import { sessionTotal } from './sessions'
 import { isFullySettled, isConfirmed, billTotalOf } from './payments'
-import { DEFAULT_RATE_LAK, DEFAULT_RATE_USD } from './currency'
+import { DEFAULT_RATE_LAK, DEFAULT_RATE_USD, taxRateOf } from './currency'
 
 /**
  * Server-side settlement. The one place a table bill becomes closed.
@@ -33,17 +33,21 @@ export async function closeSessionIfSettled(sessionId: string): Promise<{
         return { closed: false, reason: 'BALANCE_OUTSTANDING', total }
     }
 
-    // Stamp the rate this bill settles at; after this it never reads settings
-    // again (req #18).
+    // Stamp the rates this bill settles at; after this it never reads settings
+    // again (req #18). VAT is stamped with them: an Order already stores its own
+    // taxAmount, and without this a table bill reprints at whatever rate the
+    // owner has since set.
     const rateRows = await prisma.setting.findMany({
-        where: { key: { in: ['rate_lak', 'rate_usd'] } }
+        where: { key: { in: ['rate_lak', 'rate_usd', 'taxRate', 'tax_rate'] } }
     })
+    const valueOf = (key: string) => rateRows.find((r) => r.key === key)?.value
     const rateOf = (key: string, fallback: number) => {
-        const parsed = Number(rateRows.find((r) => r.key === key)?.value)
+        const parsed = Number(valueOf(key))
         return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback
     }
     const fxRateLAK = rateOf('rate_lak', DEFAULT_RATE_LAK)
     const fxRateUSD = rateOf('rate_usd', DEFAULT_RATE_USD)
+    const taxRate = taxRateOf(valueOf('taxRate') ?? valueOf('tax_rate'))
 
     const openShift = await prisma.shift.findFirst({ where: { status: 'OPEN' } })
     const closedAt = new Date()
@@ -80,7 +84,7 @@ export async function closeSessionIfSettled(sessionId: string): Promise<{
 
         await tx.tableSession.update({
             where: { id: sessionId },
-            data: { status: 'CLOSED', closedAt, fxRateLAK, fxRateUSD }
+            data: { status: 'CLOSED', closedAt, fxRateLAK, fxRateUSD, taxRate }
         })
     })
 
