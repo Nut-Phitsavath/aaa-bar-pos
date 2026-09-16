@@ -6,8 +6,8 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { canCloseShift } from '@/lib/shift-guard'
 import { verifyManager } from '@/lib/manager-auth'
-import { sessionTotal } from '@/lib/sessions'
-import { billTotalOf, balanceOf } from '@/lib/payments'
+import { sessionTotal, sessionBillTotal } from '@/lib/sessions'
+import { balanceOf } from '@/lib/payments'
 import { spawn } from "child_process"
 
 // GET /api/shifts?status=OPEN - Get current open shift or all shifts
@@ -132,7 +132,7 @@ export async function PUT(request: Request) {
                 id: s.id,
                 table: s.table.name,
                 balance: balanceOf(
-                    billTotalOf(sessionTotal(s.orders), s.discountType, s.discountValue),
+                    sessionBillTotal(s),
                     s.payments
                 ),
             }))

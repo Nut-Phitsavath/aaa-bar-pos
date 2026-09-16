@@ -1,3 +1,5 @@
+import { billTotalOf } from './payments.ts'
+
 /**
  * Open table sessions: bill math and lifecycle rules.
  *
@@ -19,6 +21,52 @@ export function sessionTotal(orders: SessionOrderLike[]): number {
     return orders
         .filter((o) => (BILLABLE_ORDER_STATUSES as readonly string[]).includes(o.status))
         .reduce((sum, o) => sum + (o.total || 0), 0)
+}
+
+/** Everything needed to price a bill. Exactly what a session row carries. */
+export type PricedSession = {
+    orders: SessionOrderLike[]
+    discountType?: string | null
+    discountValue?: number | null
+    /**
+     * What a promotion took off, snapshotted when it was applied.
+     *
+     * REQUIRED, not optional, and nullable rather than absent. Optional would
+     * let any of the eighteen queries that price a bill forget to select it and
+     * silently price the promo at zero - the customer quoted one figure at the
+     * table and charged another at the till. Required means the compiler finds
+     * every one of them instead of a customer finding one.
+     */
+    promoDiscount: number | null
+}
+
+/**
+ * What this table owes. THE one place a bill is priced.
+ *
+ * Eighteen call sites used to spell out `billTotalOf(sessionTotal(orders),
+ * s.discountType, s.discountValue)` by hand - the floor plan, the bill screen,
+ * the printed ticket, close, comp, pay-later, payments, tabs, the Z-report,
+ * the export, the shift summary. Every one of them had to be found and edited
+ * to add a promotion to a bill, and the first one missed would have quoted a
+ * customer one figure and charged them another.
+ *
+ * Order of operations, and it matters: the promotion comes off first, then the
+ * manual per-table discount applies to what is left. A promo is part of what
+ * the drinks cost - it is priced off the menu - while a manager's discount is
+ * a write-off against the bill in front of them. Taking the manual discount off
+ * the gross and then the promo as well would discount the same baht twice.
+ *
+ * The round-up lives at the end, once, in billTotalOf (req #15).
+ */
+export function sessionBillTotal(session: PricedSession): number {
+    const gross = sessionTotal(session.orders)
+    const afterPromo = Math.max(0, gross - (session.promoDiscount || 0))
+    return billTotalOf(afterPromo, session.discountType, session.discountValue)
+}
+
+/** What came off the gross in total: the promotion plus the manual discount. */
+export function sessionSavings(session: PricedSession): number {
+    return sessionTotal(session.orders) - sessionBillTotal(session)
 }
 
 /**

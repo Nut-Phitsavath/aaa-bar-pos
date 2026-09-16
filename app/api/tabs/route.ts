@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getSessionUser } from '@/lib/auth'
-import { sessionTotal } from '@/lib/sessions'
-import { billTotalOf, balanceOf } from '@/lib/payments'
+import { sessionTotal, sessionBillTotal } from '@/lib/sessions'
+import { balanceOf } from '@/lib/payments'
 
 export const dynamic = 'force-dynamic'
 
@@ -40,7 +40,7 @@ export async function GET() {
 
         for (const s of sessions) {
             if (!s.customer) continue
-            const total = billTotalOf(sessionTotal(s.orders), s.discountType, s.discountValue)
+            const total = sessionBillTotal(s)
             const balance = balanceOf(total, s.payments)
             if (balance <= 0) continue // settled tabs drop off the list
 

@@ -1,6 +1,6 @@
 import { prisma } from './prisma'
-import { sessionTotal } from './sessions'
-import { billTotalOf, balanceOf } from './payments'
+import { sessionTotal, sessionBillTotal } from './sessions'
+import { balanceOf } from './payments'
 import type { OpenBill } from './tabs'
 
 /**
@@ -27,7 +27,7 @@ export async function outstandingForCustomer(customerId: string): Promise<{
 
     const bills = sessions
         .map((s) => {
-            const billTotal = billTotalOf(sessionTotal(s.orders), s.discountType, s.discountValue)
+            const billTotal = sessionBillTotal(s)
             return {
                 id: s.id,
                 table: s.table.name,
@@ -54,7 +54,7 @@ export async function outstandingByCustomer(): Promise<Map<string, number>> {
     const owed = new Map<string, number>()
     for (const s of sessions) {
         if (!s.customerId) continue
-        const billTotal = billTotalOf(sessionTotal(s.orders), s.discountType, s.discountValue)
+        const billTotal = sessionBillTotal(s)
         const balance = balanceOf(billTotal, s.payments)
         if (balance <= 0) continue
         owed.set(s.customerId, (owed.get(s.customerId) ?? 0) + balance)

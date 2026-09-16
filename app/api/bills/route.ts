@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { startOfDay, endOfDay } from 'date-fns'
-import { sessionTotal, BILLABLE_ORDER_STATUSES } from '@/lib/sessions'
-import { billTotalOf, discountAmount, paidTotal } from '@/lib/payments'
+import { sessionTotal, BILLABLE_ORDER_STATUSES, sessionBillTotal } from '@/lib/sessions'
+import { discountAmount, paidTotal } from '@/lib/payments'
 import { tendersOf, billStatus } from '@/lib/bills'
 import { exceptionsOf } from '@/lib/bill-operations'
 
@@ -98,7 +98,7 @@ export async function GET(request: Request) {
         const tableBills = sessions.map((s) => {
             const billable = s.orders.filter((o) => BILLABLE.includes(o.status))
             const gross = sessionTotal(s.orders)
-            const total = billTotalOf(gross, s.discountType, s.discountValue)
+            const total = sessionBillTotal(s)
             const status = billStatus({
                 status: s.status,
                 total,

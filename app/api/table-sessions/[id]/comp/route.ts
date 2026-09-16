@@ -3,8 +3,8 @@ import { prisma } from '@/lib/prisma'
 import { requireOpenShift } from '@/lib/shift-guard'
 import { getSessionUser } from '@/lib/auth'
 import { verifyManager } from '@/lib/manager-auth'
-import { sessionTotal } from '@/lib/sessions'
-import { billTotalOf, balanceOf } from '@/lib/payments'
+import { sessionTotal, sessionBillTotal } from '@/lib/sessions'
+import { balanceOf } from '@/lib/payments'
 import { closeSessionIfSettled } from '@/lib/settle'
 
 export const dynamic = 'force-dynamic'
@@ -54,7 +54,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
             )
         }
 
-        const total = billTotalOf(sessionTotal(session.orders), session.discountType, session.discountValue)
+        const total = sessionBillTotal(session)
         const balance = balanceOf(total, session.payments)
 
         if (balance <= 0) {

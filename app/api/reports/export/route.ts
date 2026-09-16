@@ -2,8 +2,8 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getSessionUser } from '@/lib/auth'
 import { COUNTED_ORDER, COUNTED_LINE, periodDiscounts } from '@/lib/reporting'
-import { sessionTotal } from '@/lib/sessions'
-import { billTotalOf, isConfirmed } from '@/lib/payments'
+import { sessionTotal, sessionBillTotal } from '@/lib/sessions'
+import { isConfirmed } from '@/lib/payments'
 import * as XLSX from 'xlsx'
 
 export const dynamic = 'force-dynamic'
@@ -62,6 +62,7 @@ export async function GET(request: Request) {
                 closedAt: true,
                 discountType: true,
                 discountValue: true,
+                promoDiscount: true,
                 isOwnerVip: true,
                 table: { select: { name: true, area: true } },
                 customer: { select: { name: true } },
@@ -76,7 +77,7 @@ export async function GET(request: Request) {
 
         const bills = sessions.map((s) => {
             const gross = sessionTotal(s.orders)
-            const total = billTotalOf(gross, s.discountType, s.discountValue)
+            const total = sessionBillTotal(s)
             const minutes = s.closedAt
                 ? Math.max(0, Math.round((s.closedAt.getTime() - s.openedAt.getTime()) / 60000))
                 : null
@@ -156,9 +157,13 @@ export async function GET(request: Request) {
             _count: true,
         })
         const discountedSessions = await prisma.tableSession.findMany({
-            where: { discountType: { not: null }, orders: { some: { ...period, ...COUNTED_ORDER } } },
+            where: {
+                // Either kind of giveaway. Looking only for a discountType
+                // would miss a bill whose only saving was a promotion, and net
+                // revenue would then disagree with what that bill charged.
+                OR: [{ discountType: { not: null } }, { promoId: { not: null } }], orders: { some: { ...period, ...COUNTED_ORDER } } },
             select: {
-                discountType: true, discountValue: true,
+                discountType: true, discountValue: true, promoDiscount: true,
                 orders: { where: COUNTED_ORDER, select: { status: true, total: true } },
             },
         })

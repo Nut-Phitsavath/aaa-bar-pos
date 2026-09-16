@@ -2,8 +2,7 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { barHour, tradingDay, tradingHours } from '@/lib/trading-day'
 import { recipeCost, pourCost, verdictFor, bandFor } from '@/lib/pour-cost'
-import { sessionTotal } from '@/lib/sessions'
-import { billTotalOf } from '@/lib/payments'
+import { sessionTotal, sessionBillTotal } from '@/lib/sessions'
 // One definition of a countable sale, shared with the export and the Z-report
 // rather than re-decided here. See lib/reporting.ts for what drifted.
 import { COUNTED_ORDER, COUNTED_LINE, periodDiscounts } from '@/lib/reporting'
@@ -136,6 +135,7 @@ export async function GET(request: Request) {
                 closedAt: true,
                 discountType: true,
                 discountValue: true,
+                promoDiscount: true,
                 table: { select: { area: true } },
                 orders: { select: { status: true, total: true } },
             }
@@ -146,7 +146,7 @@ export async function GET(request: Request) {
             const area = s.table?.area || 'Unknown'
             if (!areaMap.has(area)) areaMap.set(area, { area, revenue: 0, bills: 0, minutes: 0 })
             const entry = areaMap.get(area)
-            entry.revenue += billTotalOf(sessionTotal(s.orders), s.discountType, s.discountValue)
+            entry.revenue += sessionBillTotal(s)
             entry.bills += 1
             // Clamped at zero: two tills on a bar's wifi do not agree to the
             // second, and a negative length would drag an average sideways.
@@ -446,11 +446,11 @@ export async function GET(request: Request) {
         // a bar-shaped deal ("15 Free 5" is a beer crate, not a cafe offer),
         // and an empty report is how you find out a feature is not being used.
         //
-        // What it can see is limited by something upstream: Order.promoId is
-        // only written on the walk-in counter path, so a promotion cannot
-        // currently attach to a table bill at all. Until it can, this chart is
-        // counter sales only - which on this bar is 30 orders against 204
-        // table bills. That gap is the thing to fix, not this report.
+        // Counts both paths now. A promotion used to be able to land only on a
+        // walk-in counter order, which made this chart blind to the 87% of
+        // trade that goes through a table; a bill can carry one too, so the
+        // figures below are the deal's whole effect rather than the sliver of
+        // it that happened at the counter.
         const promoOrders = await prisma.order.findMany({
             where: {
                 createdAt: { gte: startDate, lte: endDate },
@@ -470,6 +470,31 @@ export async function GET(request: Request) {
             entry.totalDiscount += o.discount
             entry.totalRevenue += o.total
         })
+        // ...and the same deal applied to a table bill.
+        const promoSessions = await prisma.tableSession.findMany({
+            where: {
+                promoId: { not: null },
+                closedAt: { gte: startDate, lte: endDate },
+            },
+            select: {
+                discountType: true, discountValue: true, promoDiscount: true,
+                promotion: { select: { name: true, code: true } },
+                orders: { where: COUNTED_ORDER, select: { status: true, total: true } },
+            }
+        })
+        promoSessions.forEach(s => {
+            const name = s.promotion?.name || "Unknown"
+            if (!promoMap.has(name)) {
+                promoMap.set(name, { name, code: s.promotion?.code ?? null, usageCount: 0, totalDiscount: 0, totalRevenue: 0 })
+            }
+            const entry = promoMap.get(name)
+            entry.usageCount += 1
+            entry.totalDiscount += s.promoDiscount || 0
+            // What the bill actually charged, so "revenue gained" means the
+            // same thing on both paths.
+            entry.totalRevenue += sessionBillTotal(s)
+        })
+
         const promoImpact = Array.from(promoMap.values()).sort((a, b) => b.totalRevenue - a.totalRevenue)
 
         // 7. Summary
@@ -489,7 +514,10 @@ export async function GET(request: Request) {
         // round-up, because that is what the customer was actually charged.
         const discountedSessions = await prisma.tableSession.findMany({
             where: {
-                discountType: { not: null },
+                // Either kind of giveaway. Looking only for a discountType
+                // would miss a bill whose only saving was a promotion, and net
+                // revenue would then disagree with what that bill charged.
+                OR: [{ discountType: { not: null } }, { promoId: { not: null } }],
                 orders: {
                     some: {
                         createdAt: { gte: startDate, lte: endDate },
@@ -500,6 +528,7 @@ export async function GET(request: Request) {
             select: {
                 discountType: true,
                 discountValue: true,
+                promoDiscount: true,
                 // Priced over the same orders the revenue above is summed
                 // from, not over everything on the table. The bill screen
                 // counts a SENT round because the customer is going to pay for

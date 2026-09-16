@@ -5,6 +5,8 @@ import { cookies } from 'next/headers'
 import { calculateInclusiveTax } from '@/lib/currency'
 import { promoBlocker, promoDiscountFor } from '@/lib/promotions'
 import { decrementStock } from '@/lib/stock'
+// A bill's promo is a snapshot; adding a round can change what it is worth.
+import { refreshSessionPromo } from '@/lib/session-promo'
 import { requireOpenShift } from '@/lib/shift-guard'
 
 // Force dynamic to prevent caching issues with Orders
@@ -547,6 +549,12 @@ export async function POST(request: Request) {
 
                 } // end money-only reversal block
             }
+
+            // The round is on the bill now, so the deal may be worth more -
+            // or newly worth something, if this is the round that met its
+            // minimum. Inside the transaction so the bill is never briefly
+            // priced with a stale discount.
+            if (sessionId) await refreshSessionPromo(tx as any, sessionId)
 
             return savedOrder
         })

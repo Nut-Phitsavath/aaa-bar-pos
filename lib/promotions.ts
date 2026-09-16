@@ -71,6 +71,52 @@ export type PromoLike = {
     startDate: string | Date
     endDate: string | Date
     minItems?: number | null
+    /** Which shelf the deal is about. Null = the whole bill. */
+    categoryId?: string | null
+}
+
+/** A line as the scope check sees it: what it is, how many, what it came to. */
+export type ScopedLine = {
+    categoryId?: string | null
+    quantity: number
+    total: number
+}
+
+/**
+ * The part of a bill a promotion is actually about.
+ *
+ * "15 Free 5" is a beer crate. Counting every line towards it meant a table
+ * that ordered fifteen snacks unlocked a beer deal, and then took the discount
+ * off the snacks too - the bug the schema comment described for months as "the
+ * open fix".
+ *
+ * An unscoped promo (categoryId null) still sees the whole bill, which is what
+ * a blanket "10% off tonight" wants.
+ */
+export function scopeOf(lines: ScopedLine[], categoryId?: string | null) {
+    const inScope = categoryId ? lines.filter((l) => l.categoryId === categoryId) : lines
+    return {
+        count: inScope.reduce((n, l) => n + (l.quantity || 0), 0),
+        subtotal: inScope.reduce((n, l) => n + (l.total || 0), 0),
+    }
+}
+
+/**
+ * What a promotion takes off a bill, scoped to its own category.
+ *
+ * The single entry point for pricing a promo against a set of lines: it works
+ * out the scope and then applies the same clamped arithmetic the counter path
+ * has always used, so a deal cannot mean one thing at the till and another on
+ * a table.
+ */
+export function promoDiscountForLines(
+    promo: (PromoLike & { categoryId?: string | null }) | null | undefined,
+    lines: ScopedLine[],
+    now: Date = new Date()
+): number {
+    if (!promo) return 0
+    const { count, subtotal } = scopeOf(lines, promo.categoryId)
+    return promoDiscountFor(promo, subtotal, count, now)
 }
 
 // Why this promo can't be used right now. null = it can.

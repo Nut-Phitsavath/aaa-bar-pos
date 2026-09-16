@@ -16,43 +16,43 @@ test('a period with no discounted bills gives back nothing', () => {
 test('a percent discount is priced off the bill, round-up included', () => {
     // 1,000 less 10% is 900 exactly, so nothing to round.
     assert.equal(
-        periodDiscounts([{ discountType: 'PERCENT', discountValue: 10, orders: [order(1000)] }]),
+        periodDiscounts([{ discountType: 'PERCENT', discountValue: 10, promoDiscount: null, orders: [order(1000)] }]),
         100
     )
     // 999 less 10% is 899.1, which the customer pays as 900 - so the bar gave
     // away 99, not 99.9. The round-up is the house's, and the discount figure
     // has to agree with the bill the customer was handed.
     assert.equal(
-        periodDiscounts([{ discountType: 'PERCENT', discountValue: 10, orders: [order(999)] }]),
+        periodDiscounts([{ discountType: 'PERCENT', discountValue: 10, promoDiscount: null, orders: [order(999)] }]),
         99
     )
 })
 
 test('a fixed discount comes straight off', () => {
     assert.equal(
-        periodDiscounts([{ discountType: 'FIXED', discountValue: 250, orders: [order(1000)] }]),
+        periodDiscounts([{ discountType: 'FIXED', discountValue: 250, promoDiscount: null, orders: [order(1000)] }]),
         250
     )
 })
 
 test('a discount bigger than the bill makes it free, never negative', () => {
     assert.equal(
-        periodDiscounts([{ discountType: 'FIXED', discountValue: 5000, orders: [order(1000)] }]),
+        periodDiscounts([{ discountType: 'FIXED', discountValue: 5000, promoDiscount: null, orders: [order(1000)] }]),
         1000
     )
 })
 
 test('an undiscounted session contributes nothing', () => {
     assert.equal(
-        periodDiscounts([{ discountType: null, discountValue: null, orders: [order(1000)] }]),
+        periodDiscounts([{ discountType: null, discountValue: null, promoDiscount: null, orders: [order(1000)] }]),
         0
     )
 })
 
 test('discounts sum across bills', () => {
     const total = periodDiscounts([
-        { discountType: 'PERCENT', discountValue: 10, orders: [order(1000)] },
-        { discountType: 'FIXED', discountValue: 50, orders: [order(400)] },
+        { discountType: 'PERCENT', discountValue: 10, promoDiscount: null, orders: [order(1000)] },
+        { discountType: 'FIXED', discountValue: 50, promoDiscount: null, orders: [order(400)] },
     ])
     assert.equal(total, 150)
 })
@@ -62,10 +62,10 @@ test('a session is priced over the orders it is given, not everything on the tab
     // and must not widen the base the discount comes off - that mismatch is
     // exactly what put the reports page and its own cross-check ฿297 apart.
     const counted = periodDiscounts([
-        { discountType: 'PERCENT', discountValue: 10, orders: [order(1000)] },
+        { discountType: 'PERCENT', discountValue: 10, promoDiscount: null, orders: [order(1000)] },
     ])
     const ifSentLeaked = periodDiscounts([
-        { discountType: 'PERCENT', discountValue: 10, orders: [order(1000), order(500, 'SENT')] },
+        { discountType: 'PERCENT', discountValue: 10, promoDiscount: null, orders: [order(1000), order(500, 'SENT')] },
     ])
     assert.equal(counted, 100)
     assert.equal(ifSentLeaked, 150)

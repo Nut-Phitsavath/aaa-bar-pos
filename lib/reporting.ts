@@ -12,7 +12,7 @@
  * can be tested without a database and a route cannot quietly fork it.
  */
 
-import { sessionTotal, type SessionOrderLike } from './sessions.ts'
+import { sessionTotal, type SessionOrderLike, sessionBillTotal } from './sessions.ts'
 import { billTotalOf } from './payments.ts'
 
 /**
@@ -38,11 +38,20 @@ export const COUNTED_LINE = { voidedAt: null } as const
 export type DiscountedSession = {
     discountType: string | null
     discountValue: number | null
+    /** Required, not optional - see the note on PricedSession. */
+    promoDiscount: number | null
     orders: SessionOrderLike[]
 }
 
 /**
- * What the bar gave away at the table over a period (requirement #15).
+ * What the bar gave away at the table over a period.
+ *
+ * Both kinds of giveaway: the manual per-table discount a manager authorises
+ * (req #15) and whatever a promotion took off. They are summed rather than
+ * reported apart because this figure has one job - to be the difference
+ * between what was rung up and what was billed - and a "discounts" total that
+ * quietly omitted promotions would put net revenue back out of step with the
+ * bills, which is the whole fault this function exists to have fixed.
  *
  * `Order.discount` is the cafe's per-order discount and this bar has never
  * written it - measured across the whole database it is 0 on every order, while
@@ -64,7 +73,7 @@ export type DiscountedSession = {
 export function periodDiscounts(sessions: DiscountedSession[]): number {
     return sessions.reduce((sum, s) => {
         const gross = sessionTotal(s.orders)
-        return sum + (gross - billTotalOf(gross, s.discountType, s.discountValue))
+        return sum + (gross - sessionBillTotal(s))
     }, 0)
 }
 

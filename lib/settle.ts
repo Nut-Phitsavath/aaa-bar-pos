@@ -1,6 +1,6 @@
 import { prisma } from './prisma'
-import { sessionTotal } from './sessions'
-import { isFullySettled, isConfirmed, billTotalOf } from './payments'
+import { sessionTotal, sessionBillTotal } from './sessions'
+import { isFullySettled, isConfirmed } from './payments'
 import { DEFAULT_RATE_LAK, DEFAULT_RATE_USD, taxRateOf } from './currency'
 
 /**
@@ -26,7 +26,7 @@ export async function closeSessionIfSettled(sessionId: string): Promise<{
     })
 
     if (!session) return { closed: false, reason: 'SESSION_NOT_FOUND' }
-    const total = billTotalOf(sessionTotal(session.orders), session.discountType, session.discountValue)
+    const total = sessionBillTotal(session)
     if (session.status === "CLOSED") return { closed: true, total }
 
     if (!isFullySettled(total, session.payments)) {

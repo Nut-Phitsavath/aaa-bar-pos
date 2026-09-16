@@ -808,12 +808,7 @@ export default function ReportsPage() {
             <Card>
               <CardHeader>
                 <CardTitle>{t.promotions_roi}</CardTitle>
-                {/* The limitation is stated on the card rather than left for
-                    someone to deduce from an empty grid. A report that under-
-                    counts silently is worse than one that says what it cannot
-                    see: promotions only attach to counter orders, and this bar
-                    sells through tables. */}
-                <CardDescription>{t.promo_counter_only}</CardDescription>
+                <CardDescription>{t.promo_efficiency}</CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">

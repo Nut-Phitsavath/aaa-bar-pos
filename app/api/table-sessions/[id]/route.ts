@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { sessionTotal } from '@/lib/sessions'
-import { balanceOf, changeDue, billTotalOf, discountAmount } from '@/lib/payments'
+import { sessionTotal, sessionBillTotal } from '@/lib/sessions'
+import { balanceOf, changeDue, discountAmount } from '@/lib/payments'
 import { DEFAULT_RATE_LAK, DEFAULT_RATE_USD, billRates, taxRateOf } from '@/lib/currency'
 import { outstandingForCustomer } from '@/lib/customer-tabs'
 import { componentIndex, contentsOf } from '@/lib/packages'
@@ -16,6 +16,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
         const session = await prisma.tableSession.findUnique({
             where: { id },
             include: {
+                // Name the deal, so the bill screen can say which one is on.
+                promotion: { select: { id: true, name: true, code: true } },
                 table: true,
                 orders: {
                     orderBy: { createdAt: 'asc' },
@@ -89,7 +91,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
             : 0
 
         const gross = sessionTotal(session.orders)
-        const total = billTotalOf(gross, session.discountType, session.discountValue)
+        const total = sessionBillTotal(session)
 
         // Built once for the whole bill: which components a package holds is
         // the same question for every line on it.
@@ -122,7 +124,21 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
             // owes after any discount. The bill screen shows both so a
             // reduction is visible rather than silently baked into one figure.
             gross,
-            discount: discountAmount(gross, session.discountType, session.discountValue),
+            // The promotion, and then the manual discount on what is left.
+            //
+            // Computed off the post-promo base, not the gross. Taking the
+            // manager's percentage off the full amount while the total is
+            // priced after the promo would leave the bill screen showing three
+            // numbers that do not add up - which on a settle screen is the
+            // moment a customer stops trusting the till.
+            promoId: session.promoId,
+            promoName: session.promotion?.name ?? null,
+            promoDiscount: session.promoDiscount ?? 0,
+            discount: discountAmount(
+                Math.max(0, gross - (session.promoDiscount ?? 0)),
+                session.discountType,
+                session.discountValue
+            ),
             total,
             // Derived here so the screen and the settle endpoint can never
             // disagree about whether this bill is paid.

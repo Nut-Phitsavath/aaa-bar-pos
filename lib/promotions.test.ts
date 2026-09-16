@@ -75,3 +75,79 @@ test('validation accepts a blank minItems as no minimum', () => {
     assert.equal(r.ok, true)
     assert.equal(r.ok && r.minItems, null)
 })
+
+// ---------------------------------------------------------------------------
+// Scoping a deal to a shelf, and pricing a promo onto a table bill.
+//
+// The bug these close: "15 Free 5" is a beer crate, and counting every line on
+// the bill towards it let fifteen snacks unlock a beer deal - and then took the
+// discount off the snacks as well. The schema carried a note calling this "the
+// open fix" for months.
+// ---------------------------------------------------------------------------
+
+import { scopeOf, promoDiscountForLines } from './promotions.ts'
+
+const BEER = 'cat-beer'
+const SNACKS = 'cat-snacks'
+
+const beerDeal = {
+    isActive: true,
+    discountType: 'percentage',
+    discountValue: 20,
+    startDate: new Date('2020-01-01'),
+    endDate: new Date('2030-01-01'),
+    minItems: 15,
+    categoryId: BEER,
+}
+
+test('a scoped promo only counts its own shelf towards the minimum', () => {
+    const snacksOnly = [{ categoryId: SNACKS, quantity: 20, total: 4000 }]
+    // Twenty snacks must not unlock a beer deal.
+    assert.equal(promoDiscountForLines(beerDeal, snacksOnly), 0)
+})
+
+test('a scoped promo discounts only its own shelf', () => {
+    const mixed = [
+        { categoryId: BEER, quantity: 15, total: 3000 },
+        { categoryId: SNACKS, quantity: 10, total: 5000 },
+    ]
+    // 20% of the beer alone, not of the 8,000 bill.
+    assert.equal(promoDiscountForLines(beerDeal, mixed), 600)
+})
+
+test('the minimum counts quantity, not lines', () => {
+    const oneBigLine = [{ categoryId: BEER, quantity: 15, total: 3000 }]
+    const manySmall = [
+        { categoryId: BEER, quantity: 7, total: 1400 },
+        { categoryId: BEER, quantity: 8, total: 1600 },
+    ]
+    assert.equal(promoDiscountForLines(beerDeal, oneBigLine), 600)
+    assert.equal(promoDiscountForLines(beerDeal, manySmall), 600)
+})
+
+test('one bottle short of the minimum is no deal', () => {
+    assert.equal(promoDiscountForLines(beerDeal, [{ categoryId: BEER, quantity: 14, total: 2800 }]), 0)
+})
+
+test('an unscoped promo still sees the whole bill', () => {
+    const blanket = { ...beerDeal, categoryId: null, minItems: null }
+    const mixed = [
+        { categoryId: BEER, quantity: 2, total: 400 },
+        { categoryId: SNACKS, quantity: 1, total: 600 },
+    ]
+    assert.equal(promoDiscountForLines(blanket, mixed), 200)
+})
+
+test('an expired deal takes nothing off, however much is in scope', () => {
+    const expired = { ...beerDeal, endDate: new Date('2020-06-01') }
+    assert.equal(promoDiscountForLines(expired, [{ categoryId: BEER, quantity: 50, total: 10000 }]), 0)
+})
+
+test('scopeOf reports what the deal can see', () => {
+    const lines = [
+        { categoryId: BEER, quantity: 15, total: 3000 },
+        { categoryId: SNACKS, quantity: 10, total: 5000 },
+    ]
+    assert.deepEqual(scopeOf(lines, BEER), { count: 15, subtotal: 3000 })
+    assert.deepEqual(scopeOf(lines, null), { count: 25, subtotal: 8000 })
+})

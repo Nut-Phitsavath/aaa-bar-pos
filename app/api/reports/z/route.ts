@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getSessionUser } from '@/lib/auth'
-import { sessionTotal } from '@/lib/sessions'
-import { billTotalOf, balanceOf, paidTotal, isConfirmed } from '@/lib/payments'
+import { sessionTotal, sessionBillTotal } from '@/lib/sessions'
+import { balanceOf, paidTotal, isConfirmed } from '@/lib/payments'
 
 export const dynamic = 'force-dynamic'
 
@@ -86,7 +86,7 @@ export async function GET(request: Request) {
 
         for (const s of sessions) {
             const rawGross = sessionTotal(s.orders)
-            const total = billTotalOf(rawGross, s.discountType, s.discountValue)
+            const total = sessionBillTotal(s)
 
             // Only count the sale itself on the day the bill closed; a tab
             // collected today must not book its drinks a second time.
