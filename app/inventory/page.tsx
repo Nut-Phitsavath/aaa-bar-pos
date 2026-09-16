@@ -448,11 +448,11 @@ export default function InventoryPage() {
           return 0
         }
 
-        // @ts-ignore
+        // @ts-expect-error sortConfig.key indexes a union the sort cannot narrow
         if (a[sortConfig.key] < b[sortConfig.key]) {
           return sortConfig.direction === 'asc' ? -1 : 1;
         }
-        // @ts-ignore
+        // @ts-expect-error same union as above
         if (a[sortConfig.key] > b[sortConfig.key]) {
           return sortConfig.direction === 'asc' ? 1 : -1;
         }

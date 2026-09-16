@@ -337,7 +337,7 @@ export async function POST(request: Request) {
                 const finalSize = item.size || item.cupSize;
 
                 // 3. Construct full descriptive name snapshot
-                let fullName = item.name || menuRecord?.name || "Item";
+                const fullName = item.name || menuRecord?.name || "Item";
 
                 // Line price comes from the DB (authoritative); cancellations keep
                 // the order's original snapshot price.
