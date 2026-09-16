@@ -81,7 +81,7 @@ export default function ReportsPage() {
     }
   }
 
-  const [refunds, setRefunds] = useState<any[]>([])
+  const [refunds, setRefunds] = useState<any>(null)
   const [isLoadingRefunds, setIsLoadingRefunds] = useState(false)
 
   const fetchRefunds = async () => {
@@ -1068,38 +1068,68 @@ export default function ReportsPage() {
 
           <TabsContent value="advanced" className="space-y-6">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Refund Tracking */}
+              {/* Money handed back.
+                  This listed cancelled ORDERS - rounds struck before anyone
+                  paid - under a heading promising refunds, so the one thing a
+                  manager opens this for, cash leaving the drawer after a sale,
+                  appeared nowhere on the page. It now reads Payment.voidedAt,
+                  the source the Z-report has used all along.
+
+                  Two names per row: one rang the money in, the other signed it
+                  back out. The pattern worth finding is the same name in the
+                  second column over and over. */}
               <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <History className="w-5 h-5 text-rose-500" />
-                    {t.refund_tracking}
-                  </CardTitle>
-                  <CardDescription>{t.all_cancelled_orders_reasons}</CardDescription>
+                <CardHeader className="flex flex-row items-start justify-between space-y-0">
+                  <div>
+                    <CardTitle className="flex items-center gap-2">
+                      <History className="w-5 h-5 text-rose-500" />
+                      {t.refund_tracking}
+                    </CardTitle>
+                    <CardDescription>{t.refunds_desc}</CardDescription>
+                  </div>
+                  {refunds?.totalCount > 0 && (
+                    <div className="text-right">
+                      <p className="text-xl font-black text-rose-600 tabular-nums">{formatTHB(refunds.totalValue)}</p>
+                      <p className="text-[10px] uppercase text-muted-foreground">{refunds.totalCount} {t.refunded}</p>
+                    </div>
+                  )}
                 </CardHeader>
                 <CardContent>
                   <div className="overflow-x-auto">
                     <table className="w-full text-sm">
                       <thead>
                         <tr className="border-b bg-muted/30 text-slate-500 font-bold">
-                          <th className="py-2 px-3 text-left">{t.order_label}</th>
-                          <th className="py-2 px-3 text-left">{t.customer}</th>
+                          <th className="py-2 px-3 text-left">{t.date_label}</th>
+                          <th className="py-2 px-3 text-left">{t.table}</th>
+                          <th className="py-2 px-3 text-left">{t.payment_method}</th>
                           <th className="py-2 px-3 text-right">{t.amount}</th>
+                          <th className="py-2 px-3 text-left">{t.staff}</th>
                           <th className="py-2 px-3 text-left">{t.reason}</th>
                         </tr>
                       </thead>
                       <tbody>
                         {isLoadingRefunds ? (
-                          <tr><td colSpan={4} className="py-10 text-center">{t.loading_refunds}</td></tr>
-                        ) : refunds.length === 0 ? (
-                          <tr><td colSpan={4} className="py-10 text-center italic text-muted-foreground">{t.no_refunds_found}</td></tr>
+                          <tr><td colSpan={6} className="py-10 text-center">{t.loading_refunds}</td></tr>
+                        ) : !refunds?.rows?.length ? (
+                          <tr><td colSpan={6} className="py-10 text-center italic text-muted-foreground">{t.no_refunds_found}</td></tr>
                         ) : (
-                          refunds.map((r: any) => (
+                          refunds.rows.map((r: any) => (
                             <tr key={r.id} className="border-b hover:bg-muted/10">
-                              <td className="py-2 px-3 font-medium text-slate-700">{r.orderNumber}</td>
-                              <td className="py-2 px-3 text-slate-500">{r.customerName}</td>
-                              <td className="py-2 px-3 text-right font-bold text-rose-600">{formatTHB(r.total)}</td>
-                              <td className="py-2 px-3 text-xs italic text-slate-400">{r.reason}</td>
+                              <td className="py-2 px-3 text-slate-500 whitespace-nowrap">
+                                {r.refundedAt ? format(new Date(r.refundedAt), "d MMM HH:mm") : "—"}
+                              </td>
+                              {/* A walk-in counter sale has no table; saying so
+                                  beats an empty cell. */}
+                              <td className="py-2 px-3 font-medium text-slate-700">{r.table ?? t.walk_in}</td>
+                              <td className="py-2 px-3 text-slate-500">{r.method}</td>
+                              <td className="py-2 px-3 text-right font-bold text-rose-600">{formatTHB(r.amount)}</td>
+                              <td className="py-2 px-3 text-xs text-slate-500">
+                                {r.refundedBy ?? "—"}
+                                {r.takenBy && r.takenBy !== r.refundedBy && (
+                                  <span className="text-slate-400"> · {r.takenBy}</span>
+                                )}
+                              </td>
+                              <td className="py-2 px-3 text-xs italic text-slate-400">{r.reason || "—"}</td>
                             </tr>
                           ))
                         )}
