@@ -141,3 +141,63 @@
     opacity: 0;
   }
 }
+/* Scroll containers
+   ------------------------------------------------------------------
+   `no-scrollbar` was on eight elements across four files and had never
+   been defined anywhere, so every one of them showed whatever the
+   platform draws by default - on Windows a grey slab wider than the
+   chip row it sits under. The class was always the intent; this is the
+   first time it does anything.
+
+   Scrollbars stay reachable by wheel, touch and keyboard. Only the
+   painted furniture goes. */
+.no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+/* A hidden scrollbar on a horizontal chip row costs nothing - the chips
+   themselves are cut off at the edge and say "keep going". A vertical
+   nav is different: the items below the fold have nothing to announce
+   them once the bar is gone, so the container fades at the edge it can
+   still scroll towards.
+
+   Scroll-driven, so the fade is only present when there is something
+   below. Browsers without `animation-timeline` skip the animation and
+   simply never fade, which is exactly where this started. */
+@supports (animation-timeline: scroll()) {
+  .scroll-fade-y {
+    animation: scroll-fade-bottom linear both;
+    animation-timeline: scroll(self block);
+    animation-range: contain;
+  }
+}
+
+@keyframes scroll-fade-bottom {
+  /* At the top and through the middle, the bottom edge is soft. */
+  0%,
+  85% {
+    mask-image: linear-gradient(to bottom, #000 calc(100% - 2rem), transparent 100%);
+  }
+
+  /* Landed at the bottom: nothing left to hint at, so the last item is
+     drawn at full strength rather than half-faded under the fold. */
+  100% {
+    mask-image: linear-gradient(to bottom, #000 100%, transparent 100%);
+  }
+}
+
+/* The mask animates a paint property, not layout, and a nav that fades
+   as it scrolls is motion the user is driving themselves - but honour
+   the preference anyway and keep a static soft edge. */
+@media (prefers-reduced-motion: reduce) {
+  .scroll-fade-y {
+    animation: none;
+    mask-image: linear-gradient(to bottom, #000 calc(100% - 2rem), transparent 100%);
+  }
+}
