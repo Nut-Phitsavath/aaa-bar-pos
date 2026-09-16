@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { barHour, tradingDay, tradingHours } from '@/lib/trading-day'
+import { recipeCost, pourCost, verdictFor, bandFor } from '@/lib/pour-cost'
 import { startOfDay, endOfDay } from 'date-fns'
 
 export async function GET(request: Request) {
@@ -59,7 +61,9 @@ export async function GET(request: Request) {
 
         const trendMap = new Map()
         orders.forEach(o => {
-            const date = o.createdAt.toISOString().split('T')[0]
+            // The night it belonged to, not the calendar date. Friday's
+            // takings run past midnight and stay Friday's.
+            const date = tradingDay(o.createdAt)
             if (!trendMap.has(date)) trendMap.set(date, { date, revenue: 0, orders: 0 })
             const entry = trendMap.get(date)
             entry.revenue += o.total
@@ -118,13 +122,30 @@ export async function GET(request: Request) {
         // 3. Hourly Sales
         const hourMap = new Map()
         orders.forEach(o => {
-            const hour = o.createdAt.getHours().toString().padStart(2, '0')
+            // The clock behind the bar, not the one the server is set to.
+            const hour = barHour(o.createdAt).toString().padStart(2, '0')
             if (!hourMap.has(hour)) hourMap.set(hour, { hour, revenue: 0, orders: 0 })
             const entry = hourMap.get(hour)
             entry.revenue += o.total
             entry.orders += 1
         })
-        const hourlySales = Array.from(hourMap.values()).sort((a, b) => a.hour.localeCompare(b.hour))
+        // Ordered as the night runs, not 00 to 23.
+        //
+        // Sorting the hour as a string put this bar's busiest stretch - 21:00
+        // through 02:00 - at opposite ends of the chart with its quietest hours
+        // in the middle, so one continuous evening was drawn as two mountains
+        // and a valley. Starting the axis at the trading-day boundary makes the
+        // night one unbroken run.
+        //
+        // All 24 hours, always, including the empty ones. Two reasons: a quiet
+        // hour reads as a gap rather than a column that silently closes up, and
+        // the axis stays the same width whatever range is selected, so two
+        // periods can be compared by eye. Trimming the dead hours was tried and
+        // removed - it made the chart's width depend on its data, and the
+        // afternoon being empty is itself worth seeing.
+        const hourlySales = tradingHours().map(
+            (hour) => hourMap.get(hour) ?? { hour, revenue: 0, orders: 0 }
+        )
 
         // 4. Payment Methods
         // How bills were actually settled.
@@ -257,8 +278,15 @@ export async function GET(request: Request) {
         // Get all menu items with recipes and ingredient costs
         const menuRecipes = await prisma.menu.findMany({
             include: {
+                // Pour-cost bands are per category - what is healthy for a beer
+                // is not what is healthy for a spirit - so the verdict needs it.
+                category: { select: { name: true } },
                 recipes: {
-                    include: { ingredient: { select: { cost: true } } }
+                    // purchaseMultiplier is not optional here: Ingredient.cost
+                    // is per purchase unit and Recipe.quantity is in base units,
+                    // so without the divisor a 30ml pour is priced as a whole
+                    // bottle.
+                    include: { ingredient: { select: { cost: true, purchaseMultiplier: true } } }
                 }
             }
         })
@@ -267,19 +295,38 @@ export async function GET(request: Request) {
         menuRecipes.forEach(menu => {
             // One recipe list per item now - no base/override split, since
             // there's no size axis left to override by.
-            const itemCost = menu.recipes
-                .reduce((sum, r) => sum + (r.quantity * r.ingredient.cost), 0)
+            //
+            // Through lib/pour-cost rather than multiplied by hand. This read
+            // `quantity * cost` since before the base-units migration, which
+            // was right when quantity was a fraction of a bottle and became
+            // wrong the moment it became millilitres: a Chivas set costed at
+            // 817,040 baht to sell for 3,500, and every margin figure in these
+            // reports was overstated by the ingredient's purchase multiplier.
+            // The recipe editor has been using the correct function all along.
+            const itemCost = recipeCost(menu.recipes.map((r) => ({
+                quantity: r.quantity,
+                costPerPurchaseUnit: r.ingredient.cost,
+                purchaseMultiplier: r.ingredient.purchaseMultiplier,
+            })))
 
             const price = menu.price
             const margin = price - itemCost
             const marginPercent = price > 0 ? (margin / price) * 100 : 0
+            const pourCostPct = pourCost(itemCost, price)
 
             marginData.push({
                 menuName: menu.name,
+                category: menu.category?.name ?? null,
                 price,
                 cost: itemCost,
                 margin,
-                marginPercent
+                marginPercent,
+                // The bar's own measure, with the verdict the recipe editor
+                // already shows: a spirit at 15% is underpoured or underpriced,
+                // one at 45% is being given away.
+                pourCostPct,
+                band: bandFor(menu.category?.name),
+                verdict: verdictFor(menu.category?.name, pourCostPct),
             })
         })
 
@@ -295,8 +342,15 @@ export async function GET(request: Request) {
             const menuRecord = menuRecipes.find(m => m.id === item.menuId)
 
             if (menuRecord) {
-                const itemCost = menuRecord.recipes
-                    .reduce((sum, r) => sum + (r.quantity * r.ingredient.cost), 0)
+                // Same correction as the margin table above: per base unit, not
+                // per bottle. This figure feeds totalCOGS and grossProfit, so
+                // while it was wrong the reports showed a bar losing money on
+                // every round it poured.
+                const itemCost = recipeCost(menuRecord.recipes.map((r) => ({
+                    quantity: r.quantity,
+                    costPerPurchaseUnit: r.ingredient.cost,
+                    purchaseMultiplier: r.ingredient.purchaseMultiplier,
+                })))
 
                 salesCost += itemCost * item.quantity
             }
