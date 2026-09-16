@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import {
     TrendingUp, TrendingDown, DollarSign, ShoppingBag,
     Calendar as CalendarIcon, Clock, Package, History, ArrowRightLeft,
-    Store, Wallet, ShoppingCart, AlertTriangle, Target, Users, CreditCard, ChevronDown, Award
+    Store, Wallet, ShoppingCart, AlertTriangle, Target, Users, CreditCard, ChevronDown
 } from "lucide-react"
 import { formatTHB } from "@/lib/currency"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
@@ -290,32 +290,6 @@ export default function MonitorPage() {
                                         </Bar>
                                     </BarChart>
                                 </ResponsiveContainer>
-                            </CardContent>
-                        </Card>
-
-                        {/* 6. Top Loyalty Customers (New) */}
-                        <Card className="border-none shadow-sm bg-white overflow-hidden">
-                            <CardHeader className="p-4 pb-2 flex flex-row items-center justify-between border-b border-slate-50">
-                                <CardTitle className="text-[10px] font-black uppercase tracking-widest text-emerald-600">{t.top_loyalty_members}</CardTitle>
-                                <Award className="w-3.5 h-3.5 text-emerald-500" />
-                            </CardHeader>
-                            <CardContent className="p-0">
-                                {data?.customerStats?.topLoyalty?.slice(0, 5).map((c: any, i: number) => (
-                                    <div key={i} className="flex items-center justify-between p-3 border-b border-slate-50 last:border-0">
-                                        <div className="flex items-center gap-3">
-                                            <div className="w-7 h-7 bg-emerald-50 rounded-full flex items-center justify-center text-[10px] font-black text-emerald-600 border border-emerald-100 uppercase">{c.name.slice(0, 1)}</div>
-                                            <div>
-                                                <p className="text-xs font-black text-slate-800 uppercase leading-none">{c.name}</p>
-                                                <p className="text-[9px] font-bold text-slate-400 mt-1 uppercase">{c.visitCount} {t.visits}</p>
-                                            </div>
-                                        </div>
-                                        <div className="text-right">
-                                            <p className="text-xs font-black text-emerald-700 leading-none">{c.loyaltyPoints} {t.pts}</p>
-                                            <p className="text-[9px] font-bold text-slate-400 mt-1">{formatTHB(c.totalSpent)}</p>
-                                        </div>
-                                    </div>
-                                ))}
-                                {(!data?.customerStats?.topLoyalty || data.customerStats.topLoyalty.length === 0) && <p className="p-4 text-xs text-center text-slate-400 italic">{t.no_member_data}</p>}
                             </CardContent>
                         </Card>
 

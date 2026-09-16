@@ -13,7 +13,8 @@
     "db:seed": "node prisma/seedBarData.js",
     "db:demo": "node prisma/seedDemoHistory.js",
     "db:migrate-units": "node prisma/migrateToBaseUnits.js",
-    "check:pourcost": "node prisma/checkPourCost.js"
+    "check:pourcost": "node prisma/checkPourCost.js",
+    "check:reports": "node prisma/checkReports.js"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

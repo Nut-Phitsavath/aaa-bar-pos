@@ -2,7 +2,12 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { barHour, tradingDay, tradingHours } from '@/lib/trading-day'
 import { recipeCost, pourCost, verdictFor, bandFor } from '@/lib/pour-cost'
+import { sessionTotal } from '@/lib/sessions'
+import { billTotalOf } from '@/lib/payments'
 import { startOfDay, endOfDay } from 'date-fns'
+
+/** Movement types whose `reason` column holds a reason a person chose. */
+const REASONED_TYPES = new Set(['SHOP_ADJUST', 'WITHDRAW'])
 
 export async function GET(request: Request) {
     try {
@@ -106,9 +111,67 @@ export async function GET(request: Request) {
             { name: 'Walk-in', revenue: walkInOrders.reduce((s, o) => s + o.total, 0), count: walkInOrders.length },
         ]
 
+        // 1b. Where in the room the money came from.
+        //
+        // `Table.area` has carried INDOOR / OUTDOOR / VIP and this bar's own
+        // named floors since the floor plan was built, and no report has ever
+        // grouped by it. For a bar with VIP rooms that is the first question an
+        // owner asks and the page could not answer it.
+        //
+        // Priced off the closed bill rather than the rounds, so a discounted
+        // VIP table is compared on what it actually paid. Keyed on closedAt for
+        // the same reason the Z-report is: a bill belongs to the night it was
+        // settled, and only a settled bill has a length.
+        //
+        // The figure worth reading here is revenuePerHour. Takings alone reward
+        // a table for sitting there all night; a VIP room that turns ฿8,000 in
+        // two hours and one that turns ฿9,000 in six are not the same table,
+        // and only the per-hour column says so.
+        const areaSessions = await prisma.tableSession.findMany({
+            where: { closedAt: { gte: startDate, lte: endDate } },
+            select: {
+                openedAt: true,
+                closedAt: true,
+                discountType: true,
+                discountValue: true,
+                table: { select: { area: true } },
+                orders: { select: { status: true, total: true } },
+            }
+        })
+
+        const areaMap = new Map()
+        areaSessions.forEach(s => {
+            const area = s.table?.area || 'Unknown'
+            if (!areaMap.has(area)) areaMap.set(area, { area, revenue: 0, bills: 0, minutes: 0 })
+            const entry = areaMap.get(area)
+            entry.revenue += billTotalOf(sessionTotal(s.orders), s.discountType, s.discountValue)
+            entry.bills += 1
+            // Clamped at zero: two tills on a bar's wifi do not agree to the
+            // second, and a negative length would drag an average sideways.
+            entry.minutes += Math.max(0, ((s.closedAt?.getTime() ?? 0) - s.openedAt.getTime()) / 60000)
+        })
+
+        const areaStats = Array.from(areaMap.values()).map(a => ({
+            area: a.area,
+            revenue: Math.round(a.revenue),
+            bills: a.bills,
+            avgBill: a.bills > 0 ? Math.round(a.revenue / a.bills) : 0,
+            avgMinutes: a.bills > 0 ? Math.round(a.minutes / a.bills) : 0,
+            revenuePerHour: a.minutes > 0 ? Math.round(a.revenue / (a.minutes / 60)) : 0,
+        })).sort((a, b) => b.revenue - a.revenue)
+
         // 2. Category Share
+        //
+        // Struck lines are not sales. Every per-item figure on this page reads
+        // this one query - category share, best sellers, worst sellers and the
+        // COGS that gross profit is built from - and none of them filtered the
+        // void stamp, so a drink rung up and taken back off still counted as
+        // sold and still charged the bar for its pour. The order's own total is
+        // recomputed on void, which is why the headline revenue was right while
+        // everything broken down by item was not.
         const orderItems = await prisma.orderItem.findMany({
             where: {
+                voidedAt: null,
                 order: {
                     createdAt: { gte: startDate, lte: endDate },
                     status: 'COMPLETED',
@@ -332,6 +395,11 @@ export async function GET(request: Request) {
         // 2. Daily COGS (Cost of Goods Sold)
         // a. From Sales
         let salesCost = 0
+        // Cost per category, accumulated in the same pass, so the category
+        // chart can carry the bar's own measure beside the revenue. Beer at
+        // 25% and spirits at 25% are not the same news, and a single
+        // bar-wide number hides which one moved.
+        const categoryCost = new Map<string, number>()
         orderItems.forEach(item => {
             const menuRecord = menuRecipes.find(m => m.id === item.menuId)
 
@@ -347,8 +415,22 @@ export async function GET(request: Request) {
                 })))
 
                 salesCost += itemCost * item.quantity
+
+                const catName = item.menu?.category.name || "Other"
+                categoryCost.set(catName, (categoryCost.get(catName) || 0) + itemCost * item.quantity)
             }
         })
+
+        // Pour cost per category, on the same rows the revenue came from.
+        for (const row of categoryShare) {
+            row.cost = Math.round(categoryCost.get(row.category) || 0)
+            row.pourCostPct = row.revenue > 0
+                ? Math.round((row.cost / row.revenue) * 1000) / 10
+                : null
+            row.band = bandFor(row.category)
+            row.verdict = verdictFor(row.category, row.pourCostPct ?? 0)
+        }
+
         // wastageCost will be calculated after inventoryTransactions is fetched below
 
         // 3. Inventory Shrinkage
@@ -356,36 +438,63 @@ export async function GET(request: Request) {
         let shrinkageCost = 0
         let shrinkageDetails: any[] = []
 
-        // 6. Promo Impact
-        const promoOrders = await prisma.order.findMany({
-            where: {
-                createdAt: { gte: startDate, lte: endDate },
-                status: 'COMPLETED',
-                isReportable: true,
-                promoId: { not: null }
-            },
-            include: { promotion: true }
-        })
-        const promoMap = new Map()
-        promoOrders.forEach(o => {
-            const name = o.promotion?.name || "Unknown"
-            if (!promoMap.has(name)) promoMap.set(name, { name, usageCount: 0, totalDiscount: 0, totalRevenue: 0 })
-            const entry = promoMap.get(name)
-            entry.usageCount += 1
-            entry.totalDiscount += o.discount
-            entry.totalRevenue += o.total
-        })
-        const promoImpact = Array.from(promoMap.values())
+        // Promotion ROI used to be computed here. The promotions engine is the
+        // cafe's and this bar has never run one: 0 promotions exist, and 0 of
+        // 570 orders carry a promo id. A bar discounts a table, by hand, with a
+        // manager's name against it - that is req #15, and it is reported as
+        // totalDiscounts below. The tab this fed drew an empty grid.
 
         // 7. Summary
-        const totalRevenue = orders.reduce((sum, o) => sum + o.total, 0)
-        const totalOrders = orders.length
-        const aov = totalOrders > 0 ? totalRevenue / totalOrders : 0
-        // Uses the same order set as every other figure above rather than its
-        // own query. The old form was `sum + o.discount || 0`, which parses as
-        // `(sum + o.discount) || 0` - it happened to work only because the
-        // running total was never zero after the first discounted order.
-        const totalDiscounts = orders.reduce((sum, o) => sum + (o.discount || 0), 0)
+
+        // What the bar gave away at the table (req #15).
+        //
+        // This summed `Order.discount`, which is the cafe's per-order discount
+        // and a column this bar has never written: measured across the whole
+        // database it is 0 on all 570 orders, while 27 table bills carry a
+        // PERCENT discount between them. So the KPI read "0 discounts" on a bar
+        // that discounts a table most nights, and - worse - every revenue and
+        // profit figure on the page stayed gross of money that was never taken,
+        // which is why this page and the Z-report disagreed on the same night.
+        //
+        // Priced through the same helper the bill screen and the Z-report use,
+        // so the three cannot drift apart again. The difference includes the
+        // round-up, because that is what the customer was actually charged.
+        const discountedSessions = await prisma.tableSession.findMany({
+            where: {
+                discountType: { not: null },
+                orders: {
+                    some: {
+                        createdAt: { gte: startDate, lte: endDate },
+                        status: 'COMPLETED',
+                        isReportable: true
+                    }
+                }
+            },
+            select: {
+                discountType: true,
+                discountValue: true,
+                // Priced over the same orders the revenue above is summed
+                // from, not over everything on the table. The bill screen
+                // counts a SENT round because the customer is going to pay for
+                // it; this page counts revenue as COMPLETED only, so pricing
+                // the discount on the wider set takes money off a base that
+                // was never added. Four rounds are sitting SENT on closed bills
+                // in this database and that alone moved the total by ฿297.
+                orders: {
+                    where: { status: 'COMPLETED', isReportable: true },
+                    select: { status: true, total: true }
+                }
+            }
+        })
+        // A discount is given against a whole bill, so the bill is counted
+        // whole rather than sliced at the range boundary. Table sessions here
+        // run about two hours, so one straddling midnight on the last day of a
+        // range is both rare and small next to the alternative, which is a
+        // discount figure that does not match any bill anyone can look at.
+        const totalDiscounts = discountedSessions.reduce((sum, s) => {
+            const gross = sessionTotal(s.orders)
+            return sum + (gross - billTotalOf(gross, s.discountType, s.discountValue))
+        }, 0)
 
         // Summary Stats (robustified)
         const summaryStats = await prisma.order.aggregate({
@@ -399,99 +508,72 @@ export async function GET(request: Request) {
             _avg: { total: true }
         })
 
+        const grossRevenue = summaryStats._sum?.total || 0
+        const totalOrders = (summaryStats._count as any) || 0
+        const netRevenue = grossRevenue - totalDiscounts
+
         // Final verification check for the user in logs
         if ((summaryStats._count as any) === 0) {
             const lastOrder = await prisma.order.findFirst({ orderBy: { createdAt: 'desc' } })
             console.log("Analytics Diagnostic: No orders in range. Last order in DB:", lastOrder?.createdAt)
         }
 
-        // Complimentary Orders Stats
-        const complimentaryStats = await prisma.order.aggregate({
+        // Owner VIP comps (req #16).
+        //
+        // This watched `isReportable: false` - the cafe's complimentary flag,
+        // which hid the order from reports entirely and which this bar has
+        // never set on a single row. A card built to show the owner what was
+        // given away read zero on six comped tables.
+        //
+        // A bar comp is an OWNER_VIP payment settling the bill, which is how
+        // the Z-report already reads it: the stock was poured, the sale was
+        // rung, and nobody paid. Voided tenders are excluded for the same
+        // reason they are everywhere else - a comp handed back is not a comp.
+        const compPayments = await prisma.payment.findMany({
             where: {
-                createdAt: { gte: startDate, lte: endDate },
-                status: 'COMPLETED',
-                isReportable: false
+                method: 'OWNER_VIP',
+                voidedAt: null,
+                createdAt: { gte: startDate, lte: endDate }
             },
-            _sum: { total: true },
-            _count: true
+            select: {
+                amount: true,
+                session: {
+                    select: {
+                        customer: { select: { name: true } },
+                        table: { select: { name: true } }
+                    }
+                }
+            }
         })
 
-        // Complimentary Orders by Customer
-        const complimentaryOrders = await prisma.order.findMany({
-            where: {
-                createdAt: { gte: startDate, lte: endDate },
-                status: 'COMPLETED',
-                isReportable: false,
-                customerId: { not: null }
-            },
-            include: { customer: true }
-        })
+        const complimentaryStats = {
+            _count: compPayments.length,
+            _sum: { total: compPayments.reduce((sum, p) => sum + p.amount, 0) }
+        }
 
         const complimentaryMap = new Map()
-        complimentaryOrders.forEach(o => {
-            const name = o.customer?.name || "Unknown"
+        compPayments.forEach(p => {
+            // Most comped tables are not a named regular, so the table is the
+            // next best answer to "who" - and it is the one staff remember.
+            const name = p.session?.customer?.name || p.session?.table?.name || "Unknown"
             if (!complimentaryMap.has(name)) {
                 complimentaryMap.set(name, { customerName: name, orderCount: 0, totalValue: 0 })
             }
             const entry = complimentaryMap.get(name)
             entry.orderCount += 1
-            entry.totalValue += o.total
+            entry.totalValue += p.amount
         })
         const complimentaryDetails = Array.from(complimentaryMap.values()).sort((a, b) => b.totalValue - a.totalValue)
 
-        // Customer Statistics
-        const memberOrders = await prisma.order.findMany({
-            where: {
-                createdAt: { gte: startDate, lte: endDate },
-                status: 'COMPLETED',
-                isReportable: true,
-                customerId: { not: null }
-            },
-            select: { total: true, pointsRedeemed: true }
-        })
-
-        const guestOrders = await prisma.order.findMany({
-            where: {
-                createdAt: { gte: startDate, lte: endDate },
-                status: 'COMPLETED',
-                isReportable: true,
-                customerId: null
-            },
-            select: { total: true }
-        })
-
-        const memberVsGuest = [
-            {
-                type: "Member",
-                count: memberOrders.length,
-                revenue: memberOrders.reduce((sum, o) => sum + o.total, 0)
-            },
-            {
-                type: "Guest",
-                count: guestOrders.length,
-                revenue: guestOrders.reduce((sum, o) => sum + o.total, 0)
-            }
-        ]
-
-        // Top Loyalty Customers
-        const topLoyalty = await prisma.customer.findMany({
-            orderBy: { loyaltyPoints: 'desc' },
-            take: 10,
-            select: {
-                name: true,
-                loyaltyPoints: true,
-                totalSpent: true,
-                visitCount: true
-            }
-        })
-
-        // Loyalty Points Stats
-        const allCustomers = await prisma.customer.findMany({
-            select: { loyaltyPoints: true }
-        })
-        const totalPointsEarned = allCustomers.reduce((sum, c) => sum + c.loyaltyPoints, 0)
-        const totalPointsRedeemed = memberOrders.reduce((sum, o) => sum + (o.pointsRedeemed || 0), 0)
-        const activeMembers = allCustomers.filter(c => c.loyaltyPoints > 0).length
+        // Member-vs-guest and the loyalty scheme used to be computed here and
+        // fed a whole Customers tab. Both are the cafe's: 0 of 570 orders carry
+        // a customer and 0 of 2 customers hold a point, so the pie drew 100%
+        // guest and the loyalty panel drew three zeroes, every time.
+        //
+        // The bar does have customers - a TableSession names one when a regular
+        // sits down - but that is for tabs and comps (req #16, #19), and both
+        // are already reported where they belong: the Z-report's tab lines, and
+        // the comp card above.
 
         // Inventory Transaction Stats
         const inventoryTransactions = await prisma.stockTransaction.findMany({
@@ -517,20 +599,64 @@ export async function GET(request: Request) {
             })
         const mostAdded = Array.from(addedMap.values()).sort((a, b) => b.quantity - a.quantity).slice(0, 10)
 
-        // Most Transferred to Shop
-        const transferMap = new Map()
+        // What actually left the shelf.
+        //
+        // This was "Most Transferred to Shop", reading TRANSFER rows. The bar
+        // has never written one - it does not run a warehouse-to-shop transfer
+        // step - so the card was permanently empty while the movement that
+        // matters, stock going out of the door as drinks, had no card at all.
+        //
+        // Valued at cost as well as counted, because "180 bottles" and "3,200
+        // baht" are the same fact told to two different people and only one of
+        // them orders stock. Cost is per purchase unit and quantity is in base
+        // units, so the multiplier divides - the same correction the margin
+        // table and the variance report already make.
+        const depletionMap = new Map()
         inventoryTransactions
-            .filter(t => t.type === 'TRANSFER')
+            .filter(t => t.type === 'SALE' && t.fromStore)
             .forEach(t => {
                 const name = t.ingredient.name
-                if (!transferMap.has(name)) {
-                    transferMap.set(name, { name, quantity: 0, unit: t.ingredient.unit, transactions: 0 })
+                const multiplier = t.ingredient.purchaseMultiplier || 1
+                if (!depletionMap.has(name)) {
+                    depletionMap.set(name, {
+                        name, quantity: 0,
+                        // Quantity is in base units, so the card needs what it
+                        // takes to render them: 700 of a 700ml bottle is one
+                        // bottle, and printing "700 bottle" is how a report
+                        // gets ignored.
+                        measureType: t.ingredient.measureType,
+                        purchaseUnit: t.ingredient.purchaseUnit,
+                        purchaseMultiplier: multiplier,
+                        valueAtCost: 0, transactions: 0,
+                    })
                 }
-                const entry = transferMap.get(name)
+                const entry = depletionMap.get(name)
+                entry.quantity += t.quantity
+                entry.valueAtCost += t.quantity * ((t.ingredient.cost || 0) / multiplier)
+                entry.transactions += 1
+            })
+        const depletion = Array.from(depletionMap.values())
+            .map(d => ({ ...d, valueAtCost: Math.round(d.valueAtCost) }))
+            .sort((a, b) => b.valueAtCost - a.valueAtCost)
+            .slice(0, 10)
+
+        // Unopened bottles carried back to the shelf at cleanup (req #14).
+        // Every one of these is stock returned on a member of staff's word
+        // with nobody checking it arrived, which is exactly what a short count
+        // the next morning is asking about.
+        const returnedMap = new Map()
+        inventoryTransactions
+            .filter(t => t.type === 'RETURN_UNOPENED' && t.toStore)
+            .forEach(t => {
+                const name = t.ingredient.name
+                if (!returnedMap.has(name)) {
+                    returnedMap.set(name, { name, quantity: 0, unit: t.ingredient.unit, transactions: 0 })
+                }
+                const entry = returnedMap.get(name)
                 entry.quantity += t.quantity
                 entry.transactions += 1
             })
-        const mostTransferred = Array.from(transferMap.values()).sort((a, b) => b.quantity - a.quantity).slice(0, 10)
+        const returnedUnopened = Array.from(returnedMap.values()).sort((a, b) => b.quantity - a.quantity).slice(0, 10)
 
         // b. Wastage cost (WITHDRAW or SHOP_ADJUST transactions labelled as waste/spill)
         const wastageTransactions = inventoryTransactions.filter(t =>
@@ -570,13 +696,25 @@ export async function GET(request: Request) {
 
         const totalCOGS = salesCost + wastageCost
 
-        // Transaction type breakdown
+        // Transaction type breakdown.
+        //
+        // Counted on the movement types this bar actually writes. Three of the
+        // five it used to count - TRANSFER, WITHDRAW and USAGE - have never
+        // appeared in the database, so the row read "0 / 0 / 0" beside two live
+        // figures, while the movements that do happen (a sale depleting the
+        // shelf, a package swapped, an unopened bottle carried back) had no
+        // count at all.
+        const countOf = (type: string) => inventoryTransactions.filter(t => t.type === type).length
         const transactionTypes = {
-            transfers: inventoryTransactions.filter(t => t.type === 'TRANSFER').length,
-            deposits: inventoryTransactions.filter(t => t.type === 'DEPOSIT').length,
-            withdrawals: inventoryTransactions.filter(t => t.type === 'WITHDRAW').length,
-            shopAdjustments: inventoryTransactions.filter(t => t.type === 'SHOP_ADJUST').length,
-            usage: inventoryTransactions.filter(t => t.type === 'USAGE').length
+            sold: countOf('SALE'),
+            received: countOf('DEPOSIT'),
+            returned: countOf('RETURN_UNOPENED'),
+            exchanged: countOf('EXCHANGE'),
+            adjusted: countOf('SHOP_ADJUST'),
+            // Stock put back when a round was struck. Its own count rather than
+            // netted off `sold`, because a bar that voids a lot and a bar that
+            // sells a little are different problems.
+            voidedBack: countOf('SALE_VOID'),
         }
 
         return NextResponse.json({
@@ -589,19 +727,13 @@ export async function GET(request: Request) {
             worstProducts,
             zeroSales: trashItems,
             serviceStats,
-            promoImpact,
+            areaStats,
             serverSales,
             complimentaryDetails,
-            customerStats: {
-                memberVsGuest,
-                topLoyalty,
-                totalPointsEarned,
-                totalPointsRedeemed,
-                activeMembers
-            },
             inventoryStats: {
                 mostAdded,
-                mostTransferred,
+                depletion,
+                returnedUnopened,
                 transactionTypes,
                 recentTransactions: inventoryTransactions.slice(0, 20).map(t => ({
                     id: t.id,
@@ -612,18 +744,31 @@ export async function GET(request: Request) {
                     fromStore: t.fromStore,
                     toStore: t.toStore,
                     user: t.user?.name || null,
-                    reason: t.reason,
+                    // `reason` only holds a reason on the movements a human
+                    // typed one for. On a sale or a swap the column carries the
+                    // menu or session id that caused it, and a "Reason" column
+                    // showing staff a raw UUID is worse than showing them
+                    // nothing - it reads as a fault in the system.
+                    reason: REASONED_TYPES.has(t.type) ? t.reason : null,
                     notes: t.notes,
                     createdAt: t.createdAt
                 }))
             },
             summary: {
-                totalRevenue: summaryStats._sum?.total || 0,
-                netSales: (summaryStats._sum?.total || 0) - (summaryStats._sum?.tax || 0),
+                // Rung up before anything was taken off.
+                grossRevenue,
+                // What the bar actually billed. Same definition as the
+                // Z-report's `net`, so the two documents agree on the night.
+                // Comps stay inside it and are reported on their own line
+                // below, exactly as the Z-report treats them - a comped bill
+                // is a sale the house paid for, not a sale that never happened.
+                totalRevenue: netRevenue,
+                netSales: netRevenue - (summaryStats._sum?.tax || 0),
                 taxCollected: summaryStats._sum?.tax || 0,
-                totalOrders: (summaryStats._count as any) || 0,
-                aov: summaryStats._avg?.total || 0,
-                totalDiscounts: summaryStats._sum?.discount || 0,
+                totalOrders,
+                // Average round, net of the table discount.
+                aov: totalOrders > 0 ? netRevenue / totalOrders : 0,
+                totalDiscounts,
                 periodCount: dailyTrend.length,
                 complimentaryOrders: (complimentaryStats._count as any) || 0,
                 complimentaryValue: complimentaryStats._sum?.total || 0,
@@ -631,7 +776,20 @@ export async function GET(request: Request) {
                 salesCost,
                 wastageCost,
                 shrinkageCost,
-                grossProfit: (summaryStats._sum?.total || 0) - totalCOGS
+                grossProfit: netRevenue - totalCOGS,
+                // The number a bar is run on: what the liquor in the glass cost
+                // against what the glass sold for. Everything needed for it was
+                // already being computed and it was never stated, so the one
+                // figure an owner opens a report for had to be worked out from
+                // two other cards.
+                //
+                // Against sales excluding VAT, because the tax was never the
+                // bar's money. Wastage is deliberately out of it - this is the
+                // cost of what was poured and sold; what was spilled is its own
+                // line above and mixing them hides which one is moving.
+                pourCostPct: netRevenue - (summaryStats._sum?.tax || 0) > 0
+                    ? Math.round((salesCost / (netRevenue - (summaryStats._sum?.tax || 0))) * 1000) / 10
+                    : null,
             },
             advanced: {
                 lowMarginItems,
