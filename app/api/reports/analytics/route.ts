@@ -4,6 +4,9 @@ import { barHour, tradingDay, tradingHours } from '@/lib/trading-day'
 import { recipeCost, pourCost, verdictFor, bandFor } from '@/lib/pour-cost'
 import { sessionTotal } from '@/lib/sessions'
 import { billTotalOf } from '@/lib/payments'
+// One definition of a countable sale, shared with the export and the Z-report
+// rather than re-decided here. See lib/reporting.ts for what drifted.
+import { COUNTED_ORDER, COUNTED_LINE, periodDiscounts } from '@/lib/reporting'
 import { startOfDay, endOfDay } from 'date-fns'
 
 /** Movement types whose `reason` column holds a reason a person chose. */
@@ -50,8 +53,7 @@ export async function GET(request: Request) {
                     gte: startDate,
                     lte: endDate
                 },
-                status: 'COMPLETED',
-                isReportable: true
+                ...COUNTED_ORDER
             },
             select: {
                 total: true,
@@ -171,11 +173,10 @@ export async function GET(request: Request) {
         // everything broken down by item was not.
         const orderItems = await prisma.orderItem.findMany({
             where: {
-                voidedAt: null,
+                ...COUNTED_LINE,
                 order: {
                     createdAt: { gte: startDate, lte: endDate },
-                    status: 'COMPLETED',
-                    isReportable: true
+                    ...COUNTED_ORDER
                 }
             },
             include: {
@@ -258,8 +259,7 @@ export async function GET(request: Request) {
         const walkInOrdersPaid = await prisma.order.findMany({
             where: {
                 createdAt: { gte: startDate, lte: endDate },
-                status: 'COMPLETED',
-                isReportable: true,
+                ...COUNTED_ORDER,
                 sessionId: null
             },
             select: { paymentMethod: true, total: true }
@@ -465,8 +465,7 @@ export async function GET(request: Request) {
                 orders: {
                     some: {
                         createdAt: { gte: startDate, lte: endDate },
-                        status: 'COMPLETED',
-                        isReportable: true
+                        ...COUNTED_ORDER
                     }
                 }
             },
@@ -491,17 +490,13 @@ export async function GET(request: Request) {
         // run about two hours, so one straddling midnight on the last day of a
         // range is both rare and small next to the alternative, which is a
         // discount figure that does not match any bill anyone can look at.
-        const totalDiscounts = discountedSessions.reduce((sum, s) => {
-            const gross = sessionTotal(s.orders)
-            return sum + (gross - billTotalOf(gross, s.discountType, s.discountValue))
-        }, 0)
+        const totalDiscounts = periodDiscounts(discountedSessions)
 
         // Summary Stats (robustified)
         const summaryStats = await prisma.order.aggregate({
             where: {
                 createdAt: { gte: startDate, lte: endDate },
-                status: 'COMPLETED',
-                isReportable: true
+                ...COUNTED_ORDER
             },
             _sum: { total: true, discount: true, tax: true },
             _count: true,
