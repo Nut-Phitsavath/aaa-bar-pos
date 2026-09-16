@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Printer, Banknote, QrCode, Gift, Clock3, AlertTriangle } from "lucide-react"
 import { formatTHB } from "@/lib/currency"
+import { APP_NAME } from "@/lib/shop"
 
 type ZReport = {
     date: string
@@ -29,7 +30,51 @@ type ZReport = {
         startTime: string; endTime: string | null
     } | null
     expectedCash: number
+    /** VAT as charged, summed off the orders rather than recomputed. */
+    tax: number
+    /** Rounds that went out, so an average ticket needs no export. */
+    tickets: number
+    voids: { count: number; value: number }
+    refunds: { count: number; value: number }
 }
+
+/**
+ * Print rules for the Z-report.
+ *
+ * `window.print()` on its own printed the whole application: the sidebar, the
+ * page header, all twelve report tabs, the date picker and the Print button
+ * itself, with the figures somewhere in the middle. Nothing in this project had
+ * print styles except the receipt, and those are scoped to the receipt.
+ *
+ * The visibility trick rather than display:none on ancestors, because the
+ * report sits several layers inside the app shell and hiding any one of those
+ * layers would take the report with it. Making everything invisible and the
+ * report visible again works no matter how deep it is, and re-anchoring it to
+ * the top-left stops it printing at whatever offset the sidebar left it at.
+ *
+ * A4 portrait, not the receipt's 80mm roll: this is a document for an
+ * accountant's file, not a slip for a customer's hand.
+ */
+const PRINT_CSS = `
+  @media print {
+    @page { size: A4 portrait; margin: 14mm; }
+    body { background: #fff !important; }
+    body * { visibility: hidden !important; }
+    #z-report, #z-report * { visibility: visible !important; }
+    #z-report {
+      position: absolute !important;
+      left: 0; top: 0; width: 100% !important;
+    }
+    /* The controls are how you got here, not part of what you are filing. */
+    #z-report .no-print { display: none !important; }
+    /* Flat on paper: a card's shadow prints as a grey smear. */
+    #z-report [data-slot="card"], #z-report .rounded-xl {
+      box-shadow: none !important;
+      border-color: #cbd5e1 !important;
+      break-inside: avoid;
+    }
+  }
+`
 
 const METHOD_ICON: Record<string, any> = {
     CASH: Banknote,
@@ -71,11 +116,28 @@ export function ZReport() {
                     : m === "OWNER_VIP" ? t.owner_vip
                         : m
 
+    /** The day, written the way a person files it rather than 2026-09-15. */
+    const printedDate = new Date(`${date}T00:00:00`).toLocaleDateString("en-GB", {
+        weekday: "long", day: "numeric", month: "long", year: "numeric",
+    })
+
     return (
-        <div className="space-y-4">
+        <div id="z-report" className="space-y-4">
+            <style>{PRINT_CSS}</style>
+
+            {/* Only on paper. On screen the date is in the picker and the tab
+                says where you are; printed, both are gone, and a Z-report with
+                no date or business on it is not a document anybody can file. */}
+            <div className="hidden print:block mb-4 pb-3 border-b border-slate-300">
+                <p className="text-xs font-bold uppercase tracking-widest text-slate-500">
+                    {APP_NAME} · Z-Report
+                </p>
+                <p className="text-2xl font-black text-slate-900">{printedDate}</p>
+            </div>
+
             {/* Its own single-date control: a Z-report is one day by
                 definition, where the tabs around it read a range. */}
-            <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center justify-between gap-2 no-print">
                 <div className="flex items-center gap-2">
                     <Input
                         type="date"
@@ -90,7 +152,18 @@ export function ZReport() {
                 </div>
             </div>
 
-            <div className="max-w-3xl space-y-4">
+            {/* Two columns on a wide screen, one on a narrow one, and always
+                one when printed. The cap was max-w-3xl, which kept the document
+                feel but left half a manager's monitor empty while they scrolled
+                a reconciliation they could have read at once. Columns rather
+                than a wider single column: the money reads top-to-bottom, and
+                stretching a two-figure row to 1400px puts its label and its
+                number too far apart to pair by eye.
+
+                `break-inside: avoid` on each card so a card is never split
+                across a page break on the printed copy. */}
+            <div className="grid gap-4 items-start lg:grid-cols-2 xl:max-w-6xl
+                            print:block print:max-w-full *:break-inside-avoid">
                 {loading || !z ? (
                     <>
                         <div className="h-32 rounded-xl bg-white border border-slate-200 animate-pulse" />
@@ -98,8 +171,9 @@ export function ZReport() {
                     </>
                 ) : (
                     <>
-                        {/* The question the report exists to answer. */}
-                        <Card className="p-5">
+                        {/* The question the report exists to answer, so it
+                            spans the full width and nothing sits beside it. */}
+                        <Card className="p-5 lg:col-span-2">
                             <p className="text-xs font-bold uppercase tracking-widest text-slate-400">
                                 {t.expected_cash}
                             </p>
@@ -135,6 +209,39 @@ export function ZReport() {
                             <div className="flex justify-between font-bold text-slate-900 pt-2 border-t">
                                 <span>{t.net_sales}</span>
                                 <span className="text-xl tabular-nums">{formatTHB(z.net)}</span>
+                            </div>
+                            {/* VAT is inclusive, so this is the portion of net
+                                sales that is tax rather than an addition to it.
+                                Said quietly, under the total it came out of -
+                                but said, because it is the figure an accountant
+                                opens this report for. */}
+                            <div className="flex justify-between text-sm text-slate-500 pt-1">
+                                <span>{t.tax_included}</span>
+                                <span className="tabular-nums">{formatTHB(z.tax)}</span>
+                            </div>
+                            {z.tickets > 0 && (
+                                <div className="flex justify-between text-sm text-slate-400">
+                                    <span>{t.tickets}</span>
+                                    <span className="tabular-nums">
+                                        {z.tickets} · {formatTHB(Math.round(z.net / z.tickets))} {t.average}
+                                    </span>
+                                </div>
+                            )}
+                        </Card>
+
+                        {/* What was rung up and then taken back. Zero is a
+                            result worth printing, not a row to hide: a manager
+                            signing off on a day wants to see that nothing was
+                            struck, not to wonder whether the report checked. */}
+                        <Card className="p-5 space-y-2">
+                            <h2 className="text-sm font-bold text-slate-900 mb-1">{t.taken_back}</h2>
+                            <div className={`flex justify-between ${z.voids.count > 0 ? "text-rose-600" : "text-slate-400"}`}>
+                                <span>{t.voids} {z.voids.count > 0 && <span className="tabular-nums opacity-70">×{z.voids.count}</span>}</span>
+                                <span className="tabular-nums">{formatTHB(z.voids.value)}</span>
+                            </div>
+                            <div className={`flex justify-between ${z.refunds.count > 0 ? "text-rose-600" : "text-slate-400"}`}>
+                                <span>{t.refunded} {z.refunds.count > 0 && <span className="tabular-nums opacity-70">×{z.refunds.count}</span>}</span>
+                                <span className="tabular-nums">{formatTHB(z.refunds.value)}</span>
                             </div>
                         </Card>
 
