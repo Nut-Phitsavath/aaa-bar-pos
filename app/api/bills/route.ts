@@ -45,6 +45,8 @@ export async function GET(request: Request) {
             orderBy: { openedAt: 'desc' },
             take,
             include: {
+                // Name the deal, so a bill can say which one came off it.
+                promotion: { select: { name: true } },
                 table: { select: { name: true, area: true } },
                 customer: { select: { id: true, name: true } },
                 payments: { orderBy: { createdAt: 'asc' }, include: { voidedBy: { select: { name: true } } } },
@@ -123,7 +125,22 @@ export async function GET(request: Request) {
                 ),
                 voidedLines: s.orders.reduce((n, o) => n + o.items.filter((i) => i.voidedAt).length, 0),
                 gross,
-                discount: discountAmount(gross, s.discountType, s.discountValue),
+                // Both savings, reported apart, and the manual one priced off
+                // the post-promo base.
+                //
+                // This computed the discount from the gross and never mentioned
+                // a promotion at all - so a bill that was reduced showed its
+                // full rounds beside a smaller total with nothing on the row
+                // accounting for the difference. On a history screen that is
+                // the worst possible silence: the one place somebody goes to
+                // ask "why did this table pay that".
+                promoName: s.promotion?.name ?? null,
+                promoDiscount: s.promoDiscount ?? 0,
+                discount: discountAmount(
+                    Math.max(0, gross - (s.promoDiscount ?? 0)),
+                    s.discountType,
+                    s.discountValue
+                ),
                 total,
                 paid: paidTotal(s.payments),
                 tenders: tendersOf(s.payments),
