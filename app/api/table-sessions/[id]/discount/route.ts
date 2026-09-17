@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getSessionUser } from '@/lib/auth'
 import { verifyManager } from '@/lib/manager-auth'
-import { sessionTotal } from '@/lib/sessions'
+import { sessionTotal, sessionBillTotal } from '@/lib/sessions'
 import { billTotalOf, balanceOf } from '@/lib/payments'
 import { closeSessionIfSettled } from '@/lib/settle'
 
@@ -51,7 +51,11 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
         const gross = sessionTotal(session.orders)
         const newTotal = clearing
             ? gross
-            : billTotalOf(gross, discountType, Number(discountValue))
+            : sessionBillTotal({
+                ...session,
+                discountType,
+                discountValue: Number(discountValue),
+            })
 
         // Refuse a discount that would drop the bill below what has already been
         // paid: that is a refund, and this endpoint cannot give money back.

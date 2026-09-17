@@ -25,6 +25,7 @@ type Promotion = {
   isActive: boolean
   staffPickable: boolean
   minItems: number | null
+  categoryId: string | null
 }
 
 import { useTranslation } from "@/hooks/use-translation"
@@ -34,7 +35,19 @@ import { useDiscardGuard } from "@/components/confirm-provider"
 export default function PromotionsPage() {
   const { t } = useTranslation()
   const [promotions, setPromotions] = useState<Promotion[]>([])
+  // The shelves a deal can be aimed at. Loaded here rather than hardcoded so
+  // renaming or adding a category never silently drops it from the list.
+  const [categories, setCategories] = useState<{ id: string; name: string }[]>([])
   const [isLoading, setIsLoading] = useState(true)
+
+  useEffect(() => {
+    // Menu categories - Beer, Spirits, Cocktails. NOT inventory-categories,
+      // which groups ingredients and is a different model entirely.
+      fetch('/api/menu/categories')
+      .then((r) => (r.ok ? r.json() : []))
+      .then((c) => setCategories(Array.isArray(c) ? c : []))
+      .catch(() => setCategories([]))
+  }, [])
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   // Overlay, Escape, × and Cancel all ask before throwing away typing.
   const { requestClose, markDirty } = useDiscardGuard(isDialogOpen, setIsDialogOpen)
@@ -71,7 +84,9 @@ export default function PromotionsPage() {
       endDate: new Date(formData.get('endDate') as string).toISOString(),
       isActive: formData.get('isActive') === 'active',
       staffPickable: formData.get('staffPickable') === 'yes',
-      minItems: formData.get('minItems')
+      minItems: formData.get('minItems'),
+      // "" from the select means the whole bill; the validator maps it to null.
+      categoryId: formData.get('categoryId')
     }
 
     const url = editingPromo ? `/api/promotions/${editingPromo.id}` : '/api/promotions'
@@ -170,6 +185,26 @@ export default function PromotionsPage() {
                       <Input id="minItems" name="minItems" type="number" min={1} placeholder={t.min_items_any} defaultValue={editingPromo?.minItems ?? ""} />
                       <p className="text-xs text-muted-foreground">{t.min_items_hint}</p>
                     </div>
+                  </div>
+                  {/* Which shelf the deal is about. Sits directly under the
+                      minimum because the two only make sense together: "15" is
+                      meaningless until you say fifteen of what. Without this
+                      field a beer deal counted snacks towards its minimum and
+                      then discounted them too. */}
+                  <div className="space-y-2">
+                    <Label htmlFor="categoryId">{t.promo_scope}</Label>
+                    <select
+                      id="categoryId"
+                      name="categoryId"
+                      className="w-full h-10 px-3 rounded-md border"
+                      defaultValue={editingPromo?.categoryId ?? ""}
+                    >
+                      <option value="">{t.promo_scope_all}</option>
+                      {categories.map((c) => (
+                        <option key={c.id} value={c.id}>{c.name}</option>
+                      ))}
+                    </select>
+                    <p className="text-xs text-muted-foreground">{t.promo_scope_hint}</p>
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">

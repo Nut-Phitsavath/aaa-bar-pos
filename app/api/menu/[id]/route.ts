@@ -26,8 +26,17 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
             // Assuming category is required or we keep existing.
             // If not provided, maybe we shouldn't update it?
             // But UI sends it.
+            // This read `current?.categoryId!` - an optional chain saying the
+            // row may be missing, then a non-null assertion saying it is not.
+            // When the menu really had been deleted, `undefined` reached Prisma
+            // and it quietly skipped the field instead of failing, so the
+            // update ran against a row that was not there. Menu.categoryId is
+            // NOT NULL, so there is no sensible fallback: say the item is gone.
             const current = await prisma.menu.findUnique({ where: { id } })
-            categoryId = current?.categoryId!
+            if (!current) {
+                return NextResponse.json({ error: 'Menu item not found' }, { status: 404 })
+            }
+            categoryId = current.categoryId
         }
 
         await prisma.menu.update({

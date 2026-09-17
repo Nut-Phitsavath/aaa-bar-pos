@@ -53,6 +53,7 @@ model Category {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
   menus         Menu[]
+  promotions    Promotion[]
 
   @@index([displayOrder])
 }
@@ -206,12 +207,17 @@ model Promotion {
   staffPickable Boolean  @default(true)
   // Minimum items in the cart before the promo applies. "15 Free 5" means 20
   // units rung up; null means no minimum.
-  // NOTE: counts EVERY item, bakery included - so a drinks deal can currently
-  // be triggered by croissants. Scoping this to a Category is the open fix.
   minItems      Int?
+  /// Which shelf the deal is about. "15 Free 5" is a beer crate, and counting
+  /// every line on the bill towards it meant a round of snacks could trigger
+  /// it - the open fix the note here used to describe. Null means the whole
+  /// bill, which is what a blanket "10% off tonight" wants.
+  categoryId    String?
+  category      Category? @relation(fields: [categoryId], references: [id])
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
   orders        Order[]
+  sessions      TableSession[]
 }
 
 model Order {
@@ -308,6 +314,18 @@ model TableSession {
   discountType         String?
   discountValue        Float?
   discountApprovedById String?
+  /// A promotion applied to this bill. Until now a promo could only land on a
+  /// walk-in counter order, so the deals this bar actually runs - "15 Free 5"
+  /// on a beer crate - could not touch the 87% of sales that go through a
+  /// table.
+  promoId              String?
+  promotion            Promotion?          @relation(fields: [promoId], references: [id])
+  /// What the promo took off, in baht, worked out when it was applied and
+  /// again whenever a round is added or struck. Snapshotted for the same
+  /// reason fxRate is: a deal whose window closes at midnight must not silently
+  /// re-price a bill that was quoted at 23:55, and every screen that prices a
+  /// bill would otherwise have to load its items to find out.
+  promoDiscount        Float?
   /// Owner VIP comp (req #16). Stock is still deducted by the normal order
   /// path; the bill is settled by an OWNER_VIP payment for the full balance.
   isOwnerVip           Boolean             @default(false)

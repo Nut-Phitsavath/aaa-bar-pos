@@ -105,3 +105,95 @@ test('canCloseSession refuses a session holding a HOLD order', () => {
     ])
     assert.equal(check.ok, false)
 })
+
+// ---------------------------------------------------------------------------
+// sessionBillTotal: the one place a bill is priced.
+//
+// Eighteen call sites used to spell this out by hand. The cases below pin the
+// thing that made consolidating it necessary - the order a promotion and a
+// manual discount come off in, which decides what the customer pays.
+// ---------------------------------------------------------------------------
+
+import { sessionBillTotal, sessionSavings, canRepricePromo } from './sessions.ts'
+
+const round = (total: number, status = 'COMPLETED') => ({ status, total })
+
+test('a plain bill is just its rounds', () => {
+    assert.equal(sessionBillTotal({ orders: [round(600), round(400)], promoDiscount: null }), 1000)
+})
+
+test('a promotion comes off before the manual discount, not after', () => {
+    // 1,000 gross, a 200 promo, then 10% off the table.
+    // Right:  (1000 - 200) = 800, less 10% = 720.
+    // Wrong:  1000 less 10% = 900, less 200 = 700 - the same 200 discounted
+    //         twice, and 20 baht the bar never agreed to give away.
+    const total = sessionBillTotal({
+        orders: [round(1000)],
+        promoDiscount: 200,
+        discountType: 'PERCENT',
+        discountValue: 10,
+    })
+    assert.equal(total, 720)
+})
+
+test('the round-up still happens once, at the end', () => {
+    // 999 less a 100 promo is 899; 10% off that is 809.1, charged as 810.
+    const total = sessionBillTotal({
+        orders: [round(999)],
+        promoDiscount: 100,
+        discountType: 'PERCENT',
+        discountValue: 10,
+    })
+    assert.equal(total, 810)
+})
+
+test('a promo bigger than the bill makes it free, never negative', () => {
+    assert.equal(sessionBillTotal({ orders: [round(500)], promoDiscount: 9999 }), 0)
+})
+
+test('a held round is not on the bill yet', () => {
+    assert.equal(sessionBillTotal({ orders: [round(600), round(400, 'HOLD')], promoDiscount: null }), 600)
+})
+
+test('savings is everything that came off the gross', () => {
+    const session = {
+        orders: [round(1000)],
+        promoDiscount: 200,
+        discountType: 'PERCENT' as const,
+        discountValue: 10,
+    }
+    assert.equal(sessionSavings(session), 280)
+})
+
+test('a session with no promo prices exactly as it did before', () => {
+    const before = { orders: [round(2499.5)], discountType: 'PERCENT', discountValue: 0, promoDiscount: null }
+    assert.equal(sessionBillTotal(before), 2500)
+})
+
+test('an open bill prices its deal live', () => {
+    assert.equal(canRepricePromo({ status: 'OPEN' }), true)
+    assert.equal(canRepricePromo({ status: 'OPEN', reopenedAt: null }), true)
+})
+
+test('a bill waiting for its bill is still open', () => {
+    // BILL_REQUESTED occupies the table and can still take another round.
+    assert.equal(canRepricePromo({ status: 'BILL_REQUESTED' }), true)
+})
+
+test('a closed bill is priced at what the customer was charged', () => {
+    assert.equal(canRepricePromo({ status: 'CLOSED' }), false)
+})
+
+test('a reopened bill stays frozen, even though its status says OPEN', () => {
+    // The trap. Status alone would call this live.
+    assert.equal(canRepricePromo({ status: 'OPEN', reopenedAt: new Date() }), false)
+})
+
+test('a reopened bill is frozen whether the stamp is a Date or a string', () => {
+    // It arrives as a string over JSON and as a Date from Prisma.
+    assert.equal(canRepricePromo({ status: 'OPEN', reopenedAt: '2026-09-16T23:00:00Z' }), false)
+})
+
+test('a reopened bill that was closed again is doubly frozen', () => {
+    assert.equal(canRepricePromo({ status: 'CLOSED', reopenedAt: new Date() }), false)
+})

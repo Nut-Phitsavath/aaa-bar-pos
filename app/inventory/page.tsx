@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog"
-import { Plus, Edit, Trash2, Package, ShoppingCart, Minus, Settings, Search, ArrowUpDown, Store, Warehouse, Printer, Pencil } from "lucide-react"
+import { Plus, Edit, Trash2, Package, ShoppingCart, Minus, Settings, Search, ArrowUpDown, Store, Warehouse, Printer, Pencil, ClipboardCheck } from "lucide-react"
 import { formatTHB } from "@/lib/currency"
 import { formatStock } from "@/lib/stock"
 import { formatStockOf, toBase, fromBase } from "@/lib/units"
@@ -448,11 +448,11 @@ export default function InventoryPage() {
           return 0
         }
 
-        // @ts-ignore
+        // @ts-expect-error sortConfig.key indexes a union the sort cannot narrow
         if (a[sortConfig.key] < b[sortConfig.key]) {
           return sortConfig.direction === 'asc' ? -1 : 1;
         }
-        // @ts-ignore
+        // @ts-expect-error same union as above
         if (a[sortConfig.key] > b[sortConfig.key]) {
           return sortConfig.direction === 'asc' ? 1 : -1;
         }
@@ -502,7 +502,7 @@ export default function InventoryPage() {
                 ))}
               </select>
               
-              {/* Req #22: the count starts on paper, at the fridge. */}
+              {/* Req #22: the count starts on paper, at the fridge... */}
               <Button
                 variant="outline"
                 className="border-slate-200"
@@ -510,6 +510,19 @@ export default function InventoryPage() {
               >
                 <Printer className="w-4 h-4 mr-2" />
                 {t.print_count_sheet}
+              </Button>
+
+              {/* ...and ends here. Without this the sheet printed, somebody
+                  walked the room with a pen, and there was nowhere to type the
+                  numbers back in - which is why the variance report had never
+                  had a single row to read. */}
+              <Button
+                variant="outline"
+                className="border-slate-200"
+                onClick={() => router.push('/inventory/count')}
+              >
+                <ClipboardCheck className="w-4 h-4 mr-2" />
+                {t.enter_count}
               </Button>
 
               <Dialog

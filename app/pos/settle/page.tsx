@@ -11,7 +11,7 @@ import { ManagerApproval } from "@/components/manager-approval"
 import { ReceiptDialog } from "@/components/receipt-dialog"
 import { ReturnsDialog } from "@/components/pos/returns-dialog"
 import { QRCodeSVG } from "qrcode.react"
-import { Banknote, QrCode, Gift, Clock3, Printer, Percent, ArrowLeft, Check, PackageOpen } from "lucide-react"
+import { Banknote, QrCode, Gift, Clock3, Printer, Percent, Tag, ArrowLeft, Check, PackageOpen } from "lucide-react"
 import { formatTHB, formatLAK, thbToLak } from "@/lib/currency"
 import { toast } from "sonner"
 
@@ -33,6 +33,10 @@ type SettleBill = {
     orders: SettleOrder[]
     payments: { id: string; method: string; amount: number; paymentStatus: string | null }[]
     gross: number
+    /** A promotion on this bill, if one is on. */
+    promoId: string | null
+    promoName: string | null
+    promoDiscount: number
     discount: number
     total: number
     balance: number
@@ -79,8 +83,57 @@ function SettleScreen() {
     type Approvable = "DISCOUNT" | "COMP" | "PAY_LATER"
     const [approving, setApproving] = useState<Approvable | null>(null)
     const [approvalError, setApprovalError] = useState<string | null>(null)
+    const [promoOpen, setPromoOpen] = useState(false)
+    const [promos, setPromos] = useState<any[]>([])
+
     const [discountOpen, setDiscountOpen] = useState(false)
     const [discountKind, setDiscountKind] = useState<"PERCENT" | "FIXED">("PERCENT")
+
+    /**
+     * A promotion is a price the owner already set, with its own window and
+     * minimum, so applying one needs no manager PIN - unlike the manual
+     * discount beside it, which is a decision made at the table and wants a
+     * name against it.
+     */
+    const openPromo = async () => {
+        setPromoOpen(true)
+        try {
+            const res = await fetch("/api/promotions")
+            if (res.ok) setPromos(await res.json())
+        } catch { setPromos([]) }
+    }
+
+    /**
+     * Which deals staff may choose from the list.
+     *
+     * Live, in window, and not a customer coupon. The coupon check was missing
+     * and every "code only" promotion in the system sat in this picker waiting
+     * to be handed out by whoever was on the till.
+     */
+    const pickable = (p: any) =>
+        p.isActive &&
+        p.staffPickable !== false &&
+        new Date(p.startDate) <= new Date() &&
+        new Date(p.endDate) >= new Date()
+
+    const applyPromo = async (promoId: string | null) => {
+        try {
+            const res = await fetch(`/api/table-sessions/${bill!.id}/promo`, {
+                method: promoId ? "POST" : "DELETE",
+                headers: { "Content-Type": "application/json" },
+                ...(promoId ? { body: JSON.stringify({ promoId }) } : {}),
+            })
+            const data = await res.json().catch(() => ({}))
+            if (!res.ok) { toast.error(data.error || t.error); return }
+            // A deal can be on and worth nothing yet - the round that meets its
+            // minimum may not be rung in - so say which happened rather than
+            // letting a £0 saving read as a failure.
+            if (promoId && data.qualifies === false) toast.warning(t.promo_not_qualified)
+            else toast.success(promoId ? t.promo_applied : t.promo_removed)
+            setPromoOpen(false)
+            await load()
+        } catch { toast.error(t.error) }
+    }
     const [discountInput, setDiscountInput] = useState("")
     const [tabCustomerId, setTabCustomerId] = useState("")
     const [customers, setCustomers] = useState<{ id: string; name: string }[]>([])
@@ -372,6 +425,12 @@ function SettleScreen() {
                 </div>
 
                 <div className="border-t px-3 py-2.5 shrink-0">
+                    {bill.promoDiscount > 0 && (
+                        <div className="flex justify-between text-sm text-rose-600">
+                            <span className="truncate">{bill.promoName ?? t.apply_promo}</span>
+                            <span className="tabular-nums shrink-0">− {formatTHB(bill.promoDiscount)}</span>
+                        </div>
+                    )}
                     {bill.discount > 0 && (
                         <div className="flex justify-between text-sm text-rose-600">
                             <span>{t.apply_discount}</span>
@@ -487,7 +546,15 @@ function SettleScreen() {
                     </button>
                 </div>
 
-                <div className="h-16 grid grid-cols-3 gap-px shrink-0">
+                <div className="h-16 grid grid-cols-4 gap-px shrink-0">
+                    <button
+                        onClick={openPromo}
+                        disabled={busy}
+                        className={`${side} flex items-center justify-center gap-2 disabled:opacity-40 ${bill.promoId ? "text-rose-600 font-bold" : ""}`}
+                    >
+                        <Tag className="w-4 h-4" />
+                        {t.apply_promo}
+                    </button>
                     <button
                         onClick={() => { setDiscountInput(""); setDiscountOpen(true) }}
                         disabled={busy}
@@ -641,6 +708,53 @@ function SettleScreen() {
                             </Button>
                         </div>
                     </div>
+                </DialogContent>
+            </Dialog>
+
+            {/* Which deal is on. A list rather than a code box: staff are
+                picking from what the owner set up, and a code to type is a code
+                to mistype at 1am. A deal that is not running at all is not
+                offered, so the only failure left is the minimum - which the
+                row states rather than letting the tap quietly do nothing. */}
+            <Dialog open={promoOpen} onOpenChange={setPromoOpen}>
+                <DialogContent className="max-w-md">
+                    <DialogHeader><DialogTitle>{t.choose_promo}</DialogTitle></DialogHeader>
+                    <div className="space-y-2 max-h-[55vh] overflow-y-auto no-scrollbar">
+                        {promos
+                            .filter(pickable)
+                            .map((p: any) => (
+                                <button
+                                    key={p.id}
+                                    onClick={() => applyPromo(p.id)}
+                                    disabled={busy}
+                                    className={`w-full text-left rounded-xl border-2 p-3 transition-all disabled:opacity-40 ${
+                                        bill.promoId === p.id ? "border-rose-500 bg-rose-50" : "border-slate-200 hover:border-slate-300"}`}
+                                >
+                                    <div className="flex items-center gap-2">
+                                        <span className="font-bold text-slate-900">{p.name}</span>
+                                        {bill.promoId === p.id && <Check className="w-4 h-4 text-rose-600 ms-auto" />}
+                                    </div>
+                                    <p className="text-xs text-slate-500 mt-0.5">
+                                        {p.discountType === "percentage" ? `${p.discountValue}%` : formatTHB(p.discountValue)}
+                                        {p.category?.name ? ` · ${p.category.name}` : ""}
+                                        {p.minItems ? ` · ${t.promo_min_items.replace("{n}", String(p.minItems))}` : ""}
+                                    </p>
+                                </button>
+                            ))}
+                        {promos.filter(pickable).length === 0 && (
+                            <p className="py-8 text-center text-sm italic text-slate-400">{t.no_promos_running}</p>
+                        )}
+                    </div>
+                    {bill.promoId && (
+                        <Button
+                            variant="outline"
+                            onClick={() => applyPromo(null)}
+                            disabled={busy}
+                            className="h-11 w-full text-rose-600 border-rose-200 hover:bg-rose-50"
+                        >
+                            {t.remove_promo}
+                        </Button>
+                    )}
                 </DialogContent>
             </Dialog>
 

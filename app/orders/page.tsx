@@ -61,6 +61,8 @@ type Bill = {
     items: number
     voidedLines: number
     gross: number
+    promoName: string | null
+    promoDiscount: number
     discount: number
     total: number
     paid: number
@@ -543,9 +545,32 @@ export default function BillsPage() {
                                             )}
 
                                             <div className="px-4 py-3 flex items-center gap-3 flex-wrap">
+                                                {/* Named, not just "discount".
+                                                    Somebody reading a bill back
+                                                    wants to know WHICH deal came
+                                                    off it, and the two reductions
+                                                    have different authors - a
+                                                    promotion is a price the owner
+                                                    set, a discount is a decision
+                                                    somebody made at the table. */}
+                                                {b.promoDiscount > 0 && (
+                                                    <span className="text-sm text-rose-600 font-bold tabular-nums">
+                                                        {b.promoName ?? t.apply_promo} −{formatTHB(b.promoDiscount)}
+                                                    </span>
+                                                )}
                                                 {b.discount > 0 && (
                                                     <span className="text-sm text-rose-600 font-bold tabular-nums">
                                                         {t.discount} −{formatTHB(b.discount)}
+                                                    </span>
+                                                )}
+                                                {/* The arithmetic, spelled out. The
+                                                    rounds above added to one figure
+                                                    and the bill charged another,
+                                                    and nothing on the row joined
+                                                    them up. */}
+                                                {(b.promoDiscount > 0 || b.discount > 0) && (
+                                                    <span className="text-xs text-slate-500 tabular-nums">
+                                                        {formatTHB(b.gross)} → {formatTHB(b.total)}
                                                     </span>
                                                 )}
                                                 {b.reopenedAt && (

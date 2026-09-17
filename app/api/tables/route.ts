@@ -1,8 +1,7 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requireManager } from '@/lib/auth'
-import { sessionTotal, BILLABLE_ORDER_STATUSES } from '@/lib/sessions'
-import { billTotalOf } from '@/lib/payments'
+import { sessionTotal, BILLABLE_ORDER_STATUSES, sessionBillTotal } from '@/lib/sessions'
 import { outstandingByCustomer } from '@/lib/customer-tabs'
 
 // The floor plan polls this every 5s; it must never be served stale.
@@ -48,7 +47,7 @@ export async function GET() {
                     orderCount: billable.length,
                     waiterCount: new Set(billable.map((o) => o.waiterId).filter(Boolean)).size,
                     // What they will actually pay, discount included.
-                    total: billTotalOf(sessionTotal(session.orders), session.discountType, session.discountValue),
+                    total: sessionBillTotal(session),
                     isOwnerVip: session.isOwnerVip,
                     customer: session.customer
                         ? {

@@ -4,6 +4,8 @@ import { getSessionUser } from '@/lib/auth'
 import { decrementStock } from '@/lib/stock'
 import { reverseSwap } from '@/lib/swap-charge'
 import { isVoidReason, canVoid, totalsFrom, allVoided } from '@/lib/voids'
+// Striking a line can take a bill back under a deal's minimum.
+import { refreshSessionPromo } from '@/lib/session-promo'
 
 export const dynamic = 'force-dynamic'
 
@@ -114,7 +116,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
             const after = await tx.orderItem.findMany({ where: { orderId: id } })
             const totals = totalsFrom(after)
 
-            return tx.order.update({
+            const round = await tx.order.update({
                 where: { id },
                 data: {
                     subtotal: totals.subtotal,
@@ -129,6 +131,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
                 },
                 include: { items: true },
             })
+
+            // Striking a line can drop the bill back under a deal's minimum.
+            // Without this the discount would survive the drinks that earned it.
+            if (order.sessionId) await refreshSessionPromo(tx as any, order.sessionId)
+
+            return round
         })
 
         return NextResponse.json({

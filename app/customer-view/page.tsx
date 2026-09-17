@@ -272,7 +272,7 @@ export default function CustomerViewPage() {
                         <h1 className="text-7xl font-black text-amber-900 leading-tight">{settings?.shopName || APP_NAME}</h1>
                         <div className="text-2xl text-amber-700/70 font-light mt-2 flex flex-col items-center leading-tight">
                             <span>ບອກບາຣິສຕ້າຂອງພວກເຮົາໄດ້ເລີຍວ່າທ່ານຕ້ອງການເມນູໃດ</span>
-                            <span className="text-amber-600/50 text-xl">Tell our barista what you'd like today</span>
+                            <span className="text-amber-600/50 text-xl">Tell our barista what you&apos;d like today</span>
                         </div>
                     </div>
 

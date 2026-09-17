@@ -6,8 +6,9 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { canCloseShift } from '@/lib/shift-guard'
 import { verifyManager } from '@/lib/manager-auth'
-import { sessionTotal } from '@/lib/sessions'
-import { billTotalOf, balanceOf } from '@/lib/payments'
+import { sessionTotal, sessionBillTotal } from '@/lib/sessions'
+import { balanceOf } from '@/lib/payments'
+import { spawn } from "child_process"
 
 // GET /api/shifts?status=OPEN - Get current open shift or all shifts
 export async function GET(request: Request) {
@@ -74,7 +75,6 @@ export async function POST(request: Request) {
 // backup must never delay or break closing the till.
 function backupAfterShiftClose() {
     try {
-        const { spawn } = require("child_process")
         // powershell.exe, not powershell: Node on Windows does not do PATHEXT
         // resolution for a bare name unless shell:true, and it fails silently.
         const script = path.join(process.cwd(), "scripts", "backup.ps1")
@@ -132,7 +132,7 @@ export async function PUT(request: Request) {
                 id: s.id,
                 table: s.table.name,
                 balance: balanceOf(
-                    billTotalOf(sessionTotal(s.orders), s.discountType, s.discountValue),
+                    sessionBillTotal(s),
                     s.payments
                 ),
             }))

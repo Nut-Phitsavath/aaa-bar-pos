@@ -3,8 +3,8 @@ import { prisma } from '@/lib/prisma'
 import { requireOpenShift } from '@/lib/shift-guard'
 import { getSessionUser } from '@/lib/auth'
 import { verifyManager } from '@/lib/manager-auth'
-import { sessionTotal } from '@/lib/sessions'
-import { billTotalOf, balanceOf } from '@/lib/payments'
+import { sessionTotal, sessionBillTotal } from '@/lib/sessions'
+import { balanceOf } from '@/lib/payments'
 import { DEFAULT_RATE_LAK, DEFAULT_RATE_USD, taxRateOf } from '@/lib/currency'
 
 export const dynamic = 'force-dynamic'
@@ -64,7 +64,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
             )
         }
 
-        const total = billTotalOf(sessionTotal(session.orders), session.discountType, session.discountValue)
+        const total = sessionBillTotal(session)
         const outstanding = balanceOf(total, session.payments)
         if (outstanding <= 0) {
             return NextResponse.json({ error: 'BILL_ALREADY_SETTLED' }, { status: 409 })

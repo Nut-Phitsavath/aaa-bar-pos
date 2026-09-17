@@ -747,7 +747,7 @@ export default function RecipesPage() {
                             <div className="space-y-3">
                                 <h3 className="text-3xl font-black text-slate-900 tracking-tight">{t.select_product}</h3>
                                 <p className="text-slate-400 max-w-[280px] mx-auto text-lg font-medium leading-relaxed italic">
-                                    "{t.select_a_product_to_view_and_manage_its_recipe_structure || "Select a product to start building its masterpiece recipe."}"
+                                    &ldquo;{t.select_a_product_to_view_and_manage_its_recipe_structure || "Select a product to start building its masterpiece recipe."}&rdquo;
                                 </p>
                             </div>
                         </div>

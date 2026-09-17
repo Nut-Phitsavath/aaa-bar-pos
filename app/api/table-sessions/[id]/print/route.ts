@@ -3,8 +3,8 @@ import { prisma } from '@/lib/prisma'
 import { getSessionUser } from '@/lib/auth'
 import { generateOnepayQR } from '@/lib/onepay'
 import { classifyPaymentFailure } from '@/lib/net-status'
-import { sessionTotal } from '@/lib/sessions'
-import { billTotalOf, balanceOf } from '@/lib/payments'
+import { sessionTotal, sessionBillTotal } from '@/lib/sessions'
+import { balanceOf } from '@/lib/payments'
 
 export const dynamic = 'force-dynamic'
 
@@ -38,7 +38,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         })
         if (!session) return NextResponse.json({ error: 'Session not found' }, { status: 404 })
 
-        const total = billTotalOf(sessionTotal(session.orders), session.discountType, session.discountValue)
+        const total = sessionBillTotal(session)
         const balance = balanceOf(total, session.payments)
 
         // Retire any QR from an earlier print of this bill; only one should
