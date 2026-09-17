@@ -11,14 +11,23 @@ export type PromotionInput = {
     endDate?: unknown
     minItems?: unknown
     staffPickable?: unknown
+    categoryId?: unknown
 }
 
 export type PromotionValidation =
-    | { ok: true; value: number; start: Date; end: Date; minItems: number | null; staffPickable: boolean }
+    | {
+        ok: true
+        value: number
+        start: Date
+        end: Date
+        minItems: number | null
+        staffPickable: boolean
+        categoryId: string | null
+    }
     | { ok: false; error: string }
 
 export function validatePromotionInput(body: PromotionInput): PromotionValidation {
-    const { name, code, discountType, discountValue, startDate, endDate, minItems, staffPickable } = body
+    const { name, code, discountType, discountValue, startDate, endDate, minItems, staffPickable, categoryId } = body
 
     if (!name || !code || !discountType) {
         return { ok: false, error: 'Name, code, and discount type are required' }
@@ -54,7 +63,22 @@ export function validatePromotionInput(body: PromotionInput): PromotionValidatio
         }
     }
 
-    return { ok: true, value, start, end, minItems: minCount, staffPickable: staffPickable !== false }
+    // Which shelf the deal is about. Blank means the whole bill, and the
+    // empty string a <select> sends for "no choice" has to mean that too -
+    // otherwise saving an unscoped promo writes "" as a category id and the
+    // deal silently matches nothing.
+    const scope =
+        typeof categoryId === 'string' && categoryId.trim() !== '' ? categoryId.trim() : null
+
+    return {
+        ok: true,
+        value,
+        start,
+        end,
+        minItems: minCount,
+        staffPickable: staffPickable !== false,
+        categoryId: scope,
+    }
 }
 
 

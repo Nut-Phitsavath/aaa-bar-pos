@@ -151,3 +151,40 @@ test('scopeOf reports what the deal can see', () => {
     assert.deepEqual(scopeOf(lines, BEER), { count: 15, subtotal: 3000 })
     assert.deepEqual(scopeOf(lines, null), { count: 25, subtotal: 8000 })
 })
+
+// ---------------------------------------------------------------------------
+// The scope has to survive the form, not just the engine.
+//
+// The scoping worked from the day it was written, but only if categoryId was
+// written straight into the database - the API dropped it, the validator never
+// saw it, and the form had no field. The feature was unreachable by anyone
+// using the app.
+// ---------------------------------------------------------------------------
+
+const baseInput = {
+    name: 'Crate deal', code: 'CRATE', discountType: 'percentage', discountValue: 25,
+    startDate: '2026-01-01', endDate: '2026-12-31',
+}
+
+test('a category picked on the form reaches the promo', () => {
+    const v = validatePromotionInput({ ...baseInput, categoryId: 'cat-beer' })
+    assert.equal(v.ok, true)
+    assert.equal((v as any).categoryId, 'cat-beer')
+})
+
+test('the empty string a select sends for "whole bill" becomes null', () => {
+    // Not cosmetic: storing "" as a category id makes the deal match no line at
+    // all, so a blanket promotion would silently be worth nothing.
+    const v = validatePromotionInput({ ...baseInput, categoryId: '' })
+    assert.equal((v as any).categoryId, null)
+})
+
+test('an omitted category is the whole bill', () => {
+    const v = validatePromotionInput(baseInput)
+    assert.equal((v as any).categoryId, null)
+})
+
+test('whitespace is not a category', () => {
+    const v = validatePromotionInput({ ...baseInput, categoryId: '   ' })
+    assert.equal((v as any).categoryId, null)
+})

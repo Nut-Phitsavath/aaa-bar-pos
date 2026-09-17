@@ -39,7 +39,8 @@ export async function POST(request: Request) {
                 endDate: v.end,
                 isActive: !!isActive,
                 staffPickable: v.staffPickable,
-                minItems: v.minItems
+                minItems: v.minItems,
+                categoryId: v.categoryId
             }
         })
 

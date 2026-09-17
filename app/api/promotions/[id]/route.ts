@@ -28,7 +28,8 @@ export async function PUT(
                 endDate: v.end,
                 isActive: isActive ?? true,
                 staffPickable: v.staffPickable,
-                minItems: v.minItems
+                minItems: v.minItems,
+                categoryId: v.categoryId
             }
         })
 
