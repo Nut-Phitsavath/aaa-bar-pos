@@ -188,3 +188,59 @@ test('whitespace is not a category', () => {
     const v = validatePromotionInput({ ...baseInput, categoryId: '   ' })
     assert.equal((v as any).categoryId, null)
 })
+
+// ---------------------------------------------------------------------------
+// Who may pick a deal, and when it is live.
+//
+// Both of these were decided inline before - one not at all, one by passing
+// Number.MAX_SAFE_INTEGER to a function to make it skip a check.
+// ---------------------------------------------------------------------------
+
+import { isStaffPickable, promoWindowBlocker } from './promotions.ts'
+
+const live = {
+    isActive: true, discountType: 'percentage', discountValue: 10,
+    startDate: new Date('2026-01-01'), endDate: new Date('2026-12-31'),
+}
+const during = new Date('2026-06-01')
+
+test('a customer coupon is never offered in the staff picker', () => {
+    // The whole point of staffPickable:false. Before this check, every coupon
+    // in the system sat in the till's list waiting to be given away.
+    assert.equal(isStaffPickable({ staffPickable: false }), false)
+})
+
+test('a normal promo is pickable, and so is one that never set the flag', () => {
+    assert.equal(isStaffPickable({ staffPickable: true }), true)
+    assert.equal(isStaffPickable({}), true)
+})
+
+test('nothing is pickable', () => {
+    assert.equal(isStaffPickable(null), false)
+    assert.equal(isStaffPickable(undefined), false)
+})
+
+test('the window check ignores the item count entirely', () => {
+    // It must say nothing about minimums: the apply endpoint checks the window
+    // before the bill's contents are known, and used to fake an item count to
+    // get that answer.
+    const withMin = { ...live, minItems: 500 }
+    assert.equal(promoWindowBlocker(withMin, during), null)
+})
+
+test('the window check catches each way a deal can be unusable', () => {
+    assert.equal(promoWindowBlocker({ ...live, isActive: false }, during), 'inactive')
+    assert.equal(promoWindowBlocker(live, new Date('2025-12-31')), 'not_started')
+    assert.equal(promoWindowBlocker(live, new Date('2027-01-01')), 'expired')
+    assert.equal(promoWindowBlocker(null, during), 'inactive')
+})
+
+test('promoBlocker still answers the full question', () => {
+    // The window checks were moved out; the combined check must not have lost
+    // any of them on the way.
+    const withMin = { ...live, minItems: 15 }
+    assert.equal(promoBlocker(withMin, 20, during), null)
+    assert.equal(promoBlocker(withMin, 14, during), 'min_items')
+    assert.equal(promoBlocker({ ...withMin, isActive: false }, 20, during), 'inactive')
+    assert.equal(promoBlocker(withMin, 20, new Date('2027-01-01')), 'expired')
+})

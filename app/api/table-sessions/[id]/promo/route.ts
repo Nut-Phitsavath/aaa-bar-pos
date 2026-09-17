@@ -2,9 +2,9 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getSessionUser } from '@/lib/auth'
 import { refreshSessionPromo } from '@/lib/session-promo'
-import { sessionTotal, sessionBillTotal } from '@/lib/sessions'
+import { sessionTotal, sessionBillTotal, canRepricePromo } from '@/lib/sessions'
 import { balanceOf } from '@/lib/payments'
-import { promoBlocker } from '@/lib/promotions'
+import { promoWindowBlocker, isStaffPickable } from '@/lib/promotions'
 
 export const dynamic = 'force-dynamic'
 
@@ -37,17 +37,31 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
             include: { orders: { select: { status: true, total: true } }, payments: true },
         })
         if (!session) return NextResponse.json({ error: 'SESSION_NOT_FOUND' }, { status: 404 })
-        if (session.status === 'CLOSED') {
+        // Closed, or settled once and reopened for a correction. Neither is a
+        // bill whose deal should still be moving.
+        if (!canRepricePromo(session)) {
             return NextResponse.json({ error: 'SESSION_ALREADY_CLOSED' }, { status: 409 })
         }
 
         const promo = await prisma.promotion.findUnique({ where: { id: promoId } })
         if (!promo) return NextResponse.json({ error: 'PROMO_NOT_FOUND' }, { status: 404 })
 
-        // The window and active checks, before anything is written. The minimum
-        // is left to the recompute below, which knows the bill's contents.
-        const blocked = promoBlocker(promo, Number.MAX_SAFE_INTEGER)
-        if (blocked && blocked !== 'min_items') {
+        // A coupon is typed off the voucher the customer is holding, never
+        // picked off a list. The screen hides these; the server refuses them,
+        // because a screen filter is a suggestion and this one guards money.
+        if (!isStaffPickable(promo)) {
+            return NextResponse.json({ error: 'CODE_ONLY' }, { status: 403 })
+        }
+
+        // Live right now? The window and the active flag only - the minimum is
+        // left to the recompute below, which knows the bill's contents.
+        //
+        // This used to be promoBlocker(promo, Number.MAX_SAFE_INTEGER): an
+        // absurd item count passed in to dodge the minimum check. It worked,
+        // said nothing about why, and would have broken silently the day
+        // another rule keyed off that count.
+        const blocked = promoWindowBlocker(promo)
+        if (blocked) {
             return NextResponse.json({ error: blocked.toUpperCase() }, { status: 409 })
         }
 
@@ -87,9 +101,12 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
 
     try {
         const { id } = await params
-        const session = await prisma.tableSession.findUnique({ where: { id }, select: { status: true } })
+        const session = await prisma.tableSession.findUnique({
+            where: { id },
+            select: { status: true, reopenedAt: true },
+        })
         if (!session) return NextResponse.json({ error: 'SESSION_NOT_FOUND' }, { status: 404 })
-        if (session.status === 'CLOSED') {
+        if (!canRepricePromo(session)) {
             return NextResponse.json({ error: 'SESSION_ALREADY_CLOSED' }, { status: 409 })
         }
 

@@ -99,6 +99,34 @@ export function formatDuration(openedAt: Date | string, now: Date): string {
     return `${Math.floor(minutes / 60)}h ${String(minutes % 60).padStart(2, '0')}m`
 }
 
+/**
+ * May this bill's promo still be re-priced?
+ *
+ * Pure, so the rule can be tested without a database and stated in one place.
+ *
+ * Two bills must never be re-priced:
+ *
+ *   - a CLOSED one, for the obvious reason;
+ *   - one that has been REOPENED. This is the trap. Reopening sets the status
+ *     back to OPEN, which made the bill look live again - so adding a round to
+ *     a bill settled last night would re-price its deal at today's clock. If
+ *     the deal had since expired or been switched off, the discount silently
+ *     dropped to zero on a bill the customer had already been charged for, and
+ *     nothing on any screen would say why the figure moved.
+ *
+ * A bill that has been settled once has had its deal priced. Reopening exists
+ * for corrections - a forgotten round, a wrong tender - not for re-negotiating
+ * a promotion that was already honoured.
+ */
+export function canRepricePromo(session: {
+    status: string
+    reopenedAt?: Date | string | null
+}): boolean {
+    if (session.status === 'CLOSED') return false
+    if (session.reopenedAt) return false
+    return true
+}
+
 export function canCloseSession(session: { status: string }, orders: SessionOrderLike[]): CloseCheck {
     if (session.status === 'CLOSED') {
         return { ok: false, reason: 'SESSION_ALREADY_CLOSED' }

@@ -97,6 +97,8 @@ export type PromoLike = {
     minItems?: number | null
     /** Which shelf the deal is about. Null = the whole bill. */
     categoryId?: string | null
+    /** False for customer coupons: they are typed, never picked off a list. */
+    staffPickable?: boolean | null
 }
 
 /** A line as the scope check sees it: what it is, how many, what it came to. */
@@ -144,17 +146,51 @@ export function promoDiscountForLines(
 }
 
 // Why this promo can't be used right now. null = it can.
-export type PromoBlocker = 'inactive' | 'not_started' | 'expired' | 'min_items'
+export type PromoBlocker = 'inactive' | 'not_started' | 'expired' | 'min_items' | 'code_only'
+
+/**
+ * May staff choose this deal from a list?
+ *
+ * `staffPickable` is false for customer coupons - the form calls it "code
+ * only" - and the intent is that a coupon has to be typed off the voucher the
+ * customer is holding, not tapped by whoever is on the till. The settle screen
+ * filtered on active and in-window and ignored this entirely, so every coupon
+ * in the system sat in the staff picker waiting to be handed out for free.
+ *
+ * Separate from promoBlocker because it answers a different question: not
+ * "can this deal be used" but "may it be chosen this way".
+ */
+export function isStaffPickable(promo: { staffPickable?: boolean | null } | null | undefined): boolean {
+    return !!promo && promo.staffPickable !== false
+}
+
+/**
+ * Is this deal live right now, ignoring anything about the bill?
+ *
+ * The window and the active flag only. Split out of promoBlocker because the
+ * apply endpoint needs exactly this and used to get it by calling
+ * `promoBlocker(promo, Number.MAX_SAFE_INTEGER)` - passing an absurd item count
+ * to dodge the minimum check. That worked and said nothing about why, and it
+ * would have broken silently the day another rule keyed off the count.
+ */
+export function promoWindowBlocker(
+    promo: PromoLike | null | undefined,
+    now: Date = new Date()
+): Exclude<PromoBlocker, 'min_items' | 'code_only'> | null {
+    if (!promo || !promo.isActive) return 'inactive'
+    if (now < new Date(promo.startDate)) return 'not_started'
+    if (now > new Date(promo.endDate)) return 'expired'
+    return null
+}
 
 export function promoBlocker(
     promo: PromoLike | null | undefined,
     itemCount: number,
     now: Date = new Date()
 ): PromoBlocker | null {
-    if (!promo || !promo.isActive) return 'inactive'
-    if (now < new Date(promo.startDate)) return 'not_started'
-    if (now > new Date(promo.endDate)) return 'expired'
-    if (promo.minItems && itemCount < promo.minItems) return 'min_items'
+    const window = promoWindowBlocker(promo, now)
+    if (window) return window
+    if (promo!.minItems && itemCount < promo!.minItems) return 'min_items'
     return null
 }
 

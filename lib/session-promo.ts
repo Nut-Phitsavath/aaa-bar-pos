@@ -1,6 +1,6 @@
 import { prisma } from './prisma'
 import { promoDiscountForLines } from './promotions'
-import { BILLABLE_ORDER_STATUSES } from './sessions'
+import { BILLABLE_ORDER_STATUSES, canRepricePromo } from './sessions'
 
 /**
  * Keeping a bill's promo discount true.
@@ -70,16 +70,17 @@ export async function computeSessionPromo(tx: Executor, sessionId: string): Prom
  * Recompute and store it. Safe to call on a session with no promo - it writes
  * null and costs one indexed read.
  *
- * Deliberately silent when the session has closed: a settled bill is priced at
- * what the customer was charged, and a late recompute would rewrite history the
- * same way re-reading the exchange rate would.
+ * Deliberately silent on a bill that has closed, or been reopened after
+ * closing: a settled bill is priced at what the customer was charged, and a
+ * late recompute would rewrite history the same way re-reading the exchange
+ * rate would. See canRepricePromo.
  */
 export async function refreshSessionPromo(tx: Executor, sessionId: string): Promise<number | null> {
     const session = await tx.tableSession.findUnique({
         where: { id: sessionId },
-        select: { status: true, promoId: true },
+        select: { status: true, promoId: true, reopenedAt: true },
     })
-    if (!session || session.status === 'CLOSED') return null
+    if (!session || !canRepricePromo(session)) return null
     if (!session.promoId) {
         await tx.tableSession.update({ where: { id: sessionId }, data: { promoDiscount: null } })
         return null

@@ -114,7 +114,7 @@ test('canCloseSession refuses a session holding a HOLD order', () => {
 // manual discount come off in, which decides what the customer pays.
 // ---------------------------------------------------------------------------
 
-import { sessionBillTotal, sessionSavings } from './sessions.ts'
+import { sessionBillTotal, sessionSavings, canRepricePromo } from './sessions.ts'
 
 const round = (total: number, status = 'COMPLETED') => ({ status, total })
 
@@ -168,4 +168,32 @@ test('savings is everything that came off the gross', () => {
 test('a session with no promo prices exactly as it did before', () => {
     const before = { orders: [round(2499.5)], discountType: 'PERCENT', discountValue: 0, promoDiscount: null }
     assert.equal(sessionBillTotal(before), 2500)
+})
+
+test('an open bill prices its deal live', () => {
+    assert.equal(canRepricePromo({ status: 'OPEN' }), true)
+    assert.equal(canRepricePromo({ status: 'OPEN', reopenedAt: null }), true)
+})
+
+test('a bill waiting for its bill is still open', () => {
+    // BILL_REQUESTED occupies the table and can still take another round.
+    assert.equal(canRepricePromo({ status: 'BILL_REQUESTED' }), true)
+})
+
+test('a closed bill is priced at what the customer was charged', () => {
+    assert.equal(canRepricePromo({ status: 'CLOSED' }), false)
+})
+
+test('a reopened bill stays frozen, even though its status says OPEN', () => {
+    // The trap. Status alone would call this live.
+    assert.equal(canRepricePromo({ status: 'OPEN', reopenedAt: new Date() }), false)
+})
+
+test('a reopened bill is frozen whether the stamp is a Date or a string', () => {
+    // It arrives as a string over JSON and as a Date from Prisma.
+    assert.equal(canRepricePromo({ status: 'OPEN', reopenedAt: '2026-09-16T23:00:00Z' }), false)
+})
+
+test('a reopened bill that was closed again is doubly frozen', () => {
+    assert.equal(canRepricePromo({ status: 'CLOSED', reopenedAt: new Date() }), false)
 })

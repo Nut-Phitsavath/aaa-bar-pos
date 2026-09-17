@@ -103,6 +103,19 @@ function SettleScreen() {
         } catch { setPromos([]) }
     }
 
+    /**
+     * Which deals staff may choose from the list.
+     *
+     * Live, in window, and not a customer coupon. The coupon check was missing
+     * and every "code only" promotion in the system sat in this picker waiting
+     * to be handed out by whoever was on the till.
+     */
+    const pickable = (p: any) =>
+        p.isActive &&
+        p.staffPickable !== false &&
+        new Date(p.startDate) <= new Date() &&
+        new Date(p.endDate) >= new Date()
+
     const applyPromo = async (promoId: string | null) => {
         try {
             const res = await fetch(`/api/table-sessions/${bill!.id}/promo`, {
@@ -708,7 +721,7 @@ function SettleScreen() {
                     <DialogHeader><DialogTitle>{t.choose_promo}</DialogTitle></DialogHeader>
                     <div className="space-y-2 max-h-[55vh] overflow-y-auto no-scrollbar">
                         {promos
-                            .filter((p: any) => p.isActive && new Date(p.startDate) <= new Date() && new Date(p.endDate) >= new Date())
+                            .filter(pickable)
                             .map((p: any) => (
                                 <button
                                     key={p.id}
@@ -728,7 +741,7 @@ function SettleScreen() {
                                     </p>
                                 </button>
                             ))}
-                        {promos.filter((p: any) => p.isActive && new Date(p.startDate) <= new Date() && new Date(p.endDate) >= new Date()).length === 0 && (
+                        {promos.filter(pickable).length === 0 && (
                             <p className="py-8 text-center text-sm italic text-slate-400">{t.no_promos_running}</p>
                         )}
                     </div>
