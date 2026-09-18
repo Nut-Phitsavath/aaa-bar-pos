@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation"
 import { useTranslation } from "@/hooks/use-translation"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
-import { ArrowRightLeft, Merge, SplitSquareHorizontal, Users } from "lucide-react"
+import { ArrowRightLeft, Merge, Minus, Plus, SplitSquareHorizontal, Users } from "lucide-react"
 import { toast } from "sonner"
 import { formatTHB } from "@/lib/currency"
 
@@ -52,7 +52,9 @@ export function TableOpsDialog({
     const router = useRouter()
     const [mode, setMode] = useState<Mode>("MOVE")
     const [tables, setTables] = useState<FloorTable[]>([])
-    const [picked, setPicked] = useState<Set<string>>(new Set())
+    // Line id -> how many of its units are leaving. A Map rather than a Set,
+    // because "which drinks" is now a count and not a yes/no.
+    const [picked, setPicked] = useState<Map<string, number>>(new Map())
     const [busy, setBusy] = useState(false)
 
     const load = useCallback(async () => {
@@ -62,7 +64,7 @@ export function TableOpsDialog({
 
     useEffect(() => {
         if (!open) return
-        setMode("MOVE"); setPicked(new Set())
+        setMode("MOVE"); setPicked(new Map())
         load()
     }, [open, load])
 
@@ -70,6 +72,7 @@ export function TableOpsDialog({
         code === "TABLE_OCCUPIED" ? t.op_table_occupied
             : code === "ALREADY_PAID" ? t.op_already_paid
                 : code === "CANNOT_SPLIT_EVERYTHING" ? t.op_split_everything
+                    : code === "SWAPPED_LINE_MOVES_WHOLE" ? t.op_swapped_whole
                     : code === "NO_OPEN_SHIFT" ? t.no_open_shift_exchange
                         : t.save_failed
 
@@ -93,12 +96,34 @@ export function TableOpsDialog({
     const otherBills = tables.flatMap((x) =>
         x.sessions.filter((s) => s.id !== sessionId).map((bill) => ({ table: x, bill })))
 
-    const splitTotal = lines
-        .filter((l) => picked.has(l.id))
-        .reduce((sum, l) => sum + l.total, 0)
-    const stayingTotal = lines
-        .filter((l) => !picked.has(l.id))
-        .reduce((sum, l) => sum + l.total, 0)
+    // Per drink, not per row: a line of two whiskeys with one leaving is half
+    // its value on each bill. total is price x quantity on every line, so this
+    // divides exactly.
+    const unitPrice = (l: Line) => (l.quantity > 0 ? l.total / l.quantity : 0)
+    const taking = (l: Line) => picked.get(l.id) ?? 0
+
+    const splitTotal = lines.reduce((sum, l) => sum + unitPrice(l) * taking(l), 0)
+    const stayingTotal = lines.reduce((sum, l) => sum + unitPrice(l) * (l.quantity - taking(l)), 0)
+
+    const unitsOnBill = lines.reduce((sum, l) => sum + l.quantity, 0)
+    const unitsMoving = lines.reduce((sum, l) => sum + taking(l), 0)
+    // The same rule the route refuses on, so the button is dead rather than the
+    // tap being rejected: at least one drink stays behind.
+    const splitAllowed = unitsMoving > 0 && unitsMoving < unitsOnBill
+
+    /** Tick the row: all of it, or none. The stepper trims from there. */
+    const toggleLine = (l: Line) => setPicked((prev) => {
+        const next = new Map(prev)
+        next.has(l.id) ? next.delete(l.id) : next.set(l.id, l.quantity)
+        return next
+    })
+
+    const setTaking = (l: Line, n: number) => setPicked((prev) => {
+        const next = new Map(prev)
+        const clamped = Math.max(0, Math.min(l.quantity, n))
+        clamped === 0 ? next.delete(l.id) : next.set(l.id, clamped)
+        return next
+    })
 
     const tabs: { key: Mode; label: string; icon: React.ReactNode }[] = [
         { key: "MOVE", label: t.op_move, icon: <ArrowRightLeft className="w-4 h-4" /> },
@@ -191,26 +216,71 @@ export function TableOpsDialog({
                     <>
                         <p className="text-sm text-slate-600">{t.op_split_desc}</p>
                         <div className="rounded-xl border border-slate-200 overflow-hidden max-h-64 overflow-y-auto">
+                            {/* A row, not a button: the stepper lives inside it
+                                and a button cannot nest inside a button. */}
                             {lines.map((l) => {
-                                const on = picked.has(l.id)
+                                const n = taking(l)
+                                const on = n > 0
                                 return (
-                                    <button
+                                    <div
                                         key={l.id}
-                                        onClick={() => setPicked((prev) => {
-                                            const next = new Set(prev)
-                                            next.has(l.id) ? next.delete(l.id) : next.add(l.id)
-                                            return next
-                                        })}
-                                        className={`w-full flex items-center gap-3 px-3 py-2.5 text-start border-b border-slate-100 last:border-0 transition-colors duration-150 ${on ? "bg-amber-50" : "bg-white hover:bg-slate-50"
+                                        className={`flex items-center gap-3 px-3 py-2.5 border-b border-slate-100 last:border-0 transition-colors duration-150 ${on ? "bg-amber-50" : "bg-white"
                                             }`}
                                     >
-                                        <span className={`w-5 h-5 rounded border-2 grid place-items-center shrink-0 ${on ? "bg-amber-600 border-amber-600" : "border-slate-300"}`}>
-                                            {on && <span className="w-2 h-2 rounded-sm bg-white" />}
+                                        {/* Tapping the name takes the whole line,
+                                            which is what usually happens. */}
+                                        <button
+                                            type="button"
+                                            onClick={() => toggleLine(l)}
+                                            aria-pressed={on}
+                                            className="flex items-center gap-3 min-w-0 flex-1 text-start"
+                                        >
+                                            <span className={`w-5 h-5 rounded border-2 grid place-items-center shrink-0 ${on ? "bg-amber-600 border-amber-600" : "border-slate-300"}`}>
+                                                {on && <span className="w-2 h-2 rounded-sm bg-white" />}
+                                            </span>
+                                            <span className="min-w-0 flex-1 truncate text-slate-900">
+                                                {l.localName || l.name}
+                                            </span>
+                                        </button>
+
+                                        {/* Only where there is something to
+                                            divide. A stepper on a single drink
+                                            is two dead buttons. */}
+                                        {l.quantity > 1 ? (
+                                            <div className="flex items-center gap-1 shrink-0">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setTaking(l, n - 1)}
+                                                    disabled={n === 0}
+                                                    aria-label={t.op_take_fewer}
+                                                    className="w-9 h-9 rounded-md border-2 border-slate-300 grid place-items-center text-slate-700 font-black disabled:opacity-30 hover:border-slate-400 transition-colors"
+                                                >
+                                                    <Minus className="w-4 h-4" />
+                                                </button>
+                                                {/* n of quantity, so the split
+                                                    and the remainder are both
+                                                    readable without arithmetic. */}
+                                                <span className="w-12 text-center tabular-nums font-bold text-slate-900">
+                                                    {n}<span className="text-slate-400">/{l.quantity}</span>
+                                                </span>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setTaking(l, n + 1)}
+                                                    disabled={n >= l.quantity}
+                                                    aria-label={t.op_take_more}
+                                                    className="w-9 h-9 rounded-md border-2 border-slate-300 grid place-items-center text-slate-700 font-black disabled:opacity-30 hover:border-slate-400 transition-colors"
+                                                >
+                                                    <Plus className="w-4 h-4" />
+                                                </button>
+                                            </div>
+                                        ) : (
+                                            <span className="w-[136px] text-center tabular-nums text-slate-400 shrink-0">1</span>
+                                        )}
+
+                                        <span className="w-20 text-end tabular-nums text-slate-700 shrink-0">
+                                            {formatTHB(unitPrice(l) * (on ? n : l.quantity))}
                                         </span>
-                                        <span className="w-8 tabular-nums font-bold text-slate-500 shrink-0">{l.quantity}</span>
-                                        <span className="min-w-0 flex-1 truncate text-slate-900">{l.localName || l.name}</span>
-                                        <span className="tabular-nums text-slate-700 shrink-0">{formatTHB(l.total)}</span>
-                                    </button>
+                                    </div>
                                 )
                             })}
                         </div>
@@ -225,8 +295,10 @@ export function TableOpsDialog({
                             </span>
                             <Button
                                 className="ms-auto h-11 bg-amber-600 hover:bg-amber-700 font-bold"
-                                disabled={busy || picked.size === 0 || picked.size >= lines.length}
-                                onClick={() => run(`/api/table-sessions/${sessionId}/split`, { itemIds: [...picked] }, (d) => {
+                                disabled={busy || !splitAllowed}
+                                onClick={() => run(`/api/table-sessions/${sessionId}/split`, {
+                                    items: [...picked].map(([itemId, quantity]) => ({ itemId, quantity })),
+                                }, (d) => {
                                     toast.success(t.op_split_done)
                                     onDone(); onClose()
                                     // Straight to the new bill: it exists to be

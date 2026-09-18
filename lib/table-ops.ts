@@ -132,3 +132,99 @@ export function withSwapCharges(
     }
     return [...picked]
 }
+
+/** One line, and how many of its units are leaving. */
+export type MovingLine = { itemId: string; quantity: number }
+
+export type SplittableLine = {
+    id: string
+    quantity: number
+    /** True when a package exchange is logged against this line. */
+    hasSwap?: boolean
+}
+
+/**
+ * The same split, by the unit rather than by the line.
+ *
+ * A line carries a quantity: two whiskeys keyed together are ONE row of two,
+ * because the till merges identical items. So "the guest leaving early pays for
+ * their whiskey" was impossible - the only choice was both whiskeys or neither,
+ * and 65% of real lines carry more than one unit.
+ *
+ * Three rules change once quantities are in play:
+ *
+ *   - "Everything is leaving" is now counted in UNITS, not rows. Taking 1 of 2
+ *     from every line on the bill leaves a real bill behind and is allowed;
+ *     taking all of every line is still a merge wearing a split's clothes.
+ *
+ *   - A quantity has to be a whole number of drinks, at least one, and no more
+ *     than the line holds. Half a beer is not a thing the bar can pour back.
+ *
+ *   - A line with an exchange logged against it moves WHOLE or not at all. The
+ *     swap points at one order line, so splitting that row leaves no honest
+ *     answer to which half the exchange happened on - and the upcharge that
+ *     rides with it would have to follow both halves at once.
+ */
+export function canSplitQuantities(
+    session: SessionLike,
+    lines: SplittableLine[],
+    moving: MovingLine[],
+    currentShiftId: string | null,
+): Check {
+    if (!isOpen(session.status)) return { ok: false, reason: 'SESSION_NOT_OPEN' }
+    if (session.paidCount > 0) return { ok: false, reason: 'ALREADY_PAID' }
+    if (!currentShiftId) return { ok: false, reason: 'NO_OPEN_SHIFT' }
+    if (moving.length === 0) return { ok: false, reason: 'NOTHING_SELECTED' }
+
+    const byId = new Map(lines.map((l) => [l.id, l]))
+    const seen = new Set<string>()
+    let unitsMoving = 0
+
+    for (const pick of moving) {
+        const line = byId.get(pick.itemId)
+        if (!line) return { ok: false, reason: 'LINE_NOT_ON_BILL' }
+        if (seen.has(pick.itemId)) return { ok: false, reason: 'DUPLICATE_LINE' }
+        seen.add(pick.itemId)
+
+        if (!Number.isInteger(pick.quantity)) return { ok: false, reason: 'QUANTITY_MUST_BE_WHOLE' }
+        if (pick.quantity < 1) return { ok: false, reason: 'QUANTITY_MUST_BE_POSITIVE' }
+        if (pick.quantity > line.quantity) return { ok: false, reason: 'MORE_THAN_ORDERED' }
+
+        if (line.hasSwap && pick.quantity !== line.quantity) {
+            return { ok: false, reason: 'SWAPPED_LINE_MOVES_WHOLE' }
+        }
+
+        unitsMoving += pick.quantity
+    }
+
+    const unitsOnBill = lines.reduce((sum, l) => sum + l.quantity, 0)
+    if (unitsMoving >= unitsOnBill) return { ok: false, reason: 'CANNOT_SPLIT_EVERYTHING' }
+
+    return { ok: true }
+}
+
+/**
+ * The exchange upcharge lines that have to travel with this selection.
+ *
+ * Same rule as withSwapCharges, expressed for quantities: a package leaving
+ * whole takes its upcharge line whole with it. A partial move of a swapped
+ * package is refused above, so there is no partial case to answer here.
+ *
+ * Returns ids, not quantities. The caller already knows how many units each
+ * line holds, and "the whole line" said as a number would be a sentinel
+ * somebody has to decode.
+ */
+export function swapChargeLineIds(
+    moving: MovingLine[],
+    swaps: { orderItemId: string; chargeItemId: string | null }[],
+): string[] {
+    const picked = new Set(moving.map((m) => m.itemId))
+    const extra: string[] = []
+    for (const swap of swaps) {
+        if (!swap.chargeItemId) continue
+        if (!picked.has(swap.orderItemId)) continue
+        if (picked.has(swap.chargeItemId)) continue
+        extra.push(swap.chargeItemId)
+    }
+    return extra
+}

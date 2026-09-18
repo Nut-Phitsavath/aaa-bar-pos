@@ -2,17 +2,24 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getSessionUser } from '@/lib/auth'
 import { isConfirmed } from '@/lib/payments'
-import { canSplit, withSwapCharges } from '@/lib/table-ops'
+import { canSplitQuantities, swapChargeLineIds, type MovingLine } from '@/lib/table-ops'
 import { recomputeOrderTotal } from '@/lib/swap-charge'
+// Splitting changes the line count a deal is measured against.
+import { refreshSessionPromo } from '@/lib/session-promo'
 
 export const dynamic = 'force-dynamic'
 
 /**
  * One guest pays for their own drinks (req #2, split by item).
  *
- * The chosen lines lift onto a second bill at the same table. Both bills stay
+ * The chosen drinks lift onto a second bill at the same table. Both bills stay
  * open and both get settled separately - which is the whole point: the guest
  * leaving early pays now, the rest of the party carries on.
+ *
+ * Takes QUANTITIES, not just lines. The till merges identical items, so two
+ * whiskeys keyed together are one row of two - and 65% of real order lines
+ * carry more than one unit. Moving a single whiskey off a row of two used to be
+ * impossible, which made "split by item" a promise the screen could not keep.
  *
  * Deliberately NOT "split evenly by four". Settle already takes as many tenders
  * against one bill as it needs, so four people paying a quarter each is four
@@ -28,8 +35,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         const user = await getSessionUser()
         if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-        const { itemIds } = await request.json()
-        const moving: string[] = Array.isArray(itemIds) ? itemIds : []
+        const body = await request.json()
+        const moving: MovingLine[] = Array.isArray(body?.items)
+            ? body.items.map((i: any) => ({ itemId: String(i?.itemId), quantity: Number(i?.quantity) }))
+            : []
 
         const openShift = await prisma.shift.findFirst({ where: { status: 'OPEN' } })
 
@@ -50,35 +59,44 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         // movable nor counted when deciding whether everything is leaving.
         const live = session.orders.flatMap((o) => o.items.filter((i) => !i.voidedAt))
 
-        const check = canSplit(
-            { id: session.id, status: session.status, paidCount: session.payments.filter(isConfirmed).length },
-            live.map((i) => i.id),
-            moving,
-            openShift?.id ?? null,
-        )
-        if (!check.ok) return NextResponse.json({ error: check.reason }, { status: 409 })
-
-        // An exchange upcharge is not a line of its own - it belongs to the
-        // package that earned it, and has to land on the same bill.
+        // An exchange upcharge is not a line a guest ordered - it belongs to
+        // the package that earned it, and has to land on the same bill.
         const swaps = await prisma.packageSwap.findMany({
             where: { orderItemId: { in: live.map((i) => i.id) }, reversedAt: null },
-            select: { id: true, orderItemId: true, chargeItemId: true },
+            select: { orderItemId: true, chargeItemId: true },
         })
-        const lines = withSwapCharges(moving, swaps)
+        const swapped = new Set(swaps.map((s) => s.orderItemId))
+
+        const splittable = live.map((i) => ({
+            id: i.id,
+            quantity: i.quantity,
+            hasSwap: swapped.has(i.id),
+        }))
+        const byId = new Map(live.map((i) => [i.id, i]))
+
+        const sessionLike = {
+            id: session.id,
+            status: session.status,
+            paidCount: session.payments.filter(isConfirmed).length,
+        }
+
+        const check = canSplitQuantities(sessionLike, splittable, moving, openShift?.id ?? null)
+        if (!check.ok) return NextResponse.json({ error: check.reason }, { status: 409 })
+
+        // The upcharges dragged along, each moving its whole line.
+        const extra = swapChargeLineIds(moving, swaps)
+            .map((lineId) => ({ itemId: lineId, quantity: byId.get(lineId)?.quantity ?? 0 }))
+            .filter((m) => m.quantity > 0)
+        const all = [...moving, ...extra]
 
         // Re-checked, because dragging the upcharges along can be what tips the
         // selection into being the whole bill.
-        const after = canSplit(
-            { id: session.id, status: session.status, paidCount: session.payments.filter(isConfirmed).length },
-            live.map((i) => i.id),
-            lines,
-            openShift?.id ?? null,
-        )
+        const after = canSplitQuantities(sessionLike, splittable, all, openShift?.id ?? null)
         if (!after.ok) return NextResponse.json({ error: after.reason }, { status: 409 })
 
-        // The waiter and till user of the round the first line came from, so the
-        // new bill is attributed rather than orphaned.
-        const sourceOrder = session.orders.find((o) => o.items.some((i) => i.id === moving[0]))!
+        // The waiter and till user of the round the first drink came from, so
+        // the new bill is attributed rather than orphaned.
+        const sourceOrder = session.orders.find((o) => o.items.some((i) => i.id === all[0].itemId))!
 
         const created = await prisma.$transaction(async (tx) => {
             const child = await tx.tableSession.create({
@@ -129,26 +147,76 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
                 },
             })
 
-            // The lines themselves move; nothing is re-priced and no stock
-            // moves, because the drinks were poured either way.
-            await tx.orderItem.updateMany({
-                where: { id: { in: lines } },
-                data: { orderId: order.id },
-            })
+            // Nothing is re-priced and no stock moves - the drinks were poured
+            // either way. What changes is which bill they sit on.
+            //
+            // total is price x quantity on every one of the 1049 lines in the
+            // database, and the orders route writes it that way, so dividing a
+            // row is exact arithmetic rather than a proportion that could drift
+            // a satang and leave the two halves not adding up to the original.
+            const wholeLines: string[] = []
+            for (const pick of all) {
+                const lineItem = byId.get(pick.itemId)!
 
-            // Exchanges are logged against a session as well as a line, so they
-            // follow their package to the new bill - otherwise the exchange
-            // report names a bill the set is no longer on.
-            await tx.packageSwap.updateMany({
-                where: { orderItemId: { in: lines }, sessionId: id },
-                data: { sessionId: child.id },
-            })
+                if (pick.quantity >= lineItem.quantity) {
+                    // The whole row goes: reparented, not copied, so its id
+                    // survives and anything pointing at it still resolves.
+                    wholeLines.push(pick.itemId)
+                    continue
+                }
 
-            // Every round that lost lines is worth less, and the new one is
+                const staying = lineItem.quantity - pick.quantity
+                await tx.orderItem.update({
+                    where: { id: pick.itemId },
+                    data: { quantity: staying, total: lineItem.price * staying },
+                })
+                await tx.orderItem.create({
+                    data: {
+                        orderId: order.id,
+                        menuId: lineItem.menuId,
+                        // Snapshotted name and price, copied rather than
+                        // re-read: the new row is the same drink sold at the
+                        // same moment for the same money.
+                        name: lineItem.name,
+                        price: lineItem.price,
+                        quantity: pick.quantity,
+                        total: lineItem.price * pick.quantity,
+                        note: lineItem.note,
+                        sugarLevel: lineItem.sugarLevel,
+                        shotType: lineItem.shotType,
+                        isTakeaway: lineItem.isTakeaway,
+                    },
+                })
+            }
+
+            if (wholeLines.length > 0) {
+                await tx.orderItem.updateMany({
+                    where: { id: { in: wholeLines } },
+                    data: { orderId: order.id },
+                })
+
+                // Exchanges are logged against a session as well as a line, so
+                // they follow their package to the new bill - otherwise the
+                // exchange report names a bill the set is no longer on. Only
+                // whole lines move, which is why a swapped line may not split.
+                await tx.packageSwap.updateMany({
+                    where: { orderItemId: { in: wholeLines }, sessionId: id },
+                    data: { sessionId: child.id },
+                })
+            }
+
+            // Every round that lost drinks is worth less, and the new one is
             // worth what it gained. Recomputed from surviving lines rather than
             // adjusted by a delta that could drift.
             for (const o of session.orders) await recomputeOrderTotal(tx, o.id)
             await recomputeOrderTotal(tx, order.id)
+
+            // A promo is counted from the drinks ON a bill, and this just moved
+            // some off. Without this the parent keeps paying out a deal its
+            // remaining rounds no longer qualify for. The parent only: promoId
+            // does not follow to the child, because the deal was quoted to the
+            // bill the party sat down on.
+            await refreshSessionPromo(tx, id)
 
             await tx.tableSessionEvent.create({
                 data: {
@@ -158,14 +226,19 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
                     fromTable: session.table.name,
                     toTable: session.table.name,
                     otherSessionId: child.id,
-                    lineCount: lines.length,
+                    lineCount: all.length,
                 },
             })
 
             return child
         })
 
-        return NextResponse.json({ split: true, sessionId: created.id, lines: lines.length })
+        return NextResponse.json({
+            split: true,
+            sessionId: created.id,
+            lines: all.length,
+            units: all.reduce((sum, m) => sum + Math.min(m.quantity, byId.get(m.itemId)?.quantity ?? 0), 0),
+        })
     } catch (error) {
         console.error('[table split] POST failed', error)
         return NextResponse.json({ error: 'Failed to split bill' }, { status: 500 })
