@@ -7,7 +7,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { ArrowLeft, Clock, User, ChevronDown, UserRound, Search, X, SplitSquareHorizontal } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { toast } from "sonner"
-import { formatDuration } from "@/lib/sessions"
+import { formatDuration, openedClock } from "@/lib/sessions"
 // One rule for lettering a table's bills, shared with the floor plan picker.
 import { billLabel, orderBills } from "@/lib/table-ops"
 // The same dialog the floor plan opens, so the question looks the same.
@@ -194,6 +194,13 @@ export function SessionBanner({
                 </p>
                 <p className="text-sm text-slate-400 mt-1.5 flex items-center gap-1.5 tabular-nums">
                   <Clock className="w-4 h-4" />
+                  {/* The clock time the party sat down, not only how long ago.
+                      "2h 40m" cannot be checked against anything; "19:00" can be
+                      read back to a guest arguing about their bill, and matches
+                      what the printed slip says. Elapsed time stays because it
+                      is the figure staff actually scan the floor for. */}
+                  <span className="text-slate-300">{openedClock(session.openedAt)}</span>
+                  <span className="text-slate-600">·</span>
                   {formatDuration(session.openedAt, now)}
                   <span className="text-slate-600">·</span>
                   {session.status === "BILL_REQUESTED" ? t.bill_requested : t.occupied}

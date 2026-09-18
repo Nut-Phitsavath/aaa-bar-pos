@@ -136,3 +136,23 @@ export function canCloseSession(session: { status: string }, orders: SessionOrde
     }
     return { ok: true }
 }
+
+/**
+ * The clock time a table opened: "19:00".
+ *
+ * Elapsed time answers "how long have they been here", which is what staff scan
+ * the floor for. It cannot answer "when did we sit down", which is what a guest
+ * disputing a bill asks - and "2h 40m ago" makes them do the arithmetic.
+ *
+ * 24-hour and zero-padded, matching the printed slip, so the screen and the
+ * paper never disagree about the same table. A bar that closes at 3am reads
+ * "01:30", not "1:30 AM", which is one glyph to misread at the end of a shift.
+ *
+ * Seconds are absent for the same reason they are absent from the duration: a
+ * table is measured in rounds, not ticks.
+ */
+export function openedClock(openedAt: Date | string): string {
+    const opened = typeof openedAt === 'string' ? new Date(openedAt) : openedAt
+    if (Number.isNaN(opened.getTime())) return ''
+    return `${String(opened.getHours()).padStart(2, '0')}:${String(opened.getMinutes()).padStart(2, '0')}`
+}
