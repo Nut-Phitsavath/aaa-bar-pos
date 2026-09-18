@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { requireManager } from '@/lib/auth'
 import { sessionTotal, BILLABLE_ORDER_STATUSES, sessionBillTotal } from '@/lib/sessions'
 import { outstandingByCustomer } from '@/lib/customer-tabs'
+import { parseMinSpend } from '@/lib/min-spend'
 
 // The floor plan polls this every 5s; it must never be served stale.
 export const dynamic = 'force-dynamic'
@@ -69,6 +70,9 @@ export async function GET() {
                 area: table.area,
                 seats: table.seats,
                 displayOrder: table.displayOrder,
+                // The room's floor, so the manage screen can show which rooms
+                // carry one. Null on an ordinary table.
+                minSpend: table.minSpend,
                 sessions,
                 // The oldest bill, which is the party who sat down. Kept so a
                 // table with one bill - almost all of them - reads exactly as
@@ -92,7 +96,7 @@ export async function POST(request: Request) {
     if (gate instanceof Response) return gate
 
     try {
-        const { name, area, seats, displayOrder } = await request.json()
+        const { name, area, seats, displayOrder, minSpend } = await request.json()
 
         if (!name || typeof name !== 'string' || !name.trim()) {
             return NextResponse.json({ error: 'Table name is required' }, { status: 400 })
@@ -106,7 +110,8 @@ export async function POST(request: Request) {
                 // appears as a new tab without a migration.
                 area: String(area || 'INDOOR').trim().slice(0, 24) || 'INDOOR',
                 seats: Number(seats) || 4,
-                displayOrder: Number(displayOrder) || 0
+                displayOrder: Number(displayOrder) || 0,
+                minSpend: parseMinSpend(minSpend)
             }
         })
 

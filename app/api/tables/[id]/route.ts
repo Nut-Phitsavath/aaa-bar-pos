@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requireManager } from '@/lib/auth'
+import { parseMinSpend } from '@/lib/min-spend'
 
 export const dynamic = 'force-dynamic'
 
@@ -10,7 +11,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
 
     try {
         const { id } = await params
-        const { name, area, seats, displayOrder, isActive } = await request.json()
+        const { name, area, seats, displayOrder, isActive, minSpend } = await request.json()
 
         // A table with money open on it cannot be taken off the floor.
         if (isActive === false) {
@@ -29,7 +30,11 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
                 ...(area !== undefined && { area: String(area).trim().slice(0, 24) || 'INDOOR' }),
                 ...(seats !== undefined && { seats: Number(seats) }),
                 ...(displayOrder !== undefined && { displayOrder: Number(displayOrder) }),
-                ...(isActive !== undefined && { isActive: Boolean(isActive) })
+                ...(isActive !== undefined && { isActive: Boolean(isActive) }),
+                // Sent explicitly, so clearing the field on a room that had a
+                // floor actually removes it - parseMinSpend turns blank into
+                // null rather than leaving yesterday's figure in place.
+                ...(minSpend !== undefined && { minSpend: parseMinSpend(minSpend) })
             }
         })
 

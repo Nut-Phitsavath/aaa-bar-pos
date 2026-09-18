@@ -20,6 +20,8 @@ type Table = {
     name: string
     area: string
     seats: number
+    /** A room sold on a floor. Null on an ordinary table. */
+    minSpend: number | null
     displayOrder: number
     sessions: { id: string }[]
 }
@@ -46,7 +48,7 @@ export default function ManageTablesPage() {
 
     const [isOpen, setIsOpen] = useState(false)
     const [editing, setEditing] = useState<Table | null>(null)
-    const [form, setForm] = useState({ name: "", area: "INDOOR", newArea: "", seats: "4" })
+    const [form, setForm] = useState({ name: "", area: "INDOOR", newArea: "", seats: "4", minSpend: "" })
 
     const load = useCallback(async () => {
         try {
@@ -78,13 +80,13 @@ export default function ManageTablesPage() {
 
     const openNew = () => {
         setEditing(null)
-        setForm({ name: "", area: areas[0] || "INDOOR", newArea: "", seats: "4" })
+        setForm({ name: "", area: areas[0] || "INDOOR", newArea: "", seats: "4", minSpend: "" })
         setIsOpen(true)
     }
 
     const openEdit = (table: Table) => {
         setEditing(table)
-        setForm({ name: table.name, area: table.area, newArea: "", seats: String(table.seats) })
+        setForm({ name: table.name, area: table.area, newArea: "", seats: String(table.seats), minSpend: table.minSpend ? String(table.minSpend) : "" })
         setIsOpen(true)
     }
 
@@ -100,6 +102,7 @@ export default function ManageTablesPage() {
                     name: form.name.trim(),
                     area,
                     seats: Number(form.seats) || 4,
+                    minSpend: form.minSpend,
                     // New tables land at the end of their area rather than on
                     // top of whatever is already there.
                     displayOrder: editing
@@ -328,6 +331,22 @@ export default function ManageTablesPage() {
                                 onChange={(e) => setForm({ ...form, seats: e.target.value.replace(/\D/g, "") })}
                                 maxLength={2}
                             />
+                        </div>
+                        {/* Blank on every table but the rooms that are sold on
+                            a floor, so the hint says what blank means rather
+                            than leaving a manager guessing whether 0 is it. */}
+                        <div className="space-y-2 sm:col-span-2">
+                            <Label htmlFor="tableMinSpend">{t.min_spend}</Label>
+                            <Input
+                                id="tableMinSpend"
+                                className="h-11"
+                                inputMode="numeric"
+                                placeholder="—"
+                                value={form.minSpend}
+                                onChange={(e) => setForm({ ...form, minSpend: e.target.value.replace(/\D/g, "") })}
+                                maxLength={9}
+                            />
+                            <p className="text-xs text-muted-foreground">{t.min_spend_hint}</p>
                         </div>
                     </div>
                     <DialogFooter>

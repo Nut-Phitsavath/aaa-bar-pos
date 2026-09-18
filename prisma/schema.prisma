@@ -282,6 +282,14 @@ model Table {
   seats        Int            @default(4)
   displayOrder Int            @default(0)
   isActive     Boolean        @default(true)
+  /// What this room undertakes to spend across the night (req: VIP room rule).
+  ///
+  /// Null on an ordinary table, and null is not 0: most tables have no floor,
+  /// and 0 would read as "a minimum of nothing" rather than "no minimum".
+  ///
+  /// On the table rather than the session, because the room is what was booked
+  /// on these terms and a bill inherits them by sitting there.
+  minSpend     Float?
   createdAt    DateTime       @default(now())
   updatedAt    DateTime       @updatedAt
   sessions     TableSession[]
