@@ -354,7 +354,7 @@ export default function TablesPage() {
             >
               <CalendarClock className="w-4 h-4 mr-2" />
               {t.reserve_table}
-            </Button>)
+            </Button>
             <Button
               variant="outline"
               className="h-11 border-slate-300 text-slate-700"
