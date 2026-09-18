@@ -290,6 +290,22 @@ model Table {
   /// On the table rather than the session, because the room is what was booked
   /// on these terms and a bill inherits them by sitting there.
   minSpend     Float?
+  /// Settled but not yet cleared. A table used to become free the instant its
+  /// bill closed, so a host could walk a party onto glasses nobody had
+  /// collected - the floor plan said "free" and the room said otherwise.
+  ///
+  /// On the table, not the session: the session is over, and what is left is a
+  /// fact about the furniture.
+  needsClearing Boolean       @default(false)
+  /// A booking held on this table. Name and time only - who is coming and when
+  /// - because the thing this has to prevent is seating somebody else in a room
+  /// that is spoken for, and that needs no more than those two facts.
+  ///
+  /// ponytail: not a bookings system. No party size, no deposit, no arrived /
+  /// no-show, no history. Add those when someone needs to run the diary from
+  /// here rather than from a notebook.
+  reservedFor  String?
+  reservedAt   DateTime?
   createdAt    DateTime       @default(now())
   updatedAt    DateTime       @updatedAt
   sessions     TableSession[]
@@ -349,6 +365,10 @@ model TableSession {
   /// once stays a bill that was reopened, which is what an audit asks.
   reopenedAt           DateTime?
   reopenedById         String?
+  /// When the bill was asked for. A table waiting to pay is the most
+  /// time-sensitive thing on a floor, and without this one asked for 30
+  /// seconds ago looked identical to one asked for twenty minutes ago.
+  billRequestedAt      DateTime?
   reopenReason         String?
   createdAt            DateTime            @default(now())
   updatedAt            DateTime            @updatedAt

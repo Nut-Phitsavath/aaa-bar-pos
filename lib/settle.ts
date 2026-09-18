@@ -82,10 +82,30 @@ export async function closeSessionIfSettled(sessionId: string): Promise<{
             data: { paymentStatus: 'CANCELLED' }
         })
 
-        await tx.tableSession.update({
+        const closedSession = await tx.tableSession.update({
             where: { id: sessionId },
             data: { status: 'CLOSED', closedAt, fxRateLAK, fxRateUSD, taxRate }
         })
+
+        // The party has paid and left; the glasses have not. Marking the table
+        // rather than freeing it is what stops a host seating somebody onto a
+        // table nobody has collected - the floor plan used to call it free the
+        // instant this row changed.
+        //
+        // Only when the last bill goes: a split table with one half still
+        // drinking is not ready to be cleared.
+        const stillOpen = await tx.tableSession.count({
+            where: {
+                tableId: closedSession.tableId,
+                status: { not: 'CLOSED' },
+            },
+        })
+        if (stillOpen === 0) {
+            await tx.table.update({
+                where: { id: closedSession.tableId },
+                data: { needsClearing: true },
+            })
+        }
     })
 
     return { closed: true, total }
