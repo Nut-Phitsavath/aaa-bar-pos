@@ -8,7 +8,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
     canMove, canMerge, canSplit, withSwapCharges,
-    canSplitQuantities, swapChargeLineIds, billLabel, orderBills,
+    canSplitQuantities, swapChargeLineIds, billLabel, orderBills, canSendLines,
 } from './table-ops.ts'
 
 const open = (over = {}) => ({ id: 's1', status: 'OPEN', paidCount: 0, ...over })
@@ -314,4 +314,68 @@ test('without createdAt it still sorts deterministically, just by id', () => {
     const bills = [{ id: 'b', openedAt: same }, { id: 'a', openedAt: same }]
     assert.equal(billLabel('T5', bills, 'a'), 'T5-a')
     assert.equal(billLabel('T5', [...bills].reverse(), 'a'), 'T5-a')
+})
+
+// --- canSendLines: drinks leaving for another table's bill -------------------
+
+const otherBill = (over = {}) => ({ id: 's2', status: 'OPEN', paidCount: 0, ...over })
+
+test('a bottle can leave a line of three for another table', () => {
+    const lines = [{ id: 'wine', quantity: 3 }, { id: 'beer', quantity: 2 }]
+    assert.deepEqual(
+        canSendLines(open(), otherBill(), lines, [{ itemId: 'wine', quantity: 1 }], 'shift1'),
+        { ok: true },
+    )
+})
+
+test('sending every drink is a merge, and says so', () => {
+    const lines = [{ id: 'wine', quantity: 1 }]
+    assert.deepEqual(
+        canSendLines(open(), otherBill(), lines, [{ itemId: 'wine', quantity: 1 }], 'shift1'),
+        { ok: false, reason: 'CANNOT_SEND_EVERYTHING' },
+    )
+})
+
+test('a bill cannot send drinks to itself', () => {
+    const lines = [{ id: 'wine', quantity: 3 }]
+    assert.deepEqual(
+        canSendLines(open({ id: 'same' }), otherBill({ id: 'same' }), lines,
+            [{ itemId: 'wine', quantity: 1 }], 'shift1'),
+        { ok: false, reason: 'SAME_BILL' },
+    )
+})
+
+test('the destination has to be open and unpaid too', () => {
+    const lines = [{ id: 'wine', quantity: 3 }]
+    const one = [{ itemId: 'wine', quantity: 1 }]
+    assert.deepEqual(
+        canSendLines(open(), otherBill({ status: 'CLOSED' }), lines, one, 'shift1'),
+        { ok: false, reason: 'DESTINATION_NOT_OPEN' },
+    )
+    assert.deepEqual(
+        canSendLines(open(), otherBill({ paidCount: 1 }), lines, one, 'shift1'),
+        { ok: false, reason: 'DESTINATION_ALREADY_PAID' },
+    )
+    // A bill asking for its bill is still open for business.
+    assert.deepEqual(
+        canSendLines(open(), otherBill({ status: 'BILL_REQUESTED' }), lines, one, 'shift1'),
+        { ok: true },
+    )
+})
+
+test('the split rules still apply to the sending bill', () => {
+    const lines = [{ id: 'wine', quantity: 3 }, { id: 'beer', quantity: 2 }]
+    assert.deepEqual(
+        canSendLines(open({ paidCount: 1 }), otherBill(), lines, [{ itemId: 'wine', quantity: 1 }], 'shift1'),
+        { ok: false, reason: 'ALREADY_PAID' },
+    )
+    assert.deepEqual(
+        canSendLines(open(), otherBill(), lines, [{ itemId: 'wine', quantity: 9 }], 'shift1'),
+        { ok: false, reason: 'MORE_THAN_ORDERED' },
+    )
+    assert.deepEqual(
+        canSendLines(open(), otherBill(), [{ id: 'pkg', quantity: 2, hasSwap: true }, { id: 'b', quantity: 5 }],
+            [{ itemId: 'pkg', quantity: 1 }], 'shift1'),
+        { ok: false, reason: 'SWAPPED_LINE_MOVES_WHOLE' },
+    )
 })

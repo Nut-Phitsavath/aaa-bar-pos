@@ -295,3 +295,41 @@ export function billLabel(
     if (index < 0) return tableName
     return `${tableName}-${splitSuffix(index)}`
 }
+
+/**
+ * Chosen drinks leave for another table's bill (req #2, transfer item).
+ *
+ * A bottle carried from a floor table into a VIP room; a round rung into the
+ * wrong table. This is a SPLIT whose second bill already exists, so it borrows
+ * the split's rules wholesale - including the quantities, so a single bottle
+ * can leave a line of three.
+ *
+ * Two rules it adds, both about the destination:
+ *
+ *   - The receiving bill has to be open and unpaid, for the same reason the
+ *     sending one does: a tender belongs to the bill it was taken against, and
+ *     drinks arriving underneath it explain a total that no longer exists.
+ *
+ *   - Sending EVERY drink is a merge, and merge is the operation that closes
+ *     the emptied bill properly. Doing it here would leave a session worth
+ *     nothing sitting open on the floor for somebody to find later.
+ */
+export function canSendLines(
+    from: SessionLike,
+    into: SessionLike,
+    lines: SplittableLine[],
+    moving: MovingLine[],
+    currentShiftId: string | null,
+): Check {
+    if (from.id === into.id) return { ok: false, reason: 'SAME_BILL' }
+    if (!isOpen(into.status)) return { ok: false, reason: 'DESTINATION_NOT_OPEN' }
+    if (into.paidCount > 0) return { ok: false, reason: 'DESTINATION_ALREADY_PAID' }
+
+    const check = canSplitQuantities(from, lines, moving, currentShiftId)
+    // Said in the language of the operation the staff member chose: "leave one
+    // behind" is advice for a split, and the answer here is to use Merge.
+    if (!check.ok && check.reason === 'CANNOT_SPLIT_EVERYTHING') {
+        return { ok: false, reason: 'CANNOT_SEND_EVERYTHING' }
+    }
+    return check
+}

@@ -4,6 +4,7 @@ import { getSessionUser } from '@/lib/auth'
 import { isConfirmed } from '@/lib/payments'
 import { canSplitQuantities, swapChargeLineIds, type MovingLine } from '@/lib/table-ops'
 import { recomputeOrderTotal } from '@/lib/swap-charge'
+import { placeLinesOnOrder } from '@/lib/line-moves'
 // Splitting changes the line count a deal is measured against.
 import { refreshSessionPromo } from '@/lib/session-promo'
 
@@ -147,54 +148,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
                 },
             })
 
-            // Nothing is re-priced and no stock moves - the drinks were poured
-            // either way. What changes is which bill they sit on.
-            //
-            // total is price x quantity on every one of the 1049 lines in the
-            // database, and the orders route writes it that way, so dividing a
-            // row is exact arithmetic rather than a proportion that could drift
-            // a satang and leave the two halves not adding up to the original.
-            const wholeLines: string[] = []
-            for (const pick of all) {
-                const lineItem = byId.get(pick.itemId)!
-
-                if (pick.quantity >= lineItem.quantity) {
-                    // The whole row goes: reparented, not copied, so its id
-                    // survives and anything pointing at it still resolves.
-                    wholeLines.push(pick.itemId)
-                    continue
-                }
-
-                const staying = lineItem.quantity - pick.quantity
-                await tx.orderItem.update({
-                    where: { id: pick.itemId },
-                    data: { quantity: staying, total: lineItem.price * staying },
-                })
-                await tx.orderItem.create({
-                    data: {
-                        orderId: order.id,
-                        menuId: lineItem.menuId,
-                        // Snapshotted name and price, copied rather than
-                        // re-read: the new row is the same drink sold at the
-                        // same moment for the same money.
-                        name: lineItem.name,
-                        price: lineItem.price,
-                        quantity: pick.quantity,
-                        total: lineItem.price * pick.quantity,
-                        note: lineItem.note,
-                        sugarLevel: lineItem.sugarLevel,
-                        shotType: lineItem.shotType,
-                        isTakeaway: lineItem.isTakeaway,
-                    },
-                })
-            }
+            // Rows divide where only some of a line is going. Shared with the
+            // transfer route, because it is the same arithmetic and it is money.
+            const wholeLines = await placeLinesOnOrder(tx, all, byId, order.id)
 
             if (wholeLines.length > 0) {
-                await tx.orderItem.updateMany({
-                    where: { id: { in: wholeLines } },
-                    data: { orderId: order.id },
-                })
-
                 // Exchanges are logged against a session as well as a line, so
                 // they follow their package to the new bill - otherwise the
                 // exchange report names a bill the set is no longer on. Only
