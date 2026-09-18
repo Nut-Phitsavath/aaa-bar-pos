@@ -18,7 +18,23 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
             include: {
                 // Name the deal, so the bill screen can say which one is on.
                 promotion: { select: { id: true, name: true, code: true } },
-                table: true,
+                // The other bills open at this table, so the till can say which
+                // one it has open and hop to the sibling. Splitting leaves two
+                // parties at one table, and until now the banner read plain
+                // "T5" on both of them - a waiter could not tell which guests
+                // they were about to charge.
+                //
+                // Id, status and openedAt only: the letter comes from the
+                // opening order and the rest of this payload is already heavy.
+                table: {
+                    include: {
+                        sessions: {
+                            where: { status: { not: 'CLOSED' } },
+                            orderBy: { openedAt: 'asc' },
+                            select: { id: true, status: true, openedAt: true, createdAt: true },
+                        },
+                    },
+                },
                 orders: {
                     orderBy: { createdAt: 'asc' },
                     include: {

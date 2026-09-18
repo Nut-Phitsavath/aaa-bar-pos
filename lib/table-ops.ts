@@ -228,3 +228,70 @@ export function swapChargeLineIds(
     }
     return extra
 }
+
+/** A bill on a table, for naming purposes only. */
+export type BillIdentity = {
+    id: string
+    openedAt: Date | string
+    /** When the row was written. Distinguishes bills that share an openedAt. */
+    createdAt?: Date | string
+}
+
+/**
+ * Order the bills on a table the way both screens must letter them.
+ *
+ * By opening time first, because that is the order the party sat down in and
+ * the order the floor plan already lists them.
+ *
+ * Then by createdAt, which is what makes "-a" mean the original party rather
+ * than a coin toss. Two bills CAN share an openedAt - a split stamps
+ * `new Date()` on the child, and a table split in the same millisecond it
+ * opened would tie - and falling straight through to id then letters them by
+ * UUID order, so the guests who had been there all night could become "T5-b"
+ * while the half that just split off took "T5-a". The newer row is always the
+ * one that split off.
+ *
+ * Id last, purely so the sort is total. A comparison that can return 0 for two
+ * different bills would letter the same bill "a" on one request and "b" on the
+ * next, which is worse than no letter at all.
+ */
+export function orderBills<T extends BillIdentity>(bills: T[]): T[] {
+    return [...bills].sort((a, b) => {
+        const at = new Date(a.openedAt).getTime()
+        const bt = new Date(b.openedAt).getTime()
+        if (at !== bt) return at - bt
+
+        const ac = a.createdAt ? new Date(a.createdAt).getTime() : null
+        const bc = b.createdAt ? new Date(b.createdAt).getTime() : null
+        if (ac !== null && bc !== null && ac !== bc) return ac - bc
+
+        return a.id.localeCompare(b.id)
+    })
+}
+
+/**
+ * What to call this bill on screen: "T5", or "T5-a" when the table holds more
+ * than one.
+ *
+ * Used by the floor plan's bill picker AND by the till's banner, from this one
+ * function on purpose. Both screens letter the same bills, and a till reading
+ * "T5-b" while the floor plan calls it "T5-a" would be a waiter charging a
+ * party they can see is not the one they picked.
+ *
+ * An unsplit table keeps its plain name. "T5-a" on a table with one bill is a
+ * suffix that answers a question nobody asked.
+ *
+ * A bill not among the siblings falls back to the table's own name rather than
+ * inventing a letter - that happens while a screen is mid-refresh, and a wrong
+ * letter is worse than a missing one.
+ */
+export function billLabel(
+    tableName: string,
+    siblings: BillIdentity[],
+    sessionId: string,
+): string {
+    if (siblings.length <= 1) return tableName
+    const index = orderBills(siblings).findIndex((s) => s.id === sessionId)
+    if (index < 0) return tableName
+    return `${tableName}-${splitSuffix(index)}`
+}

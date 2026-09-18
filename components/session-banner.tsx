@@ -4,17 +4,28 @@ import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { useTranslation } from "@/hooks/use-translation"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { ArrowLeft, Clock, User, ChevronDown, UserRound, Search, X } from "lucide-react"
+import { ArrowLeft, Clock, User, ChevronDown, UserRound, Search, X, SplitSquareHorizontal } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { toast } from "sonner"
 import { formatDuration } from "@/lib/sessions"
+// One rule for lettering a table's bills, shared with the floor plan picker.
+import { billLabel, orderBills } from "@/lib/table-ops"
+// The same dialog the floor plan opens, so the question looks the same.
+import { BillPickerDialog, type PickableBill } from "@/components/pos/bill-picker-dialog"
 import { formatTHB } from "@/lib/currency"
 
 export type BannerSession = {
   id: string
   status: string
   openedAt: string
-  table: { name: string; area: string }
+  // `sessions` is every bill still open at this table, oldest first: one entry
+  // on an ordinary table, two once a bill has been split. Optional because the
+  // banner renders before the bill has loaded.
+  table: {
+    name: string
+    area: string
+    sessions?: { id: string; status: string; openedAt: string }[]
+  }
 }
 
 export type Waiter = { id: string; name: string }
@@ -59,6 +70,9 @@ export function SessionBanner({
   const [newName, setNewName] = useState("")
   const [newPhone, setNewPhone] = useState("")
   const [saving, setSaving] = useState(false)
+  // The bill picker, and the rounds/totals it needs, loaded on open.
+  const [switching, setSwitching] = useState(false)
+  const [switchBills, setSwitchBills] = useState<PickableBill[]>([])
 
   useEffect(() => {
     if (!naming) return
@@ -101,6 +115,31 @@ export function SessionBanner({
 
   const serverName = waiters.find((w) => w.id === waiterId)?.name
 
+  // Only worth showing when the table actually holds more than one bill. On an
+  // ordinary table these collapse to the plain table name and no switcher.
+  const siblings = session?.table.sessions ?? []
+  const split = siblings.length > 1
+  const label = session ? billLabel(session.table.name, siblings, session.id) : null
+  const others = split ? orderBills(siblings).filter((s) => s.id !== session!.id) : []
+
+  // Rounds and totals for the picker, fetched only when it opens. The bill
+  // payload deliberately carries just enough to name the siblings; loading
+  // every sibling's orders on every till refresh to fill a dialog nobody has
+  // opened would be paying for it all night.
+  useEffect(() => {
+    if (!switching || !session) return
+    let cancelled = false
+    fetch("/api/tables")
+      .then((r) => (r.ok ? r.json() : []))
+      .then((rows: { id: string; sessions: PickableBill[] }[]) => {
+        if (cancelled) return
+        const mine = rows.find((x) => x.sessions?.some((s) => s.id === session.id))
+        setSwitchBills(mine?.sessions ?? [])
+      })
+      .catch(() => { if (!cancelled) setSwitchBills([]) })
+    return () => { cancelled = true }
+  }, [switching, session])
+
   return (
     <>
       <div className="bg-slate-900 text-white flex items-stretch shrink-0">
@@ -116,11 +155,37 @@ export function SessionBanner({
             fills in rather than appearing and shoving the page down. The data
             takes ~25ms; the jump was what read as slow. */}
         <div className="flex items-center gap-4 py-2.5 pe-4 min-w-0">
+          {/* The whole bill name, one weight and one colour. The suffix was a
+              smaller amber "-b" hanging off the table name, which read as a
+              rendering fault rather than part of what the bill is called. */}
           <div className="bg-white text-slate-900 rounded-xl px-5 py-1.5 leading-none shrink-0 min-w-[76px] text-center">
             {session
-              ? <span className="text-4xl font-black">{session.table.name}</span>
+              ? <span className="text-4xl font-black whitespace-nowrap">{label}</span>
               : <span className="text-4xl font-black text-slate-200">·</span>}
           </div>
+
+          {/* Only on a split table, and it opens the same dialog the floor plan
+              opens - one question, asked one way, wherever staff meet it. The
+              old version listed the sibling inline, which repeated the table
+              name beside a box already showing it.
+
+              Each bill keeps its own unsent cart (localStorage is keyed by
+              session), so switching cannot carry drinks across. */}
+          {split && (
+            <button
+              onClick={() => setSwitching(true)}
+              className="h-11 px-3.5 rounded-xl bg-white/10 hover:bg-white/20 border border-white/25 text-sm font-bold inline-flex items-center gap-2 shrink-0 transition-colors duration-150"
+            >
+              <SplitSquareHorizontal className="w-4 h-4 shrink-0" aria-hidden />
+              <span className="tabular-nums">{siblings.length}</span>
+              {t.bills_on_table}
+              {/* The other party has asked for their bill - worth seeing from
+                  this screen, since that is the one you are not looking at. */}
+              {others.some((o) => o.status === "BILL_REQUESTED") && (
+                <span className="w-2 h-2 rounded-full bg-amber-400 shrink-0" aria-hidden />
+              )}
+            </button>
+          )}
           <div className="min-w-0">
             {session ? (
               <>
@@ -300,6 +365,18 @@ export function SessionBanner({
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Marks the bill already on screen rather than offering it again: two
+          identical-looking rows and a tap that goes nowhere is how a waiter
+          decides the button is broken. */}
+      <BillPickerDialog
+        open={switching}
+        onClose={() => setSwitching(false)}
+        tableName={session?.table.name ?? ""}
+        bills={switchBills}
+        currentId={session?.id}
+        onPick={(billId) => { setSwitching(false); router.push(`/pos?session=${billId}`) }}
+      />
     </>
   )
 }

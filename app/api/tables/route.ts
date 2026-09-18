@@ -44,6 +44,10 @@ export async function GET() {
                     id: session.id,
                     status: session.status,
                     openedAt: session.openedAt.toISOString(),
+                    // Distinguishes two bills that share an openedAt, so this
+                    // screen and the till letter them the same way. See
+                    // orderBills in lib/table-ops.
+                    createdAt: session.createdAt.toISOString(),
                     orderCount: billable.length,
                     waiterCount: new Set(billable.map((o) => o.waiterId).filter(Boolean)).size,
                     // What they will actually pay, discount included.

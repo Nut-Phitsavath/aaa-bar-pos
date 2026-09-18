@@ -8,7 +8,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
     canMove, canMerge, canSplit, withSwapCharges,
-    canSplitQuantities, swapChargeLineIds,
+    canSplitQuantities, swapChargeLineIds, billLabel, orderBills,
 } from './table-ops.ts'
 
 const open = (over = {}) => ({ id: 's1', status: 'OPEN', paidCount: 0, ...over })
@@ -246,4 +246,72 @@ test('an upcharge follows the package it came from, and only once', () => {
         swapChargeLineIds([{ itemId: 'pkg', quantity: 2 }, { itemId: 'chg', quantity: 1 }], swaps),
         [],
     )
+})
+
+// --- billLabel: the same letter on both screens ------------------------------
+//
+// The floor plan picker and the till banner letter the same bills. If they
+// disagree, a waiter charges a party they can see is not the one they picked.
+
+const bill = (id: string, openedAt: string) => ({ id, openedAt })
+
+test('a table with one bill keeps its plain name', () => {
+    assert.equal(billLabel('T5', [bill('s1', '2026-09-18T19:00:00Z')], 's1'), 'T5')
+    assert.equal(billLabel('T5', [], 's1'), 'T5')
+})
+
+test('a split table letters its bills by who sat down first', () => {
+    const bills = [bill('s2', '2026-09-18T20:00:00Z'), bill('s1', '2026-09-18T19:00:00Z')]
+    // Passed in the wrong order on purpose: the function sorts, so a caller
+    // cannot make the two screens disagree by fetching differently.
+    assert.equal(billLabel('T5', bills, 's1'), 'T5-a')
+    assert.equal(billLabel('T5', bills, 's2'), 'T5-b')
+})
+
+test('three bills carry on down the alphabet', () => {
+    const bills = [
+        bill('a', '2026-09-18T19:00:00Z'),
+        bill('b', '2026-09-18T19:30:00Z'),
+        bill('c', '2026-09-18T20:00:00Z'),
+    ]
+    assert.deepEqual(bills.map((x) => billLabel('D1', bills, x.id)), ['D1-a', 'D1-b', 'D1-c'])
+})
+
+test('bills sharing a timestamp still letter the same way every time', () => {
+    // A split stamps new Date() on the child, so a tie is reachable. Without a
+    // tiebreak the letter would flip between requests.
+    const same = '2026-09-18T19:00:00Z'
+    const bills = [bill('zzz', same), bill('aaa', same)]
+    assert.equal(billLabel('T5', bills, 'aaa'), 'T5-a')
+    assert.equal(billLabel('T5', bills, 'zzz'), 'T5-b')
+    // Same answer from the reversed input.
+    const reversed = [...bills].reverse()
+    assert.equal(billLabel('T5', reversed, 'aaa'), 'T5-a')
+    assert.equal(billLabel('T5', reversed, 'zzz'), 'T5-b')
+})
+
+test('a bill not in the list falls back to the table name, never a wrong letter', () => {
+    const bills = [bill('s1', '2026-09-18T19:00:00Z'), bill('s2', '2026-09-18T20:00:00Z')]
+    assert.equal(billLabel('T5', bills, 'gone'), 'T5')
+})
+
+test('on a tie, the bill that existed first keeps the earlier letter', () => {
+    // A split stamps new Date() on the child, so parent and child can share an
+    // openedAt. Without createdAt the tiebreak falls to UUID order, and the
+    // party who had been there all night could be renamed "T5-b" while the
+    // half that just split off took "T5-a".
+    const same = '2026-09-18T19:00:00Z'
+    const parent = { id: 'zzz-parent', openedAt: same, createdAt: '2026-09-18T19:00:00Z' }
+    const child = { id: 'aaa-child', openedAt: same, createdAt: '2026-09-18T21:30:00Z' }
+    assert.equal(billLabel('T5', [parent, child], parent.id), 'T5-a')
+    assert.equal(billLabel('T5', [parent, child], child.id), 'T5-b')
+    // Same answer whichever order they arrive in.
+    assert.equal(billLabel('T5', [child, parent], parent.id), 'T5-a')
+})
+
+test('without createdAt it still sorts deterministically, just by id', () => {
+    const same = '2026-09-18T19:00:00Z'
+    const bills = [{ id: 'b', openedAt: same }, { id: 'a', openedAt: same }]
+    assert.equal(billLabel('T5', bills, 'a'), 'T5-a')
+    assert.equal(billLabel('T5', [...bills].reverse(), 'a'), 'T5-a')
 })

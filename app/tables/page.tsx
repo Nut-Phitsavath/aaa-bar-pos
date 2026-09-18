@@ -10,6 +10,7 @@ import { useShift } from "@/components/shift-provider"
 import { ShiftDialog } from "@/components/shift-dialog"
 import { Users, Clock, Receipt, ShoppingCart, AlertTriangle, LayoutGrid } from "lucide-react"
 import { formatTHB } from "@/lib/currency"
+import { BillPickerDialog } from "@/components/pos/bill-picker-dialog"
 import { formatDuration } from "@/lib/sessions"
 import { canManageTables } from "@/lib/roles"
 import { notify } from "@/components/ui/sonner"
@@ -18,6 +19,7 @@ type TableBill = {
   id: string
   status: string
   openedAt: string
+  createdAt: string
   orderCount: number
   waiterCount: number
   total: number
@@ -454,35 +456,14 @@ export default function TablesPage() {
 
       {/* Which of the two bills? A split table has two parties sitting at it,
           and picking one for the staff member would leave the other one
-          unreachable - which is exactly the bug this fixes. Opened by time, so
-          the party who sat down first is listed first. */}
-      <Dialog open={!!pickingBill} onOpenChange={(o) => { if (!o) setPickingBill(null) }}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle>{pickingBill?.name} · {t.which_bill}</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-2">
-            {(pickingBill?.sessions ?? []).map((s, i) => (
-              <button
-                key={s.id}
-                onClick={() => { setPickingBill(null); router.push(`/pos?session=${s.id}`) }}
-                className="w-full flex items-center gap-3 px-4 h-16 rounded-xl border-2 border-slate-300 text-start hover:border-amber-400 hover:bg-amber-50 transition-all"
-              >
-                <span className="text-lg font-black text-slate-900">
-                  {pickingBill!.name}-{String.fromCharCode(97 + i)}
-                </span>
-                <span className="text-xs text-slate-500">
-                  {s.orderCount} {t.round_no}
-                  {s.status === "BILL_REQUESTED" && ` · ${t.bill_requested}`}
-                </span>
-                <span className="ms-auto text-lg font-bold tabular-nums text-slate-900">
-                  {formatTHB(s.total)}
-                </span>
-              </button>
-            ))}
-          </div>
-        </DialogContent>
-      </Dialog>
+          unreachable. The same dialog the till opens - see BillPickerDialog. */}
+      <BillPickerDialog
+        open={!!pickingBill}
+        onClose={() => setPickingBill(null)}
+        tableName={pickingBill?.name ?? ""}
+        bills={pickingBill?.sessions ?? []}
+        onPick={(billId) => { setPickingBill(null); router.push(`/pos?session=${billId}`) }}
+      />
 
       {/* The same dialog the sidebar's cash widget opens. A prompt where you
           are blocked, not a trip to another page to press a second button. */}
