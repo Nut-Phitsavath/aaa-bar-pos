@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -14,6 +14,9 @@ import { useTranslation } from "@/hooks/use-translation"
 import { notify } from "@/components/ui/sonner"
 import { useConfirm } from "@/components/confirm-provider"
 import { canManageTables } from "@/lib/roles"
+// Reordering inside one area without moving the areas themselves.
+import { withAreaOrder, moveInArea } from "@/lib/floor-order"
+import { useDragLift } from "@/hooks/use-drag-lift"
 
 type Table = {
     id: string
@@ -45,6 +48,10 @@ export default function ManageTablesPage() {
     const [loaded, setLoaded] = useState(false)
     const [allowed, setAllowed] = useState<boolean | null>(null)
     const [saving, setSaving] = useState(false)
+    // What the server last confirmed, by table id. A drop diffs against this
+    // rather than against the previous render, so a drag that wanders and
+    // lands back where it started writes nothing.
+    const persisted = useRef(new Map<string, number>())
 
     const [isOpen, setIsOpen] = useState(false)
     const [editing, setEditing] = useState<Table | null>(null)
@@ -53,7 +60,13 @@ export default function ManageTablesPage() {
     const load = useCallback(async () => {
         try {
             const res = await fetch("/api/tables")
-            if (res.ok) setTables(await res.json())
+            if (res.ok) {
+                const rows: Table[] = await res.json()
+                // The order the server is holding, so a drop can tell what
+                // actually moved.
+                persisted.current = new Map(rows.map((x) => [x.id, x.displayOrder]))
+                setTables(rows)
+            }
         } catch (e) { console.error(e) }
         finally { setLoaded(true) }
     }, [])
@@ -145,44 +158,83 @@ export default function ManageTablesPage() {
     }
 
     /**
-     * Dropped somewhere new.
+     * A row moved past another. Local only.
      *
-     * Replaces a pair of arrow buttons: moving a table from the bottom of the
-     * room to the top was eleven taps, and staff already learned this grip on
-     * the menu page. Order is per area, so a drag only ever renumbers the
-     * column it happened in.
+     * Reorder.Group calls this on every SWAP, not on drop - dragging a table
+     * up six places calls it five times. It used to write to the server from
+     * here and then reload the whole floor, so one gesture fired dozens of
+     * PUTs and kept replacing the array under the finger that was dragging.
+     * That was the lag, and it was why a drag sometimes snapped back: a
+     * server response landing mid-gesture overwrote where the row had got to.
      *
-     * Written on drop rather than behind a Save button - the arrangement IS
-     * the state, and only the tables whose position actually changed are sent.
+     * So this does the cheap synchronous thing and nothing else. The writing
+     * happens once, on drop - see persistOrder.
      */
-    const reorder = async (area: string, next: Table[]) => {
-        const renumbered = next.map((x, i) => ({ ...x, displayOrder: i }))
-        // Optimistic, so the row stays where it was let go instead of snapping
-        // back while the writes are in flight.
-        //
-        // Each slot this area already occupies takes the next table in the new
-        // order. Appending the area to the end instead would have reordered
-        // the AREAS - they are derived from this array - and the columns would
-        // jump sideways every time a table moved inside one of them.
-        setTables((prev) => {
-            const queue = [...renumbered]
-            return prev.map((x) => (x.area === area ? queue.shift()! : x))
-        })
-        const changed = renumbered.filter((x) =>
-            tables.find((old) => old.id === x.id)?.displayOrder !== x.displayOrder)
+    const reorder = (area: string, next: Table[]) => {
+        setTables((prev) => withAreaOrder(prev, area, next))
+    }
+
+    /**
+     * Move a table without dragging it.
+     *
+     * The answer to a long room: dragging one table from the bottom to the top
+     * means holding the grip with one hand and scrolling with the other, and
+     * the drop misses as often as it lands. Arrow keys move it a place at a
+     * time and Home/End send it to either end in one press, so the distance
+     * stops mattering.
+     *
+     * It is also the only way a keyboard reaches this at all - a drag handle
+     * with no key bindings is a feature that does not exist without a mouse.
+     */
+    const moveWithin = (area: string, from: number, to: number) => {
+        // Computed here rather than read back from state: setTables has not
+        // rendered yet when the next line runs, so persisting from the closure
+        // would write the order as it was BEFORE the key press.
+        const full = moveInArea(tables, area, from, to)
+        // A key press at the end of a list does nothing, rather than re-saving
+        // the same order and flashing a spinner.
+        if (full === tables) return
+        setTables(full)
+        // Written straight away: a key press is a finished action, where a drag
+        // is not finished until it is let go.
+        persistRows(full)
+    }
+
+    /**
+     * The row was let go. Write what actually changed, once.
+     *
+     * Diffed against what the server last confirmed rather than against the
+     * previous render, so a drag that wanders up and down and lands back where
+     * it started writes nothing at all.
+     *
+     * No reload afterwards. The optimistic state already IS the new order, and
+     * re-fetching only invites the server's copy to arrive late and fight the
+     * next gesture. A failure reloads, because then the screen is the thing
+     * that is wrong.
+     */
+    const persistRows = useCallback(async (rows: Table[]) => {
+        const changed = rows.filter((x) => persisted.current.get(x.id) !== x.displayOrder)
         if (changed.length === 0) return
+
         setSaving(true)
         try {
-            await Promise.all(changed.map((x) =>
+            const results = await Promise.all(changed.map((x) =>
                 fetch(`/api/tables/${x.id}`, {
                     method: "PUT", headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({ displayOrder: x.displayOrder }),
                 })))
+            if (results.some((r) => !r.ok)) throw new Error("save failed")
+            for (const x of changed) persisted.current.set(x.id, x.displayOrder)
+        } catch {
+            notify.error(t.save_failed)
+            load()
         } finally {
             setSaving(false)
-            load()
         }
-    }
+    }, [load, t])
+
+    /** Drag finished. By now the last swap has rendered, so state is current. */
+    const persistOrder = useCallback(() => persistRows(tables), [persistRows, tables])
 
     if (allowed === false) {
         return (
@@ -261,10 +313,14 @@ export default function ManageTablesPage() {
                                             values={inArea}
                                             onReorder={(next) => reorder(area, next as Table[])}
                                         >
-                                            {inArea.map((table) => (
+                                            {inArea.map((table, i) => (
                                                 <TableRow
                                                     key={table.id}
                                                     table={table}
+                                                    index={i}
+                                                    count={inArea.length}
+                                                    onDrop={persistOrder}
+                                                    onMove={(to) => moveWithin(area, i, to)}
                                                     seatsLabel={t.seats}
                                                     occupiedLabel={t.occupied}
                                                     editLabel={t.edit}
@@ -375,6 +431,10 @@ export default function ManageTablesPage() {
  */
 function TableRow({
     table,
+    index,
+    count,
+    onDrop,
+    onMove,
     seatsLabel,
     occupiedLabel,
     editLabel,
@@ -383,6 +443,10 @@ function TableRow({
     onRemove,
 }: {
     table: Table
+    index: number
+    count: number
+    onDrop: () => void
+    onMove: (to: number) => void
     seatsLabel: string
     occupiedLabel: string
     editLabel: string
@@ -391,19 +455,39 @@ function TableRow({
     onRemove: () => void
 }) {
     const controls = useDragControls()
+    const { lift, drop, liftClass } = useDragLift()
 
     return (
         <Reorder.Item
             value={table}
             dragListener={false}
             dragControls={controls}
-            whileDrag={{ scale: 1.02, boxShadow: "0 12px 24px rgb(15 23 42 / 0.18)", zIndex: 10 }}
+            onDragStart={lift}
+            onDragEnd={() => { drop(); onDrop() }}
+            // Scale only. The shadow is a class - see useDragLift for why
+            // animating it through Motion left it stuck on the row.
+            whileDrag={{ scale: 1.02 }}
             transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
-            className="flex items-center gap-2 px-2 py-2 border-b border-slate-100 last:border-0 bg-white transition-colors duration-150 hover:bg-amber-50/40"
+            className={`flex items-center gap-2 px-2 py-2 border-b border-slate-100 last:border-0 bg-white transition-[colors,box-shadow] duration-150 hover:bg-amber-50/40 ${liftClass}`}
         >
+            {/* Drag with a pointer, arrows with a keyboard. Home and End exist
+                because the move people actually struggle with is all the way to
+                one end, and that is one press instead of a drag across a
+                scrolling page. */}
             <button
                 onPointerDown={(e) => controls.start(e)}
-                aria-label={table.name}
+                onKeyDown={(e) => {
+                    const to =
+                        e.key === "ArrowUp" ? index - 1
+                            : e.key === "ArrowDown" ? index + 1
+                                : e.key === "Home" ? 0
+                                    : e.key === "End" ? count - 1
+                                        : null
+                    if (to === null) return
+                    e.preventDefault()
+                    onMove(to)
+                }}
+                aria-label={`${table.name} · ${index + 1}/${count}`}
                 className="h-11 w-9 grid place-items-center rounded-lg text-slate-300 hover:text-slate-700 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 touch-none cursor-grab active:cursor-grabbing shrink-0"
             >
                 <GripVertical className="w-5 h-5" />
