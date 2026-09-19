@@ -218,6 +218,11 @@ model Promotion {
   updatedAt     DateTime @updatedAt
   orders        Order[]
   sessions      TableSession[]
+
+  /// A category-scoped deal is looked up by its category every time a bill it
+  /// touches is priced. Same story as Payment's two above: the migrations
+  /// create it, the schema never declared it, so db push kept removing it.
+  @@index([categoryId])
 }
 
 model Order {
@@ -394,6 +399,9 @@ model TableSession {
   // "Does this table already have a bill open?" runs on every table tap.
   @@index([tableId, status])
   @@index([status])
+  /// Which bills a deal was used on - read by the promotions report, and the
+  /// last of the four the migrations create that the schema never declared.
+  @@index([promoId])
 }
 
 /// One tender against a table bill. A bill is settled by however many of these
@@ -436,6 +444,14 @@ model Payment {
   @@index([sessionId])
   @@index([method])
   @@index([createdAt])
+  /// Declared because the migrations already create these and `db push` was
+  /// quietly dropping them back off - dev.db ran without them while a freshly
+  /// migrated database has had them all along.
+  ///
+  /// Both are read at every close: the Z-report groups tenders by shift, and
+  /// the refund report filters on voidedAt.
+  @@index([shiftId])
+  @@index([voidedAt])
 }
 
 model Setting {
