@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation"
 import { useTranslation } from "@/hooks/use-translation"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
-import { ArrowRightLeft, Merge, SplitSquareHorizontal, Users } from "lucide-react"
+import { ArrowRightLeft, Merge, Minus, Plus, Share2, SplitSquareHorizontal, Users } from "lucide-react"
 import { toast } from "sonner"
 import { formatTHB } from "@/lib/currency"
 
@@ -19,7 +19,7 @@ type FloorTable = {
 
 type Line = { id: string; name: string; localName: string | null; quantity: number; total: number }
 
-type Mode = "MOVE" | "MERGE" | "SPLIT"
+type Mode = "MOVE" | "MERGE" | "SPLIT" | "SEND"
 
 /**
  * Move, merge and split (req #2).
@@ -52,7 +52,9 @@ export function TableOpsDialog({
     const router = useRouter()
     const [mode, setMode] = useState<Mode>("MOVE")
     const [tables, setTables] = useState<FloorTable[]>([])
-    const [picked, setPicked] = useState<Set<string>>(new Set())
+    // Line id -> how many of its units are leaving. A Map rather than a Set,
+    // because "which drinks" is now a count and not a yes/no.
+    const [picked, setPicked] = useState<Map<string, number>>(new Map())
     const [busy, setBusy] = useState(false)
 
     const load = useCallback(async () => {
@@ -62,7 +64,7 @@ export function TableOpsDialog({
 
     useEffect(() => {
         if (!open) return
-        setMode("MOVE"); setPicked(new Set())
+        setMode("MOVE"); setPicked(new Map())
         load()
     }, [open, load])
 
@@ -70,6 +72,10 @@ export function TableOpsDialog({
         code === "TABLE_OCCUPIED" ? t.op_table_occupied
             : code === "ALREADY_PAID" ? t.op_already_paid
                 : code === "CANNOT_SPLIT_EVERYTHING" ? t.op_split_everything
+                    : code === "SWAPPED_LINE_MOVES_WHOLE" ? t.op_swapped_whole
+                    : code === "CANNOT_SEND_EVERYTHING" ? t.op_send_everything
+                    : code === "DESTINATION_NOT_OPEN" ? t.op_destination_closed
+                    : code === "DESTINATION_ALREADY_PAID" ? t.op_destination_paid
                     : code === "NO_OPEN_SHIFT" ? t.no_open_shift_exchange
                         : t.save_failed
 
@@ -93,18 +99,110 @@ export function TableOpsDialog({
     const otherBills = tables.flatMap((x) =>
         x.sessions.filter((s) => s.id !== sessionId).map((bill) => ({ table: x, bill })))
 
-    const splitTotal = lines
-        .filter((l) => picked.has(l.id))
-        .reduce((sum, l) => sum + l.total, 0)
-    const stayingTotal = lines
-        .filter((l) => !picked.has(l.id))
-        .reduce((sum, l) => sum + l.total, 0)
+    // Per drink, not per row: a line of two whiskeys with one leaving is half
+    // its value on each bill. total is price x quantity on every line, so this
+    // divides exactly.
+    const unitPrice = (l: Line) => (l.quantity > 0 ? l.total / l.quantity : 0)
+    const taking = (l: Line) => picked.get(l.id) ?? 0
+
+    const splitTotal = lines.reduce((sum, l) => sum + unitPrice(l) * taking(l), 0)
+    const stayingTotal = lines.reduce((sum, l) => sum + unitPrice(l) * (l.quantity - taking(l)), 0)
+
+    const unitsOnBill = lines.reduce((sum, l) => sum + l.quantity, 0)
+    const unitsMoving = lines.reduce((sum, l) => sum + taking(l), 0)
+    // The same rule the route refuses on, so the button is dead rather than the
+    // tap being rejected: at least one drink stays behind.
+    const splitAllowed = unitsMoving > 0 && unitsMoving < unitsOnBill
+
+    /** Tick the row: all of it, or none. The stepper trims from there. */
+    const toggleLine = (l: Line) => setPicked((prev) => {
+        const next = new Map(prev)
+        next.has(l.id) ? next.delete(l.id) : next.set(l.id, l.quantity)
+        return next
+    })
+
+    const setTaking = (l: Line, n: number) => setPicked((prev) => {
+        const next = new Map(prev)
+        const clamped = Math.max(0, Math.min(l.quantity, n))
+        clamped === 0 ? next.delete(l.id) : next.set(l.id, clamped)
+        return next
+    })
 
     const tabs: { key: Mode; label: string; icon: React.ReactNode }[] = [
         { key: "MOVE", label: t.op_move, icon: <ArrowRightLeft className="w-4 h-4" /> },
         { key: "MERGE", label: t.op_merge, icon: <Merge className="w-4 h-4" /> },
         { key: "SPLIT", label: t.op_split, icon: <SplitSquareHorizontal className="w-4 h-4" /> },
+        { key: "SEND", label: t.op_send, icon: <Share2 className="w-4 h-4" /> },
     ]
+
+    /**
+     * The drink picker, shared by SPLIT and SEND.
+     *
+     * Both ask the same question - which drinks, and how many of each - so they
+     * ask it with the same control. Two copies would be two chances for the
+     * stepper to behave differently depending on which tab you were in.
+     */
+    const linePicker = (
+        <div className="rounded-xl border border-slate-200 overflow-hidden max-h-64 overflow-y-auto">
+            {lines.map((l) => {
+                const n = taking(l)
+                const on = n > 0
+                return (
+                    <div
+                        key={l.id}
+                        className={`flex items-center gap-3 px-3 py-2.5 border-b border-slate-100 last:border-0 transition-colors duration-150 ${on ? "bg-amber-50" : "bg-white"
+                            }`}
+                    >
+                        <button
+                            type="button"
+                            onClick={() => toggleLine(l)}
+                            aria-pressed={on}
+                            className="flex items-center gap-3 min-w-0 flex-1 text-start"
+                        >
+                            <span className={`w-5 h-5 rounded border-2 grid place-items-center shrink-0 ${on ? "bg-amber-600 border-amber-600" : "border-slate-300"}`}>
+                                {on && <span className="w-2 h-2 rounded-sm bg-white" />}
+                            </span>
+                            <span className="min-w-0 flex-1 truncate text-slate-900">
+                                {l.localName || l.name}
+                            </span>
+                        </button>
+
+                        {l.quantity > 1 ? (
+                            <div className="flex items-center gap-1 shrink-0">
+                                <button
+                                    type="button"
+                                    onClick={() => setTaking(l, n - 1)}
+                                    disabled={n === 0}
+                                    aria-label={t.op_take_fewer}
+                                    className="w-9 h-9 rounded-md border-2 border-slate-300 grid place-items-center text-slate-700 font-black disabled:opacity-30 hover:border-slate-400 transition-colors"
+                                >
+                                    <Minus className="w-4 h-4" />
+                                </button>
+                                <span className="w-12 text-center tabular-nums font-bold text-slate-900">
+                                    {n}<span className="text-slate-400">/{l.quantity}</span>
+                                </span>
+                                <button
+                                    type="button"
+                                    onClick={() => setTaking(l, n + 1)}
+                                    disabled={n >= l.quantity}
+                                    aria-label={t.op_take_more}
+                                    className="w-9 h-9 rounded-md border-2 border-slate-300 grid place-items-center text-slate-700 font-black disabled:opacity-30 hover:border-slate-400 transition-colors"
+                                >
+                                    <Plus className="w-4 h-4" />
+                                </button>
+                            </div>
+                        ) : (
+                            <span className="w-[136px] text-center tabular-nums text-slate-400 shrink-0">1</span>
+                        )}
+
+                        <span className="w-20 text-end tabular-nums text-slate-700 shrink-0">
+                            {formatTHB(unitPrice(l) * (on ? n : l.quantity))}
+                        </span>
+                    </div>
+                )
+            })}
+        </div>
+    )
 
     return (
         <Dialog open={open} onOpenChange={(o) => { if (!o) onClose() }}>
@@ -113,7 +211,7 @@ export function TableOpsDialog({
                     <DialogTitle>{t.table_operations} · {tableName}</DialogTitle>
                 </DialogHeader>
 
-                <div className="grid grid-cols-3 gap-1 rounded-xl bg-slate-100 p-1">
+                <div className="grid grid-cols-4 gap-1 rounded-xl bg-slate-100 p-1">
                     {tabs.map((tab) => (
                         <button
                             key={tab.key}
@@ -190,30 +288,7 @@ export function TableOpsDialog({
                 {mode === "SPLIT" && (
                     <>
                         <p className="text-sm text-slate-600">{t.op_split_desc}</p>
-                        <div className="rounded-xl border border-slate-200 overflow-hidden max-h-64 overflow-y-auto">
-                            {lines.map((l) => {
-                                const on = picked.has(l.id)
-                                return (
-                                    <button
-                                        key={l.id}
-                                        onClick={() => setPicked((prev) => {
-                                            const next = new Set(prev)
-                                            next.has(l.id) ? next.delete(l.id) : next.add(l.id)
-                                            return next
-                                        })}
-                                        className={`w-full flex items-center gap-3 px-3 py-2.5 text-start border-b border-slate-100 last:border-0 transition-colors duration-150 ${on ? "bg-amber-50" : "bg-white hover:bg-slate-50"
-                                            }`}
-                                    >
-                                        <span className={`w-5 h-5 rounded border-2 grid place-items-center shrink-0 ${on ? "bg-amber-600 border-amber-600" : "border-slate-300"}`}>
-                                            {on && <span className="w-2 h-2 rounded-sm bg-white" />}
-                                        </span>
-                                        <span className="w-8 tabular-nums font-bold text-slate-500 shrink-0">{l.quantity}</span>
-                                        <span className="min-w-0 flex-1 truncate text-slate-900">{l.localName || l.name}</span>
-                                        <span className="tabular-nums text-slate-700 shrink-0">{formatTHB(l.total)}</span>
-                                    </button>
-                                )
-                            })}
-                        </div>
+                        {linePicker}
 
                         {/* Both halves, before the button that creates them. */}
                         <div className="flex items-center gap-4 flex-wrap rounded-xl bg-slate-50 border border-slate-200 px-4 py-3 text-sm">
@@ -225,8 +300,10 @@ export function TableOpsDialog({
                             </span>
                             <Button
                                 className="ms-auto h-11 bg-amber-600 hover:bg-amber-700 font-bold"
-                                disabled={busy || picked.size === 0 || picked.size >= lines.length}
-                                onClick={() => run(`/api/table-sessions/${sessionId}/split`, { itemIds: [...picked] }, (d) => {
+                                disabled={busy || !splitAllowed}
+                                onClick={() => run(`/api/table-sessions/${sessionId}/split`, {
+                                    items: [...picked].map(([itemId, quantity]) => ({ itemId, quantity })),
+                                }, (d) => {
                                     toast.success(t.op_split_done)
                                     onDone(); onClose()
                                     // Straight to the new bill: it exists to be
@@ -236,6 +313,56 @@ export function TableOpsDialog({
                             >
                                 {busy ? t.processing : t.op_split}
                             </Button>
+                        </div>
+                    </>
+                )}
+
+                {mode === "SEND" && (
+                    <>
+                        <p className="text-sm text-slate-600">{t.op_send_desc}</p>
+                        {linePicker}
+
+                        {/* Pick the drinks first, then where they go - and the
+                            destination list is the last tap, so the send happens
+                            the moment a bill is chosen rather than needing a
+                            confirm nobody reads. */}
+                        <div className="flex items-center gap-4 flex-wrap rounded-xl bg-slate-50 border border-slate-200 px-4 py-3 text-sm">
+                            <span className="text-slate-600">
+                                {t.op_sending} <strong className="text-slate-900 tabular-nums">{formatTHB(splitTotal)}</strong>
+                            </span>
+                            <span className="text-slate-600">
+                                {tableName} <strong className="text-slate-900 tabular-nums">{formatTHB(stayingTotal)}</strong>
+                            </span>
+                        </div>
+
+                        <div className="rounded-xl border border-slate-200 overflow-hidden max-h-56 overflow-y-auto">
+                            {otherBills.length === 0 && (
+                                <p className="py-8 text-center text-sm text-slate-500">{t.op_no_other_bill}</p>
+                            )}
+                            {otherBills.map(({ table: x, bill }) => (
+                                <button
+                                    key={bill.id}
+                                    disabled={busy || !splitAllowed}
+                                    onClick={() => run(`/api/table-sessions/${sessionId}/send-lines`, {
+                                        toSessionId: bill.id,
+                                        items: [...picked].map(([itemId, quantity]) => ({ itemId, quantity })),
+                                    }, (d) => {
+                                        toast.success(`${t.op_sent} ${d.table}`)
+                                        // Stay on this bill: the drinks left, but
+                                        // the party and their round are still here.
+                                        onDone(); onClose()
+                                    })}
+                                    className="w-full flex items-center gap-3 px-3 py-2.5 border-b border-slate-100 last:border-0 text-start hover:bg-amber-50 disabled:opacity-40 disabled:hover:bg-transparent transition-colors duration-150"
+                                >
+                                    <span className="text-lg font-black text-slate-900 w-16 shrink-0">{x.name}</span>
+                                    <span className="text-sm text-slate-500 flex-1 min-w-0 truncate">
+                                        {bill.orderCount} {t.round_no}
+                                    </span>
+                                    <span className="tabular-nums font-bold text-slate-800 shrink-0">
+                                        {formatTHB(bill.total)}
+                                    </span>
+                                </button>
+                            ))}
                         </div>
                     </>
                 )}

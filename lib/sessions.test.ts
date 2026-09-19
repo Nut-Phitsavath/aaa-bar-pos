@@ -5,7 +5,7 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { sessionTotal, formatDuration, canCloseSession } from './sessions.ts'
+import { sessionTotal, formatDuration, canCloseSession, openedClock } from './sessions.ts'
 
 test('sessionTotal sums sent and completed orders', () => {
     const orders = [
@@ -196,4 +196,26 @@ test('a reopened bill is frozen whether the stamp is a Date or a string', () => 
 
 test('a reopened bill that was closed again is doubly frozen', () => {
     assert.equal(canRepricePromo({ status: 'CLOSED', reopenedAt: new Date() }), false)
+})
+
+// --- openedClock: when the party sat down -----------------------------------
+
+test('openedClock reads the wall clock, zero-padded and 24-hour', () => {
+    assert.equal(openedClock(new Date(2026, 8, 19, 19, 0)), '19:00')
+    assert.equal(openedClock(new Date(2026, 8, 19, 9, 5)), '09:05')
+})
+
+test('openedClock stays 24-hour past midnight, when this bar is busiest', () => {
+    // "01:30" rather than "1:30 AM" - one glyph fewer to misread at 3am.
+    assert.equal(openedClock(new Date(2026, 8, 20, 1, 30)), '01:30')
+    assert.equal(openedClock(new Date(2026, 8, 20, 0, 0)), '00:00')
+})
+
+test('openedClock takes the ISO string the API actually sends', () => {
+    const d = new Date(2026, 8, 19, 19, 0)
+    assert.equal(openedClock(d.toISOString()), '19:00')
+})
+
+test('openedClock prints nothing rather than "NaN:NaN" on a bad date', () => {
+    assert.equal(openedClock('not a date'), '')
 })

@@ -90,7 +90,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         if (session.status === 'OPEN') {
             await prisma.tableSession.update({
                 where: { id },
-                data: { status: 'BILL_REQUESTED' }
+                // Stamped here too: printing the bill IS asking for it, and
+                // this is the path most tables take. Without it the floor plan
+                // could never age the wait for anyone who printed rather than
+                // flipping the status by hand.
+                data: { status: 'BILL_REQUESTED', billRequestedAt: new Date() }
             })
         }
 

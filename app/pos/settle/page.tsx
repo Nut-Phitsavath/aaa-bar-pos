@@ -11,8 +11,9 @@ import { ManagerApproval } from "@/components/manager-approval"
 import { ReceiptDialog } from "@/components/receipt-dialog"
 import { ReturnsDialog } from "@/components/pos/returns-dialog"
 import { QRCodeSVG } from "qrcode.react"
-import { Banknote, QrCode, Gift, Clock3, Printer, Percent, Tag, ArrowLeft, Check, PackageOpen } from "lucide-react"
+import { Banknote, QrCode, Gift, Clock3, Printer, Percent, Tag, ArrowLeft, Check, PackageOpen, AlertTriangle } from "lucide-react"
 import { formatTHB, formatLAK, thbToLak } from "@/lib/currency"
+import { minSpendShortfall } from "@/lib/min-spend"
 import { toast } from "sonner"
 
 type SettleOrder = {
@@ -29,7 +30,7 @@ type SettleOrder = {
 type SettleBill = {
     id: string
     status: string
-    table: { name: string; area: string }
+    table: { name: string; area: string; minSpend: number | null }
     orders: SettleOrder[]
     payments: { id: string; method: string; amount: number; paymentStatus: string | null }[]
     gross: number
@@ -159,6 +160,29 @@ function SettleScreen() {
 
     useEffect(() => { load() }, [load])
     useCustomerDisplay(bill as any)
+
+    // What the room is still owed, from the same rule the route charges on.
+    // Against the post-discount total, so a manager's write-off is not quietly
+    // taken back under another name.
+    const shortfall = bill ? minSpendShortfall(bill.total, bill.table.minSpend) : 0
+
+    /**
+     * Put the room's shortfall on the bill as a line.
+     *
+     * No manager PIN: this collects money the party already undertook to spend,
+     * which is the opposite of a discount. What needs a name against it is
+     * NOT charging it - and that is a void, which already carries one.
+     */
+    const chargeMinSpend = async () => {
+        setBusy(true)
+        try {
+            const res = await fetch(`/api/table-sessions/${bill!.id}/min-spend`, { method: "POST" })
+            const data = await res.json().catch(() => ({}))
+            if (!res.ok) { toast.error(data.error || t.error); return }
+            toast.success(t.min_spend_added.replace("{amount}", formatTHB(data.shortfall)))
+            await load()
+        } finally { setBusy(false) }
+    }
 
     useEffect(() => {
         fetch("/api/settings")
@@ -424,6 +448,42 @@ function SettleScreen() {
                     })}
                 </div>
 
+                {/* The room's floor, above the balance it is about.
+
+                    Here rather than under the keypad: this column already holds
+                    what the bill is worth and has the room for it, while the
+                    middle column is where somebody is typing an amount - a
+                    strip appearing under their hands moves the keypad mid-tap.
+
+                    A strip rather than a modal: the shortfall is a fact about
+                    the bill, not a question blocking the till, and a manager may
+                    well decide the room is not owed it tonight. Nothing is
+                    charged until somebody taps. */}
+                {shortfall > 0 && (
+                    <div className="shrink-0 bg-amber-400 text-slate-900">
+                        <div className="px-3 pt-2.5 pb-2 flex items-start gap-2.5">
+                            <AlertTriangle className="w-5 h-5 shrink-0 mt-px" aria-hidden />
+                            <div className="min-w-0">
+                                <p className="text-sm font-black uppercase tracking-wide leading-tight">
+                                    {t.min_spend} {formatTHB(bill.table.minSpend ?? 0)}
+                                </p>
+                                {/* The figure that decides the tap, given its own
+                                    line and the size of a number worth reading. */}
+                                <p className="text-xl font-black tabular-nums leading-tight mt-0.5">
+                                    {t.min_spend_short.replace("{amount}", formatTHB(shortfall))}
+                                </p>
+                            </div>
+                        </div>
+                        <button
+                            onClick={chargeMinSpend}
+                            disabled={busy}
+                            className="w-full h-12 bg-slate-900 text-white font-black text-base hover:bg-slate-800 transition-colors disabled:opacity-40 disabled:pointer-events-none tabular-nums"
+                        >
+                            {t.min_spend_add.replace("{amount}", formatTHB(shortfall))}
+                        </button>
+                    </div>
+                )}
+
                 <div className="border-t px-3 py-2.5 shrink-0">
                     {bill.promoDiscount > 0 && (
                         <div className="flex justify-between text-sm text-rose-600">
@@ -584,6 +644,7 @@ function SettleScreen() {
                         {t.print_bill}
                     </button>
                 </div>
+
             </main>
 
             {/* Three ways money arrives, then the two ways a bill closes

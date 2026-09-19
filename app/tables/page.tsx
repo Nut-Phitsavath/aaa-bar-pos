@@ -4,13 +4,18 @@ import { useState, useEffect, useMemo, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import { useTranslation } from "@/hooks/use-translation"
 import { Card } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { useShift } from "@/components/shift-provider"
 import { ShiftDialog } from "@/components/shift-dialog"
-import { Users, Clock, Receipt, ShoppingCart, AlertTriangle, LayoutGrid } from "lucide-react"
+import { Users, Clock, Receipt, ShoppingCart, AlertTriangle, LayoutGrid, Sparkles, CalendarClock, X } from "lucide-react"
 import { formatTHB } from "@/lib/currency"
-import { formatDuration } from "@/lib/sessions"
+import { BillPickerDialog } from "@/components/pos/bill-picker-dialog"
+// One place decides what a table is doing; the card, the counts and the legend
+// all read it. See lib/table-state.
+import { resolveTableState, isSeatable, type TableState } from "@/lib/table-state"
+import { formatDuration, openedClock } from "@/lib/sessions"
 import { canManageTables } from "@/lib/roles"
 import { notify } from "@/components/ui/sonner"
 
@@ -18,6 +23,11 @@ type TableBill = {
   id: string
   status: string
   openedAt: string
+  createdAt: string
+  /** Confirmed tenders so far. Below `total` means they have started paying. */
+  paid: number
+  /** When the bill was asked for, so the wait can be aged. */
+  billRequestedAt: string | null
   orderCount: number
   waiterCount: number
   total: number
@@ -30,6 +40,13 @@ type TableWithSession = {
   area: string
   seats: number
   displayOrder: number
+  /** A room sold on a floor, so the booking list can show what it costs. */
+  minSpend: number | null
+  /** Settled but not yet cleared. */
+  needsClearing: boolean
+  /** A booking held on this table: who, and when. */
+  reservedFor: string | null
+  reservedAt: string | null
   session: TableBill | null
   /** Every open bill here. A split leaves two on one table (req #2), and the
    *  card has to reach both — showing only one made the other unreachable
@@ -56,6 +73,14 @@ export default function TablesPage() {
   const [pickingBill, setPickingBill] = useState<TableWithSession | null>(null)
   // Only a manager or the owner edits the floor, so only they see the way in.
   const [canManage, setCanManage] = useState(false)
+  // Which table is being cleared, so its button can say so.
+  const [clearing, setClearing] = useState<string | null>(null)
+  // The bookings dialog: which table, for whom, at what time.
+  const [reserving, setReserving] = useState(false)
+  const [reserveTable, setReserveTable] = useState("")
+  const [reserveName, setReserveName] = useState("")
+  const [reserveTime, setReserveTime] = useState("")
+  const [savingReserve, setSavingReserve] = useState(false)
 
   useEffect(() => {
     fetch("/api/auth/me")
@@ -87,25 +112,26 @@ export default function TablesPage() {
   // Two independent clocks. The poll pulls fresh totals from the server so a
   // round rung up on another device shows here; the tick only re-renders the
   // durations in between, so cards never look frozen between polls.
-  useEffect(() => {
-    let cancelled = false
-    const load = async () => {
-      try {
-        const res = await fetch("/api/tables")
-        if (!res.ok) return
-        const data = await res.json()
-        if (!cancelled) setTables(data)
-      } catch {
-        // A tablet that dropped off the wifi keeps showing the last known
-        // floor rather than blanking mid-service.
-      } finally {
-        if (!cancelled) setLoading(false)
-      }
+  /** Hoisted out of the poll so a booking can refresh the floor immediately
+   *  rather than waiting up to five seconds for the next tick. */
+  const reload = useCallback(async () => {
+    try {
+      const res = await fetch("/api/tables")
+      if (!res.ok) return
+      setTables(await res.json())
+    } catch {
+      // A tablet that dropped off the wifi keeps showing the last known floor
+      // rather than blanking mid-service.
+    } finally {
+      setLoading(false)
     }
-    load()
-    const poll = setInterval(load, POLL_MS)
-    return () => { cancelled = true; clearInterval(poll) }
   }, [])
+
+  useEffect(() => {
+    reload()
+    const poll = setInterval(reload, POLL_MS)
+    return () => clearInterval(poll)
+  }, [reload])
 
   useEffect(() => {
     const tick = setInterval(() => setNow(new Date()), 30000)
@@ -119,13 +145,38 @@ export default function TablesPage() {
 
   const visible = area === "ALL" ? tables : tables.filter((tbl) => tbl.area === area)
 
-  const freeCount = tables.filter((tbl) => tbl.sessions.length === 0).length
-  // Counted per TABLE, so the three numbers still add up to the floor. A split
-  // table is one table however many bills sit on it, and if either of them has
-  // asked for the bill then the table has - which is what its card says too.
-  const billCount = tables.filter((tbl) => tbl.sessions.some((s) => s.status === "BILL_REQUESTED")).length
-  const occupiedCount = tables.filter((tbl) =>
-    tbl.sessions.length > 0 && !tbl.sessions.some((s) => s.status === "BILL_REQUESTED")).length
+  // One resolver for every table, then counted by state. The header used to
+  // work these out with its own filters while the cards used different ones,
+  // so the two could disagree about the same floor.
+  //
+  // Recomputed on the `now` tick as well as on new data, because two of the
+  // states age: a booking expires and a wait becomes overdue with no request
+  // to the server at all.
+  const states = useMemo(
+    () => new Map(tables.map((tbl) => [tbl.id, resolveTableState(tbl, now)])),
+    [tables, now]
+  )
+  const countOf = (state: TableState) =>
+    tables.filter((tbl) => states.get(tbl.id)?.state === state).length
+
+  const freeCount = countOf("FREE")
+  const occupiedCount = countOf("OCCUPIED")
+  const billCount = countOf("BILL_REQUESTED")
+  const dirtyCount = countOf("DIRTY")
+  const reservedCount = countOf("RESERVED")
+  // Not a state - a table can be overdue while occupied by the next party's
+  // eyes on it - so counted separately and shown only when it is happening.
+  const overdueCount = tables.filter((tbl) => states.get(tbl.id)?.overdue).length
+
+  /** One set of words per state, so the card, the counts and a screen reader
+   *  never describe the same table differently. */
+  const stateLabel = useCallback((state: TableState) => {
+    if (state === "BILL_REQUESTED") return t.bill_requested
+    if (state === "OCCUPIED") return t.occupied
+    if (state === "DIRTY") return t.state_dirty
+    if (state === "RESERVED") return t.state_reserved
+    return t.free
+  }, [t])
 
   const areaLabel = useCallback((value: string) => {
     if (value === "ALL") return t.all_areas
@@ -134,6 +185,64 @@ export default function TablesPage() {
     if (value === "VIP") return t.area_vip
     return value
   }, [t])
+
+  /** The glasses are gone; the table can take the next party. */
+  const clearTable = async (table: TableWithSession) => {
+    setClearing(table.id)
+    try {
+      const res = await fetch(`/api/tables/${table.id}/clear`, { method: "POST" })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        notify.error(err.error === "TABLE_OCCUPIED" ? t.table_has_open_session : t.save_failed)
+        return
+      }
+      // Optimistic, so the card stops looking dirty under the finger that
+      // tapped it rather than at the next poll up to five seconds later.
+      setTables((prev) => prev.map((x) =>
+        x.id === table.id ? { ...x, needsClearing: false } : x))
+      notify.success(`${table.name} · ${t.state_cleared}`)
+    } catch {
+      notify.error(t.save_failed)
+    } finally { setClearing(null) }
+  }
+
+  /**
+   * Hold a table for a party who is coming.
+   *
+   * The time is a clock time, so it means tonight - and if that time has
+   * already passed on the wall clock it means the small hours of tomorrow,
+   * which is when this bar is busiest. Booking "01:30" at 23:00 has to land
+   * after midnight, not fourteen hours into the past.
+   */
+  const saveReservation = async () => {
+    const [h, m] = reserveTime.split(":").map(Number)
+    const at = new Date(now)
+    at.setHours(h, m, 0, 0)
+    if (at.getTime() < now.getTime()) at.setDate(at.getDate() + 1)
+
+    setSavingReserve(true)
+    try {
+      const res = await fetch(`/api/tables/${reserveTable}/reserve`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reservedFor: reserveName.trim(), reservedAt: at.toISOString() }),
+      })
+      if (!res.ok) { notify.error(t.save_failed); return }
+      notify.success(t.reserved_saved)
+      setReserveTable(""); setReserveName(""); setReserveTime("")
+      await reload()
+    } catch { notify.error(t.save_failed) }
+    finally { setSavingReserve(false) }
+  }
+
+  const cancelReservation = async (table: TableWithSession) => {
+    try {
+      const res = await fetch(`/api/tables/${table.id}/reserve`, { method: "DELETE" })
+      if (!res.ok) { notify.error(t.save_failed); return }
+      setTables((prev) => prev.map((x) =>
+        x.id === table.id ? { ...x, reservedFor: null, reservedAt: null } : x))
+    } catch { notify.error(t.save_failed) }
+  }
 
   const openTable = async (table: TableWithSession) => {
     // The API refuses this too - this is so staff read why on the screen they
@@ -198,6 +307,28 @@ export default function TablesPage() {
                   {billCount} {t.bill_requested}
                 </span>
               )}
+              {/* Only when there is something to say. A row of zeroes teaches
+                  staff to stop reading the line. */}
+              {dirtyCount > 0 && (
+                <span className="inline-flex items-center gap-1.5 text-sky-700 font-semibold">
+                  <span className="w-2 h-2 rounded-full bg-sky-500" aria-hidden />
+                  {dirtyCount} {t.state_dirty}
+                </span>
+              )}
+              {reservedCount > 0 && (
+                <span className="inline-flex items-center gap-1.5 text-violet-700 font-semibold">
+                  <span className="w-2 h-2 rounded-full bg-violet-500" aria-hidden />
+                  {reservedCount} {t.state_reserved}
+                </span>
+              )}
+              {/* The one number that means somebody is standing there waiting.
+                  Loud on purpose, and absent the rest of the night. */}
+              {overdueCount > 0 && (
+                <span className="inline-flex items-center gap-1.5 rounded-md bg-rose-600 text-white font-bold px-2 py-0.5">
+                  <AlertTriangle className="w-3.5 h-3.5" aria-hidden />
+                  {overdueCount} {t.state_waiting_too_long}
+                </span>
+              )}
             </p>
           </div>
 
@@ -212,6 +343,18 @@ export default function TablesPage() {
                 {t.manage_floor}
               </Button>
             )}
+            {/* One control for bookings rather than a button on every free
+                card: taking a booking happens a few times a night, and a
+                control repeated across twenty cards to be used twice is
+                twenty chances to mis-tap while seating somebody. */}
+            <Button
+              variant="outline"
+              className="h-11 border-slate-300 text-slate-700"
+              onClick={() => { setReserveTable(""); setReserveName(""); setReserveTime(""); setReserving(true) }}
+            >
+              <CalendarClock className="w-4 h-4 mr-2" />
+              {t.reserve_table}
+            </Button>
             <Button
               variant="outline"
               className="h-11 border-slate-300 text-slate-700"
@@ -322,15 +465,28 @@ export default function TablesPage() {
               // what the table owes in total rather than half of it.
               const splitCount = table.sessions.length
               const tableTotal = table.sessions.reduce((sum, x) => sum + x.total, 0)
-              const needsBill = table.sessions.some((x) => x.status === "BILL_REQUESTED")
               const isOpening = opening === table.id
+              // The one answer, from the one resolver. Everything the card
+              // colours or says reads off this.
+              const st = states.get(table.id)!
+              const needsBill = st.state === "BILL_REQUESTED"
+              const isDirty = st.state === "DIRTY"
+              const isReserved = st.state === "RESERVED"
 
               return (
                 <Card
                   key={table.id}
                   role="button"
                   tabIndex={0}
-                  aria-label={`${table.name}, ${session ? t.occupied : t.free}`}
+                  /* All three states, not two: a bill-requested table used to
+                     announce itself as merely "occupied", which is the one
+                     state a screen reader user most needs told apart. */
+                  aria-label={[
+                    table.name,
+                    needsBill ? t.bill_requested : session ? t.occupied : t.free,
+                    splitCount > 1 ? `${splitCount} ${t.bills_on_table}` : null,
+                    session ? formatTHB(tableTotal) : null,
+                  ].filter(Boolean).join(", ")}
                   aria-busy={isOpening}
                   onClick={() => !opening && openTable(table)}
                   onKeyDown={(e) => {
@@ -339,26 +495,100 @@ export default function TablesPage() {
                       if (!opening) openTable(table)
                     }
                   }}
+                  /* Three states told by how much ink the card carries, not by
+                     a 10px dot. A discotheque runs coloured lighting: under a
+                     red or blue wash green and grey stop being distinguishable,
+                     but empty-versus-full-versus-flagged still reads. So the
+                     progression is a value one - a free table is nearly blank,
+                     an occupied one is dense with money and time, and a table
+                     waiting to pay is a solid block of amber visible across the
+                     room. Hue agrees with it; it does not carry it alone. */
                   className={`p-4 flex flex-col min-h-[168px] cursor-pointer select-none transition-[border-color,box-shadow,background-color] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:ring-offset-2 motion-safe:active:scale-[0.985] ${isOpening ? "opacity-60 pointer-events-none" : ""
-                    } ${needsBill
-                      ? "bg-amber-50 border-2 border-amber-400 hover:border-amber-500 shadow-sm"
-                      : session
-                        ? "bg-white border border-slate-300 hover:border-slate-400 hover:shadow-md"
-                        : "bg-white border border-slate-200 hover:border-slate-300 hover:shadow-sm"
+                    } ${st.overdue
+                      // Nobody went. Louder than every other state on the floor,
+                      // and the only one that uses rose - which everywhere else
+                      // in this app means money owed.
+                      ? "bg-rose-500 border-2 border-rose-600 hover:bg-rose-400 shadow-lg"
+                      : needsBill
+                        ? "bg-amber-400 border-2 border-amber-500 hover:bg-amber-300 shadow-md"
+                        : session
+                          ? "bg-white border-2 border-slate-300 hover:border-slate-400 hover:shadow-md"
+                          : isDirty
+                            // Sky, not a shade of grey: dirty has to be told
+                            // apart from free at a glance, and it is the state
+                            // most likely to be misread as "available".
+                            ? "bg-sky-100 border-2 border-sky-400 hover:bg-sky-50"
+                            : isReserved
+                              ? "bg-white border-2 border-violet-400 border-dashed hover:bg-violet-50"
+                              // Dashed and pale: a free table should read as a
+                              // gap in the grid, which is what staff are
+                              // scanning for with a party at the door.
+                              : "bg-slate-50/60 border-2 border-dashed border-slate-300 hover:border-slate-400 hover:bg-white"
                     }`}
                 >
-                  <div className="flex items-start justify-between gap-2">
-                    <h2 className={`text-lg font-bold leading-none ${session ? "text-slate-900" : "text-slate-700"}`}>
+                  <div className="flex items-baseline justify-between gap-2">
+                    <h2 className={`font-black leading-none truncate ${needsBill
+                      ? "text-xl text-slate-900"
+                      : session
+                        ? "text-xl text-slate-900"
+                        // The only thing on an empty card, so it gets the size.
+                        : "text-2xl text-slate-500"
+                      }`}>
                       {table.name}
                     </h2>
-                    <span
-                      className={`w-2.5 h-2.5 rounded-full mt-1 shrink-0 ${needsBill ? "bg-amber-500" : session ? "bg-slate-400" : "bg-emerald-500"
-                        }`}
-                      aria-hidden
-                    />
+                    {/* A split table is a second question - how many parties,
+                        not what state - so it answers on its own channel: a dark
+                        chip that reads as a mark on the card from across the
+                        room, rather than a line of small amber text below. */}
+                    {splitCount > 1 && (
+                      <span className="shrink-0 px-1.5 h-5 grid place-items-center rounded bg-slate-900 text-white text-[11px] font-black tabular-nums">
+                        {splitCount}
+                      </span>
+                    )}
                   </div>
 
-                  <p className="text-xs text-slate-500 mt-1.5 flex items-center gap-1">
+                  {/* The state, in words. The dot alone failed anyone reading
+                      from more than a step away, and colour alone fails anyone
+                      who cannot separate these hues - or any tablet under a
+                      coloured light. */}
+                  <p className={`mt-2 text-[11px] font-black uppercase tracking-widest leading-none ${st.overdue
+                    ? "text-white"
+                    : needsBill ? "text-amber-900"
+                      : session ? "text-slate-500"
+                        : isDirty ? "text-sky-800"
+                          : isReserved ? "text-violet-700"
+                            : "text-emerald-700"
+                    }`}>
+                    {stateLabel(st.state)}
+                    {/* How long they have been waiting, on the same line as the
+                        state, because "waiting" without "how long" is the thing
+                        that was already on the screen. */}
+                    {st.waitingMinutes !== null && (
+                      <span className="ms-1.5 tabular-nums">· {st.waitingMinutes}m</span>
+                    )}
+                  </p>
+
+                  {/* Money has been taken and something is still owed. It rides
+                      under the state rather than replacing it: they are still
+                      sitting there, they have just started settling. */}
+                  {st.partPaid && (
+                    <p className={`mt-1 text-[11px] font-black uppercase tracking-wide leading-none ${st.overdue ? "text-white/90" : needsBill ? "text-amber-900" : "text-emerald-700"
+                      }`}>
+                      {t.state_part_paid}
+                    </p>
+                  )}
+
+                  {/* A booking, shown whatever the state - a table can be dirty
+                      AND due at eleven, and whoever is clearing it needs to
+                      know somebody is coming. */}
+                  {st.reservation && (
+                    <p className="mt-1 text-[11px] font-bold text-violet-700 truncate leading-none tabular-nums">
+                      {openedClock(st.reservation.at)} · {st.reservation.for}
+                    </p>
+                  )}
+
+                  <p className={`text-xs mt-1.5 flex items-center gap-1 ${needsBill ? "text-amber-800" : "text-slate-500"
+                    }`}>
                     <Users className="w-3.5 h-3.5" aria-hidden />
                     {table.seats} {t.seats}
                   </p>
@@ -371,7 +601,9 @@ export default function TablesPage() {
                             sitting in the room, and nobody opens the Tabs screen
                             on the off-chance. */}
                         {session.customer && (
-                          <p className={`text-xs font-bold truncate mb-1 ${session.customer.owes > 0 ? "text-amber-700" : "text-slate-500"
+                          <p className={`text-xs font-bold truncate mb-1 ${needsBill
+                            ? "text-amber-900"
+                            : session.customer.owes > 0 ? "text-amber-700" : "text-slate-500"
                             }`}>
                             {session.customer.name}
                             {session.customer.owes > 0 && (
@@ -381,22 +613,21 @@ export default function TablesPage() {
                             )}
                           </p>
                         )}
-                        <p className="text-xl font-bold text-slate-900 leading-none tabular-nums">
+                        {/* What the table is worth is the figure staff actually
+                            scan a floor for, so it is the largest thing on an
+                            occupied card - larger than the table's own name. */}
+                        <p className="text-2xl font-black text-slate-900 leading-none tabular-nums">
                           {formatTHB(tableTotal)}
                         </p>
-                        {splitCount > 1 && (
-                          <p className="text-[11px] font-bold text-amber-700 mt-1">
-                            {splitCount} {t.bills_on_table}
-                          </p>
-                        )}
-                        <p className="text-xs text-slate-500 mt-1.5 flex items-center gap-1 tabular-nums">
+                        <p className={`text-xs mt-1.5 flex items-center gap-1 tabular-nums ${needsBill ? "text-amber-800" : "text-slate-500"
+                          }`}>
                           <Clock className="w-3.5 h-3.5" aria-hidden />
                           {formatDuration(session.openedAt, now)}
-                          <span className="text-slate-300">·</span>
+                          <span className={needsBill ? "text-amber-800/50" : "text-slate-300"}>·</span>
                           {session.orderCount} {t.orders}
                           {session.waiterCount > 1 && (
                             <>
-                              <span className="text-slate-300">·</span>
+                              <span className={needsBill ? "text-amber-800/50" : "text-slate-300"}>·</span>
                               {session.waiterCount} {t.waiters_count}
                             </>
                           )}
@@ -411,9 +642,13 @@ export default function TablesPage() {
                             e.stopPropagation()
                             router.push(`/pos/settle?session=${session.id}`)
                           }}
-                          className={`mt-3 w-full h-11 rounded-md text-sm font-semibold inline-flex items-center justify-center gap-1.5 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 ${needsBill
-                            ? "bg-amber-600 hover:bg-amber-700 text-white focus-visible:ring-amber-500"
-                            : "border border-slate-300 text-slate-700 hover:bg-slate-50 focus-visible:ring-slate-400"
+                          /* Dark on the amber card, the same pairing the settle
+                             screen's minimum-spend strip uses: on a surface that
+                             is already the alert colour, an amber button is the
+                             one thing that stops standing out. */
+                          className={`mt-3 w-full h-11 rounded-md text-sm font-bold inline-flex items-center justify-center gap-1.5 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 ${needsBill
+                            ? "bg-slate-900 hover:bg-slate-800 text-white focus-visible:ring-slate-900"
+                            : "border-2 border-slate-300 text-slate-700 hover:bg-slate-50 focus-visible:ring-slate-400"
                             }`}
                         >
                           <Receipt className="w-3.5 h-3.5" aria-hidden />
@@ -421,9 +656,24 @@ export default function TablesPage() {
                         </button>
                       </>
                     ) : (
-                      <p className="text-sm text-slate-400 h-11 flex items-center">
-                        {isOpening ? `${t.open_table}…` : t.open_table}
-                      </p>
+                      // A dirty table gets the action that unblocks it, not an
+                      // invitation to seat somebody onto glasses. Tapping the
+                      // card still opens it - staff who decide to seat anyway
+                      // are not stopped, they are just not invited.
+                      isDirty ? (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); clearTable(table) }}
+                          disabled={clearing === table.id}
+                          className="w-full h-11 rounded-md text-sm font-bold bg-sky-600 hover:bg-sky-700 text-white inline-flex items-center justify-center gap-1.5 transition-colors duration-150 disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-1"
+                        >
+                          <Sparkles className="w-3.5 h-3.5" aria-hidden />
+                          {clearing === table.id ? `${t.state_clear}…` : t.state_clear}
+                        </button>
+                      ) : (
+                        <p className="text-sm font-bold text-slate-400 h-11 flex items-center">
+                          {isOpening ? `${t.open_table}…` : t.open_table}
+                        </p>
+                      )
                     )}
                   </div>
                 </Card>
@@ -452,37 +702,91 @@ export default function TablesPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Which of the two bills? A split table has two parties sitting at it,
-          and picking one for the staff member would leave the other one
-          unreachable - which is exactly the bug this fixes. Opened by time, so
-          the party who sat down first is listed first. */}
-      <Dialog open={!!pickingBill} onOpenChange={(o) => { if (!o) setPickingBill(null) }}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle>{pickingBill?.name} · {t.which_bill}</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-2">
-            {(pickingBill?.sessions ?? []).map((s, i) => (
-              <button
-                key={s.id}
-                onClick={() => { setPickingBill(null); router.push(`/pos?session=${s.id}`) }}
-                className="w-full flex items-center gap-3 px-4 h-16 rounded-xl border-2 border-slate-300 text-start hover:border-amber-400 hover:bg-amber-50 transition-all"
-              >
-                <span className="text-lg font-black text-slate-900">
-                  {pickingBill!.name}-{String.fromCharCode(97 + i)}
-                </span>
-                <span className="text-xs text-slate-500">
-                  {s.orderCount} {t.round_no}
-                  {s.status === "BILL_REQUESTED" && ` · ${t.bill_requested}`}
-                </span>
-                <span className="ms-auto text-lg font-bold tabular-nums text-slate-900">
-                  {formatTHB(s.total)}
-                </span>
-              </button>
-            ))}
+      {/* Bookings. Deliberately small: a name, a time, and the bookings that
+          already exist so one screen answers "what is held tonight" without
+          reading twenty cards. See the note on Table.reservedFor for what a
+          real diary would add. */}
+      <Dialog open={reserving} onOpenChange={(o) => { if (!o) setReserving(false) }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader><DialogTitle>{t.reserve_table}</DialogTitle></DialogHeader>
+
+          {/* What is already held, each with the way to cancel it. */}
+          {tables.some((x) => states.get(x.id)?.reservation) && (
+            <div className="rounded-xl border border-slate-200 overflow-hidden">
+              {tables.filter((x) => states.get(x.id)?.reservation).map((x) => {
+                const r = states.get(x.id)!.reservation!
+                return (
+                  <div key={x.id} className="flex items-center gap-3 px-3 py-2.5 border-b border-slate-100 last:border-0">
+                    <span className="font-black text-slate-900 w-16 shrink-0">{x.name}</span>
+                    <span className="text-sm text-slate-600 flex-1 min-w-0 truncate tabular-nums">
+                      {openedClock(r.at)} · {r.for}
+                    </span>
+                    <button
+                      onClick={() => cancelReservation(x)}
+                      aria-label={t.reserve_cancel}
+                      className="h-9 w-9 grid place-items-center rounded-md text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors shrink-0"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+
+          <div className="space-y-3">
+            {/* Only tables nobody is sitting at. Booking an occupied table is a
+                different promise - "when they leave" - and this does not make
+                that promise. */}
+            <select
+              value={reserveTable}
+              onChange={(e) => setReserveTable(e.target.value)}
+              className="w-full h-11 rounded-xl border-2 border-slate-300 px-3 font-bold text-slate-800 bg-white"
+            >
+              <option value="">{t.tables}…</option>
+              {tables.filter((x) => x.sessions.length === 0).map((x) => (
+                <option key={x.id} value={x.id}>
+                  {x.name} · {areaLabel(x.area)}
+                  {x.minSpend ? ` · ${formatTHB(x.minSpend)}` : ""}
+                </option>
+              ))}
+            </select>
+            <Input
+              className="h-11"
+              placeholder={t.reserve_for}
+              value={reserveName}
+              onChange={(e) => setReserveName(e.target.value)}
+              maxLength={80}
+            />
+            {/* A native time input: staff already know it, it validates itself,
+                and it is one tap on a tablet keyboard. */}
+            <Input
+              className="h-11"
+              type="time"
+              value={reserveTime}
+              onChange={(e) => setReserveTime(e.target.value)}
+            />
+            <Button
+              className="w-full h-12 bg-amber-600 hover:bg-amber-700 font-bold"
+              disabled={savingReserve || !reserveTable || !reserveName.trim() || !reserveTime}
+              onClick={saveReservation}
+            >
+              {savingReserve ? `${t.reserve_table}…` : t.reserve_table}
+            </Button>
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Which of the two bills? A split table has two parties sitting at it,
+          and picking one for the staff member would leave the other one
+          unreachable. The same dialog the till opens - see BillPickerDialog. */}
+      <BillPickerDialog
+        open={!!pickingBill}
+        onClose={() => setPickingBill(null)}
+        tableName={pickingBill?.name ?? ""}
+        bills={pickingBill?.sessions ?? []}
+        onPick={(billId) => { setPickingBill(null); router.push(`/pos?session=${billId}`) }}
+      />
 
       {/* The same dialog the sidebar's cash widget opens. A prompt where you
           are blocked, not a trip to another page to press a second button. */}

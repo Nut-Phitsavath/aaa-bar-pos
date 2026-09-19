@@ -6,7 +6,10 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { canMove, canMerge, canSplit, withSwapCharges } from './table-ops.ts'
+import {
+    canMove, canMerge, canSplit, withSwapCharges,
+    canSplitQuantities, swapChargeLineIds, billLabel, orderBills, canSendLines,
+} from './table-ops.ts'
 
 const open = (over = {}) => ({ id: 's1', status: 'OPEN', paidCount: 0, ...over })
 const freeTable = (over = {}) => ({ id: 't2', isActive: true, occupied: false, ...over })
@@ -103,4 +106,276 @@ test('a discounted bill still adds up after it is split', () => {
     // than the table was quoted.
     const pct = (g: number) => Math.max(0, Math.ceil(g - g * 0.1))
     assert.equal(pct(700) + pct(300), pct(1000))
+})
+
+// --- canSplitQuantities: splitting by the unit, not the row ------------------
+//
+// The case that drove this: a table with 2 whiskeys, 2 waters and 2 snacks is
+// THREE rows of two, because the till merges identical items. Moving one
+// whiskey was impossible before.
+
+/** 2 whiskeys, 2 waters, 2 snacks - six drinks on three lines. */
+const sixOnThree = () => [
+    { id: 'wh', quantity: 2 },
+    { id: 'wa', quantity: 2 },
+    { id: 'sn', quantity: 2 },
+]
+
+test('one whiskey and one water can leave, which was the whole point', () => {
+    const check = canSplitQuantities(open(), sixOnThree(), [
+        { itemId: 'wh', quantity: 1 },
+        { itemId: 'wa', quantity: 1 },
+    ], 'shift1')
+    assert.deepEqual(check, { ok: true })
+})
+
+test('a whole line still moves, the way it always did', () => {
+    assert.deepEqual(
+        canSplitQuantities(open(), sixOnThree(), [{ itemId: 'wh', quantity: 2 }], 'shift1'),
+        { ok: true },
+    )
+})
+
+test('"everything" is counted in drinks, not rows', () => {
+    // One of each line is three of six drinks: a real bill stays behind, even
+    // though every row was touched. The row-based rule refused this.
+    const some = canSplitQuantities(open(), sixOnThree(), [
+        { itemId: 'wh', quantity: 1 },
+        { itemId: 'wa', quantity: 1 },
+        { itemId: 'sn', quantity: 1 },
+    ], 'shift1')
+    assert.deepEqual(some, { ok: true })
+
+    // All of each is all six, which is a merge wearing a split's clothes.
+    const all = canSplitQuantities(open(), sixOnThree(), [
+        { itemId: 'wh', quantity: 2 },
+        { itemId: 'wa', quantity: 2 },
+        { itemId: 'sn', quantity: 2 },
+    ], 'shift1')
+    assert.deepEqual(all, { ok: false, reason: 'CANNOT_SPLIT_EVERYTHING' })
+})
+
+test('the last drink on a bill cannot leave', () => {
+    assert.deepEqual(
+        canSplitQuantities(open(), [{ id: 'only', quantity: 1 }], [{ itemId: 'only', quantity: 1 }], 'shift1'),
+        { ok: false, reason: 'CANNOT_SPLIT_EVERYTHING' },
+    )
+})
+
+test('you cannot move more drinks than the line holds', () => {
+    assert.deepEqual(
+        canSplitQuantities(open(), sixOnThree(), [{ itemId: 'wh', quantity: 3 }], 'shift1'),
+        { ok: false, reason: 'MORE_THAN_ORDERED' },
+    )
+})
+
+test('half a beer is not a thing the bar can pour', () => {
+    assert.deepEqual(
+        canSplitQuantities(open(), sixOnThree(), [{ itemId: 'wh', quantity: 1.5 }], 'shift1'),
+        { ok: false, reason: 'QUANTITY_MUST_BE_WHOLE' },
+    )
+    assert.deepEqual(
+        canSplitQuantities(open(), sixOnThree(), [{ itemId: 'wh', quantity: 0 }], 'shift1'),
+        { ok: false, reason: 'QUANTITY_MUST_BE_POSITIVE' },
+    )
+    assert.deepEqual(
+        canSplitQuantities(open(), sixOnThree(), [{ itemId: 'wh', quantity: -1 }], 'shift1'),
+        { ok: false, reason: 'QUANTITY_MUST_BE_POSITIVE' },
+    )
+})
+
+test('a line that is not on the bill cannot be moved off it', () => {
+    assert.deepEqual(
+        canSplitQuantities(open(), sixOnThree(), [{ itemId: 'ghost', quantity: 1 }], 'shift1'),
+        { ok: false, reason: 'LINE_NOT_ON_BILL' },
+    )
+})
+
+test('the same line twice would pass each check and break the cap together', () => {
+    assert.deepEqual(
+        canSplitQuantities(open(), sixOnThree(), [
+            { itemId: 'wh', quantity: 2 },
+            { itemId: 'wh', quantity: 2 },
+        ], 'shift1'),
+        { ok: false, reason: 'DUPLICATE_LINE' },
+    )
+})
+
+test('a swapped package moves whole or not at all', () => {
+    const lines = [{ id: 'pkg', quantity: 2, hasSwap: true }, { id: 'beer', quantity: 4 }]
+    // Splitting the row leaves no honest answer to which half the exchange
+    // happened on.
+    assert.deepEqual(
+        canSplitQuantities(open(), lines, [{ itemId: 'pkg', quantity: 1 }], 'shift1'),
+        { ok: false, reason: 'SWAPPED_LINE_MOVES_WHOLE' },
+    )
+    // Whole is fine.
+    assert.deepEqual(
+        canSplitQuantities(open(), lines, [{ itemId: 'pkg', quantity: 2 }], 'shift1'),
+        { ok: true },
+    )
+})
+
+test('the old refusals still hold with quantities in play', () => {
+    const one = [{ itemId: 'wh', quantity: 1 }]
+    assert.deepEqual(
+        canSplitQuantities(open({ status: 'CLOSED' }), sixOnThree(), one, 'shift1'),
+        { ok: false, reason: 'SESSION_NOT_OPEN' },
+    )
+    assert.deepEqual(
+        canSplitQuantities(open({ paidCount: 1 }), sixOnThree(), one, 'shift1'),
+        { ok: false, reason: 'ALREADY_PAID' },
+    )
+    assert.deepEqual(
+        canSplitQuantities(open(), sixOnThree(), one, null),
+        { ok: false, reason: 'NO_OPEN_SHIFT' },
+    )
+    assert.deepEqual(
+        canSplitQuantities(open(), sixOnThree(), [], 'shift1'),
+        { ok: false, reason: 'NOTHING_SELECTED' },
+    )
+})
+
+test('an upcharge follows the package it came from, and only once', () => {
+    const swaps = [{ orderItemId: 'pkg', chargeItemId: 'chg' }]
+    assert.deepEqual(swapChargeLineIds([{ itemId: 'pkg', quantity: 2 }], swaps), ['chg'])
+    // Not dragged in when its package stays put.
+    assert.deepEqual(swapChargeLineIds([{ itemId: 'beer', quantity: 1 }], swaps), [])
+    // Not added twice if the charge was ticked as well.
+    assert.deepEqual(
+        swapChargeLineIds([{ itemId: 'pkg', quantity: 2 }, { itemId: 'chg', quantity: 1 }], swaps),
+        [],
+    )
+})
+
+// --- billLabel: the same letter on both screens ------------------------------
+//
+// The floor plan picker and the till banner letter the same bills. If they
+// disagree, a waiter charges a party they can see is not the one they picked.
+
+const bill = (id: string, openedAt: string) => ({ id, openedAt })
+
+test('a table with one bill keeps its plain name', () => {
+    assert.equal(billLabel('T5', [bill('s1', '2026-09-18T19:00:00Z')], 's1'), 'T5')
+    assert.equal(billLabel('T5', [], 's1'), 'T5')
+})
+
+test('a split table letters its bills by who sat down first', () => {
+    const bills = [bill('s2', '2026-09-18T20:00:00Z'), bill('s1', '2026-09-18T19:00:00Z')]
+    // Passed in the wrong order on purpose: the function sorts, so a caller
+    // cannot make the two screens disagree by fetching differently.
+    assert.equal(billLabel('T5', bills, 's1'), 'T5-a')
+    assert.equal(billLabel('T5', bills, 's2'), 'T5-b')
+})
+
+test('three bills carry on down the alphabet', () => {
+    const bills = [
+        bill('a', '2026-09-18T19:00:00Z'),
+        bill('b', '2026-09-18T19:30:00Z'),
+        bill('c', '2026-09-18T20:00:00Z'),
+    ]
+    assert.deepEqual(bills.map((x) => billLabel('D1', bills, x.id)), ['D1-a', 'D1-b', 'D1-c'])
+})
+
+test('bills sharing a timestamp still letter the same way every time', () => {
+    // A split stamps new Date() on the child, so a tie is reachable. Without a
+    // tiebreak the letter would flip between requests.
+    const same = '2026-09-18T19:00:00Z'
+    const bills = [bill('zzz', same), bill('aaa', same)]
+    assert.equal(billLabel('T5', bills, 'aaa'), 'T5-a')
+    assert.equal(billLabel('T5', bills, 'zzz'), 'T5-b')
+    // Same answer from the reversed input.
+    const reversed = [...bills].reverse()
+    assert.equal(billLabel('T5', reversed, 'aaa'), 'T5-a')
+    assert.equal(billLabel('T5', reversed, 'zzz'), 'T5-b')
+})
+
+test('a bill not in the list falls back to the table name, never a wrong letter', () => {
+    const bills = [bill('s1', '2026-09-18T19:00:00Z'), bill('s2', '2026-09-18T20:00:00Z')]
+    assert.equal(billLabel('T5', bills, 'gone'), 'T5')
+})
+
+test('on a tie, the bill that existed first keeps the earlier letter', () => {
+    // A split stamps new Date() on the child, so parent and child can share an
+    // openedAt. Without createdAt the tiebreak falls to UUID order, and the
+    // party who had been there all night could be renamed "T5-b" while the
+    // half that just split off took "T5-a".
+    const same = '2026-09-18T19:00:00Z'
+    const parent = { id: 'zzz-parent', openedAt: same, createdAt: '2026-09-18T19:00:00Z' }
+    const child = { id: 'aaa-child', openedAt: same, createdAt: '2026-09-18T21:30:00Z' }
+    assert.equal(billLabel('T5', [parent, child], parent.id), 'T5-a')
+    assert.equal(billLabel('T5', [parent, child], child.id), 'T5-b')
+    // Same answer whichever order they arrive in.
+    assert.equal(billLabel('T5', [child, parent], parent.id), 'T5-a')
+})
+
+test('without createdAt it still sorts deterministically, just by id', () => {
+    const same = '2026-09-18T19:00:00Z'
+    const bills = [{ id: 'b', openedAt: same }, { id: 'a', openedAt: same }]
+    assert.equal(billLabel('T5', bills, 'a'), 'T5-a')
+    assert.equal(billLabel('T5', [...bills].reverse(), 'a'), 'T5-a')
+})
+
+// --- canSendLines: drinks leaving for another table's bill -------------------
+
+const otherBill = (over = {}) => ({ id: 's2', status: 'OPEN', paidCount: 0, ...over })
+
+test('a bottle can leave a line of three for another table', () => {
+    const lines = [{ id: 'wine', quantity: 3 }, { id: 'beer', quantity: 2 }]
+    assert.deepEqual(
+        canSendLines(open(), otherBill(), lines, [{ itemId: 'wine', quantity: 1 }], 'shift1'),
+        { ok: true },
+    )
+})
+
+test('sending every drink is a merge, and says so', () => {
+    const lines = [{ id: 'wine', quantity: 1 }]
+    assert.deepEqual(
+        canSendLines(open(), otherBill(), lines, [{ itemId: 'wine', quantity: 1 }], 'shift1'),
+        { ok: false, reason: 'CANNOT_SEND_EVERYTHING' },
+    )
+})
+
+test('a bill cannot send drinks to itself', () => {
+    const lines = [{ id: 'wine', quantity: 3 }]
+    assert.deepEqual(
+        canSendLines(open({ id: 'same' }), otherBill({ id: 'same' }), lines,
+            [{ itemId: 'wine', quantity: 1 }], 'shift1'),
+        { ok: false, reason: 'SAME_BILL' },
+    )
+})
+
+test('the destination has to be open and unpaid too', () => {
+    const lines = [{ id: 'wine', quantity: 3 }]
+    const one = [{ itemId: 'wine', quantity: 1 }]
+    assert.deepEqual(
+        canSendLines(open(), otherBill({ status: 'CLOSED' }), lines, one, 'shift1'),
+        { ok: false, reason: 'DESTINATION_NOT_OPEN' },
+    )
+    assert.deepEqual(
+        canSendLines(open(), otherBill({ paidCount: 1 }), lines, one, 'shift1'),
+        { ok: false, reason: 'DESTINATION_ALREADY_PAID' },
+    )
+    // A bill asking for its bill is still open for business.
+    assert.deepEqual(
+        canSendLines(open(), otherBill({ status: 'BILL_REQUESTED' }), lines, one, 'shift1'),
+        { ok: true },
+    )
+})
+
+test('the split rules still apply to the sending bill', () => {
+    const lines = [{ id: 'wine', quantity: 3 }, { id: 'beer', quantity: 2 }]
+    assert.deepEqual(
+        canSendLines(open({ paidCount: 1 }), otherBill(), lines, [{ itemId: 'wine', quantity: 1 }], 'shift1'),
+        { ok: false, reason: 'ALREADY_PAID' },
+    )
+    assert.deepEqual(
+        canSendLines(open(), otherBill(), lines, [{ itemId: 'wine', quantity: 9 }], 'shift1'),
+        { ok: false, reason: 'MORE_THAN_ORDERED' },
+    )
+    assert.deepEqual(
+        canSendLines(open(), otherBill(), [{ id: 'pkg', quantity: 2, hasSwap: true }, { id: 'b', quantity: 5 }],
+            [{ itemId: 'pkg', quantity: 1 }], 'shift1'),
+        { ok: false, reason: 'SWAPPED_LINE_MOVES_WHOLE' },
+    )
 })
