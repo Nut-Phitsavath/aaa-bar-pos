@@ -56,3 +56,7 @@ current_main_pos.tsx
 # match these, and one slipped into a commit as 2.5MB of binary churn.
 *.db.*
 *.db-*
+
+
+# upload pic
+/public/uploads
