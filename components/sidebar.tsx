@@ -235,7 +235,7 @@ export function Sidebar() {
 
                 {/* Main Navigation */}
                 <nav className={cn(
-                    "flex-1 py-2 space-y-1.45 overflow-y-auto no-scrollbar px-3",
+                    "flex-1 py-2 space-y-1.45 overflow-y-auto no-scrollbar scroll-fade-y px-3",
                     isCollapsed && "px-2"
                 )}>
                     {filteredNavItems.map((item) => {

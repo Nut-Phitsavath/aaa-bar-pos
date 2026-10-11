@@ -82,6 +82,20 @@ function DialogContent({
         // Placed before {...props} so a caller that needs the focus return can
         // pass its own onCloseAutoFocus.
         onCloseAutoFocus={(e) => e.preventDefault()}
+        // A toast is portalled to <body>, so it sits outside this content and
+        // Radix counts a tap on it as "interacted outside" -- which dismisses
+        // the dialog underneath. Other portals (Select, Popover) are Radix
+        // dismissable layers and are excluded from that by the layer stack;
+        // sonner is not, so it needs saying explicitly.
+        //
+        // This is not a cosmetic dismissal. Error toasts never auto-clear by
+        // design, so the one toast guaranteed to be tapped by hand is the one
+        // raised over a half-filled form -- and tapping it took the form with
+        // it. Placed before {...props} so a caller can still override.
+        onInteractOutside={(e) => {
+          const target = e.target as Element | null
+          if (target?.closest?.("[data-sonner-toaster]")) e.preventDefault()
+        }}
         className={cn(
           `
           fixed left-1/2 top-1/2 z-50

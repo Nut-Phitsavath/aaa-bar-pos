@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { startOfDay, endOfDay } from 'date-fns'
-import { sessionTotal, BILLABLE_ORDER_STATUSES } from '@/lib/sessions'
-import { billTotalOf, discountAmount, paidTotal } from '@/lib/payments'
+import { sessionTotal, BILLABLE_ORDER_STATUSES, sessionBillTotal } from '@/lib/sessions'
+import { discountAmount, paidTotal } from '@/lib/payments'
 import { tendersOf, billStatus } from '@/lib/bills'
 import { exceptionsOf } from '@/lib/bill-operations'
 
@@ -45,6 +45,8 @@ export async function GET(request: Request) {
             orderBy: { openedAt: 'desc' },
             take,
             include: {
+                // Name the deal, so a bill can say which one came off it.
+                promotion: { select: { name: true } },
                 table: { select: { name: true, area: true } },
                 customer: { select: { id: true, name: true } },
                 payments: { orderBy: { createdAt: 'asc' }, include: { voidedBy: { select: { name: true } } } },
@@ -84,6 +86,12 @@ export async function GET(request: Request) {
             voidReason: i.voidReason,
             voidNote: i.voidNote,
             voidedBy: i.voidedBy?.name ?? null,
+            // What the bar was actually told to do with this line. The column
+            // has been filled since prep notes shipped, but this mapper picked
+            // its fields by hand and never listed it, so "no ice" was stored on
+            // every copy of the order and shown on none of them here.
+            note: i.note ?? null,
+            isTakeaway: Boolean(i.isTakeaway),
             // What a package actually delivered, so history reads the same as
             // the ticket and the printed slip did on the night (req #9).
             swaps: i.swaps ?? [],
@@ -92,7 +100,7 @@ export async function GET(request: Request) {
         const tableBills = sessions.map((s) => {
             const billable = s.orders.filter((o) => BILLABLE.includes(o.status))
             const gross = sessionTotal(s.orders)
-            const total = billTotalOf(gross, s.discountType, s.discountValue)
+            const total = sessionBillTotal(s)
             const status = billStatus({
                 status: s.status,
                 total,
@@ -117,7 +125,22 @@ export async function GET(request: Request) {
                 ),
                 voidedLines: s.orders.reduce((n, o) => n + o.items.filter((i) => i.voidedAt).length, 0),
                 gross,
-                discount: discountAmount(gross, s.discountType, s.discountValue),
+                // Both savings, reported apart, and the manual one priced off
+                // the post-promo base.
+                //
+                // This computed the discount from the gross and never mentioned
+                // a promotion at all - so a bill that was reduced showed its
+                // full rounds beside a smaller total with nothing on the row
+                // accounting for the difference. On a history screen that is
+                // the worst possible silence: the one place somebody goes to
+                // ask "why did this table pay that".
+                promoName: s.promotion?.name ?? null,
+                promoDiscount: s.promoDiscount ?? 0,
+                discount: discountAmount(
+                    Math.max(0, gross - (s.promoDiscount ?? 0)),
+                    s.discountType,
+                    s.discountValue
+                ),
                 total,
                 paid: paidTotal(s.payments),
                 tenders: tendersOf(s.payments),

@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { sessionTotal } from '@/lib/sessions'
-import { balanceOf, changeDue, billTotalOf, discountAmount } from '@/lib/payments'
-import { DEFAULT_RATE_LAK, DEFAULT_RATE_USD } from '@/lib/currency'
+import { sessionTotal, sessionBillTotal } from '@/lib/sessions'
+import { balanceOf, changeDue, discountAmount } from '@/lib/payments'
+import { DEFAULT_RATE_LAK, DEFAULT_RATE_USD, billRates, taxRateOf } from '@/lib/currency'
 import { outstandingForCustomer } from '@/lib/customer-tabs'
 import { componentIndex, contentsOf } from '@/lib/packages'
 import { sellableMenus } from '@/lib/packages-db'
@@ -16,13 +16,31 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
         const session = await prisma.tableSession.findUnique({
             where: { id },
             include: {
-                table: true,
+                // Name the deal, so the bill screen can say which one is on.
+                promotion: { select: { id: true, name: true, code: true } },
+                // The other bills open at this table, so the till can say which
+                // one it has open and hop to the sibling. Splitting leaves two
+                // parties at one table, and until now the banner read plain
+                // "T5" on both of them - a waiter could not tell which guests
+                // they were about to charge.
+                //
+                // Id, status and openedAt only: the letter comes from the
+                // opening order and the rest of this payload is already heavy.
+                table: {
+                    include: {
+                        sessions: {
+                            where: { status: { not: 'CLOSED' } },
+                            orderBy: { openedAt: 'asc' },
+                            select: { id: true, status: true, openedAt: true, createdAt: true },
+                        },
+                    },
+                },
                 orders: {
                     orderBy: { createdAt: 'asc' },
                     include: {
                         // The photo and category are not on the order line - they
-                        // are snapshotted only as name and price - so walk the
-                        // relation to fetch them. The customer display groups by
+                        // are snapshotted only as name and price - so join the
+                        // menu item to fetch them. The customer display groups by
                         // category and shows the photo, exactly as it does for a
                         // walk-in cart.
                         items: {
@@ -33,22 +51,14 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
                                 // What this package actually delivered, so the
                                 // ticket and the printed bill can say so (req #9).
                                 swaps: { include: { lines: true }, orderBy: { createdAt: "asc" } },
-                                variationSize: {
-                                    include: {
-                                        variation: {
-                                            include: {
-                                                menu: {
-                                                    select: {
-                                                        image: true,
-                                                        localName: true,
-                                                        category: { select: { name: true } },
-                                                        // Enough to say whether this line is a
-                                                        // package with anything swappable in it.
-                                                        recipes: { select: { ingredientId: true, quantity: true } }
-                                                    }
-                                                }
-                                            }
-                                        }
+                                menu: {
+                                    select: {
+                                        image: true,
+                                        localName: true,
+                                        category: { select: { name: true } },
+                                        // Enough to say whether this line is a
+                                        // package with anything swappable in it.
+                                        recipes: { select: { ingredientId: true, quantity: true } }
                                     }
                                 }
                             }
@@ -71,27 +81,23 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
             return NextResponse.json({ error: 'Session not found' }, { status: 404 })
         }
 
-        // An open bill quotes today's rate; a closed one re-reads the rate it
-        // was settled at, forever. Resolving this server-side means no screen
-        // can accidentally render a closed bill at the live rate (req #18).
-        let fxRateLAK = session.fxRateLAK
-        let fxRateUSD = session.fxRateUSD
-        let showUsd = false
-
+        // An open bill quotes today's rates; a closed one re-reads the rates it
+        // was settled at, forever - FX and VAT alike. Resolving this server-side
+        // means no screen can render a closed bill at live rates (req #18).
         const settings = await prisma.setting.findMany({
-            where: { key: { in: ['rate_lak', 'rate_usd', 'show_usd'] } }
+            where: { key: { in: ['rate_lak', 'rate_usd', 'show_usd', 'taxRate', 'tax_rate'] } }
         })
         const valueOf = (key: string) => settings.find((s) => s.key === key)?.value
-        showUsd = valueOf('show_usd') === 'true'
-
-        if (session.status !== 'CLOSED') {
-            const live = (key: string, fallback: number) => {
-                const parsed = Number(valueOf(key))
-                return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback
-            }
-            fxRateLAK = live('rate_lak', DEFAULT_RATE_LAK)
-            fxRateUSD = live('rate_usd', DEFAULT_RATE_USD)
+        const showUsd = valueOf('show_usd') === 'true'
+        const live = (key: string, fallback: number) => {
+            const parsed = Number(valueOf(key))
+            return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback
         }
+        const { lak: fxRateLAK, usd: fxRateUSD, tax: taxRate } = billRates(session, {
+            lak: live('rate_lak', DEFAULT_RATE_LAK),
+            usd: live('rate_usd', DEFAULT_RATE_USD),
+            tax: taxRateOf(valueOf('taxRate') ?? valueOf('tax_rate')),
+        })
 
         // What this guest already owes on other nights. The till needs it
         // before the round is served, not after: a regular who is 20,000 down
@@ -101,20 +107,19 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
             : 0
 
         const gross = sessionTotal(session.orders)
-        const total = billTotalOf(gross, session.discountType, session.discountValue)
+        const total = sessionBillTotal(session)
 
         // Built once for the whole bill: which components a package holds is
         // the same question for every line on it.
         const sellableIndex = componentIndex(await sellableMenus())
 
         // Flatten the menu lookup onto each line so no screen has to walk the
-        // relation itself. A deleted menu item leaves variationSize null, and
-        // the line still renders from its snapshotted name and price.
+        // relation itself. A deleted menu item leaves menuId (and so item.menu)
+        // null, and the line still renders from its snapshotted name and price.
         const orders = session.orders.map((order) => ({
             ...order,
             items: order.items.map((item) => {
-                const menu = item.variationSize?.variation?.menu
-                const { variationSize, ...line } = item
+                const { menu, ...line } = item
                 return {
                     ...line,
                     image: menu?.image ?? null,
@@ -135,7 +140,21 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
             // owes after any discount. The bill screen shows both so a
             // reduction is visible rather than silently baked into one figure.
             gross,
-            discount: discountAmount(gross, session.discountType, session.discountValue),
+            // The promotion, and then the manual discount on what is left.
+            //
+            // Computed off the post-promo base, not the gross. Taking the
+            // manager's percentage off the full amount while the total is
+            // priced after the promo would leave the bill screen showing three
+            // numbers that do not add up - which on a settle screen is the
+            // moment a customer stops trusting the till.
+            promoId: session.promoId,
+            promoName: session.promotion?.name ?? null,
+            promoDiscount: session.promoDiscount ?? 0,
+            discount: discountAmount(
+                Math.max(0, gross - (session.promoDiscount ?? 0)),
+                session.discountType,
+                session.discountValue
+            ),
             total,
             // Derived here so the screen and the settle endpoint can never
             // disagree about whether this bill is paid.
@@ -143,6 +162,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
             changeDue: changeDue(total, session.payments),
             fxRateLAK,
             fxRateUSD,
+            taxRate,
             showUsd,
             customerOwes
         })

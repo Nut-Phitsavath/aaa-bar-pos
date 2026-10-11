@@ -5,6 +5,8 @@ import { cookies } from 'next/headers'
 import { calculateInclusiveTax } from '@/lib/currency'
 import { promoBlocker, promoDiscountFor } from '@/lib/promotions'
 import { decrementStock } from '@/lib/stock'
+// A bill's promo is a snapshot; adding a round can change what it is worth.
+import { refreshSessionPromo } from '@/lib/session-promo'
 import { requireOpenShift } from '@/lib/shift-guard'
 
 // Force dynamic to prevent caching issues with Orders
@@ -56,19 +58,19 @@ export async function POST(request: Request) {
             }
         }
 
-        // 1. Validate Items & VariationSizes
+        // 1. Validate Items & Menu items
         if (!items || !Array.isArray(items) || items.length === 0) {
             console.error("Order Validation Failed: Items list is invalid or empty", items)
             return NextResponse.json({ error: 'Order must have items' }, { status: 400 })
         }
 
-        // Extract variationSizeIds from items
-        const variationSizeIds = Array.from(new Set(items.map((i: any) => i.variationSizeId)))
+        // Extract menuIds from items
+        const menuIds = Array.from(new Set(items.map((i: any) => i.menuId)))
             .filter(id => id !== undefined && id !== null) as string[]
 
-        if (variationSizeIds.length === 0) {
-            console.error("Order Validation Failed: No VariationSize IDs found", items)
-            return NextResponse.json({ error: 'Items must have variationSizeId' }, { status: 400 })
+        if (menuIds.length === 0) {
+            console.error("Order Validation Failed: No Menu IDs found", items)
+            return NextResponse.json({ error: 'Items must have menuId' }, { status: 400 })
         }
 
         // 1b. Table orders must name a waiter. An unattributed round makes the
@@ -91,19 +93,19 @@ export async function POST(request: Request) {
             }
         }
 
-        // Check if ALL referenced variationSizes exist in DB
-        const existingVariationSizes = await prisma.variationSize.findMany({
-            where: { id: { in: variationSizeIds } },
-            select: { id: true, price: true, size: true, variation: { select: { type: true, menu: { select: { name: true } } } } }
+        // Check if ALL referenced menu items exist in DB
+        const existingMenuItems = await prisma.menu.findMany({
+            where: { id: { in: menuIds } },
+            select: { id: true, price: true, name: true }
         })
 
-        const existingVariationSizeIds = new Set(existingVariationSizes.map(vs => vs.id))
-        const missingIds = variationSizeIds.filter(id => !existingVariationSizeIds.has(id))
+        const existingIds = new Set(existingMenuItems.map(m => m.id))
+        const missingIds = menuIds.filter(id => !existingIds.has(id))
 
         if (missingIds.length > 0) {
             console.error("Order Validation Failed: Stale IDs detected", missingIds)
             return NextResponse.json({
-                error: `Foreign Key Violation: VariationSizes with IDs [${missingIds.join(', ')}] do not exist. Please refresh the menu or clear your cart.`,
+                error: `Foreign Key Violation: Menu items with IDs [${missingIds.join(', ')}] do not exist. Please refresh the menu or clear your cart.`,
                 code: 'STALE_ID_VIOLATION',
                 missingIds
             }, { status: 400 })
@@ -160,7 +162,9 @@ export async function POST(request: Request) {
         const taxRate = Number(settingsMap.taxRate ?? settingsMap.tax_rate ?? 10) || 0
         const loyaltyRate = Number(settingsMap.loyaltyRate ?? settingsMap.loyalty_rate ?? 1000) || 1000
 
-        const priceById = new Map(existingVariationSizes.map(vs => [vs.id, vs.price]))
+        // Built from the DB rows fetched above, never from the request body:
+        // this map is what makes the reprice below server-authoritative.
+        const priceById = new Map(existingMenuItems.map(m => [m.id, m.price]))
 
         let serverSubtotal = 0
         let serverItemCount = 0
@@ -171,9 +175,28 @@ export async function POST(request: Request) {
         let serverTax = 0
         let effectivePromoId: string | null = promoId || null
 
+        // 4a. Refuse an unpriced line. A menu row sitting at 0 has not been
+        //     priced yet - it is not a free drink - so selling it would hand
+        //     the stock away and book nothing. The till warns before it gets
+        //     here; this is the boundary that actually decides, because a
+        //     second device or a stale tab can post straight past the screen.
+        //     Cancellations are exempt: they replay an order already rung up,
+        //     and their lines are priced from the stored snapshot, not the menu.
+        if (status !== 'CANCELLED') {
+            const unpriced = existingMenuItems.filter(m => !(m.price > 0))
+            if (unpriced.length > 0) {
+                console.error("Order Validation Failed: Unpriced items", unpriced.map(m => m.id))
+                return NextResponse.json({
+                    error: `These items have no price yet and cannot be sold: ${unpriced.map(m => m.name).join(', ')}. Set a price in Menu first.`,
+                    code: 'UNPRICED_ITEM',
+                    unpricedIds: unpriced.map(m => m.id)
+                }, { status: 400 })
+            }
+        }
+
         if (status !== 'CANCELLED') {
             for (const it of items) {
-                const unit = priceById.get(it.variationSizeId) ?? 0
+                const unit = priceById.get(it.menuId) ?? 0
                 const qty = parseInt(it.quantity) || 0
                 serverSubtotal += unit * qty
                 serverItemCount += qty
@@ -305,27 +328,26 @@ export async function POST(request: Request) {
                 ? { waiter: { connect: { id: waiterId } } }
                 : {}
 
-            // 3. Prepare Items (using variationSizeId)
+            // 3. Prepare Items (using menuId)
             const preparedItems = items.map((item: any) => {
-                // 1. Find the DB record for this variationSize
-                const vsRecord = existingVariationSizes.find(v => v.id === item.variationSizeId);
-                const dbVariation = vsRecord?.variation?.type; // e.g. "Hot"
-                const dbSize = vsRecord?.size; // e.g. "M"
+                // 1. Find the DB record for this menu item
+                const menuRecord = existingMenuItems.find(m => m.id === item.menuId);
 
-                // 2. Resolve Variation & Size (trust payload, fallback to DB)
-                const finalVariation = item.variation || dbVariation;
-                const finalSize = item.size || item.cupSize || dbSize;
+                // 2. Size is whatever the cart sent. There is no size axis on the
+                //    item any more, so there is nothing to fall back to: a bar
+                //    names the serving in the item ("Beer Lao Bucket (5)").
+                const finalSize = item.size || item.cupSize;
 
                 // 3. Construct full descriptive name snapshot
-                let fullName = item.name || vsRecord?.variation?.menu?.name || "Item";
+                const fullName = item.name || menuRecord?.name || "Item";
 
                 // Line price comes from the DB (authoritative); cancellations keep
                 // the order's original snapshot price.
-                const dbUnitPrice = isCancelling ? (parseFloat(item.price) || 0) : (vsRecord?.price ?? 0)
+                const dbUnitPrice = isCancelling ? (parseFloat(item.price) || 0) : (menuRecord?.price ?? 0)
                 const qty = parseInt(item.quantity) || 0
 
                 return {
-                    variationSizeId: item.variationSizeId,
+                    menuId: item.menuId,
                     name: fullName,
                     price: dbUnitPrice,
                     quantity: qty,
@@ -399,29 +421,26 @@ export async function POST(request: Request) {
             if (isNowActive && !wasActive) {
 
                 // 1. Deduct Stock (based on menu recipes)
+                //
+                // One tier, not two. The recipe used to be resolved as base
+                // (menuId, variationSizeId null) OR size-specific override
+                // (variationSizeId), which only ever meant anything when one
+                // item had several sizes to price differently. It doesn't any
+                // more, and no override row was ever written.
                 for (const item of preparedItems) {
-                    // Get the menu from variationSize
-                    const vs = await tx.variationSize.findUnique({
-                        where: { id: item.variationSizeId },
-                        include: { variation: { include: { menu: true } } }
+                    // Delete this line and one malformed cart line empties the
+                    // whole bar: an undefined menuId is "no filter" to findMany,
+                    // so it matches every recipe. findUnique used to throw here.
+                    if (!item.menuId) continue
+
+                    const recipes = await tx.recipe.findMany({
+                        where: { menuId: item.menuId }
                     })
 
-                    if (vs?.variation?.menu) {
-                        // 1.1 Find all applicable recipes (Base + Specific Choice)
-                        const recipes = await tx.recipe.findMany({
-                            where: {
-                                OR: [
-                                    { menuId: vs.variation.menu.id, variationSizeId: null }, // Tier 1: Base
-                                    { variationSizeId: item.variationSizeId }              // Tier 2: Specific Choice
-                                ]
-                            }
+                    for (const recipe of recipes) {
+                        await decrementStock(tx, recipe.ingredientId, recipe.quantity * item.quantity, {
+                            type: 'SALE', userId, notes: `order ${orderId}`, reason: item.menuId,
                         })
-
-                        for (const recipe of recipes) {
-                            await decrementStock(tx, recipe.ingredientId, recipe.quantity * item.quantity, {
-                                type: 'SALE', userId, notes: `order ${orderId}`, reason: vs.variation.menu.id,
-                            })
-                        }
                     }
                 }
 
@@ -463,29 +482,22 @@ export async function POST(request: Request) {
             if (previousOrder && wasActive && isCancelled) {
                 // 1. Revert Stock
                 const oldItems = previousOrder.items
+                // Same single-tier lookup as the deduction above, so a void
+                // gives back exactly what the sale took.
                 for (const item of oldItems) {
-                    if (!item.variationSizeId) continue
-                    const vs = await tx.variationSize.findUnique({
-                        where: { id: item.variationSizeId },
-                        include: { variation: { include: { menu: true } } }
+                    // Delete this line and voiding one line credits stock the
+                    // bar never sold: an undefined menuId filters nothing, so
+                    // findMany returns every recipe. Not defensive - load-bearing.
+                    if (!item.menuId) continue
+
+                    const recipes = await tx.recipe.findMany({
+                        where: { menuId: item.menuId }
                     })
 
-                    if (vs?.variation?.menu) {
-                        // 1.1 Find all applicable recipes (Base + Specific Choice)
-                        const recipes = await tx.recipe.findMany({
-                            where: {
-                                OR: [
-                                    { menuId: vs.variation.menu.id, variationSizeId: null }, // Tier 1: Base
-                                    { variationSizeId: item.variationSizeId }              // Tier 2: Specific Choice
-                                ]
-                            }
+                    for (const recipe of recipes) {
+                        await decrementStock(tx, recipe.ingredientId, -(recipe.quantity * item.quantity), {
+                            type: 'SALE_VOID', userId, notes: `order ${orderId}`, reason: item.menuId,
                         })
-
-                        for (const recipe of recipes) {
-                            await decrementStock(tx, recipe.ingredientId, -(recipe.quantity * item.quantity), {
-                                type: 'SALE_VOID', userId, notes: `order ${orderId}`, reason: vs.variation.menu.id,
-                            })
-                        }
                     }
                 }
 
@@ -537,6 +549,12 @@ export async function POST(request: Request) {
 
                 } // end money-only reversal block
             }
+
+            // The round is on the bill now, so the deal may be worth more -
+            // or newly worth something, if this is the round that met its
+            // minimum. Inside the transaction so the bill is never briefly
+            // priced with a stale discount.
+            if (sessionId) await refreshSessionPromo(tx as any, sessionId)
 
             return savedOrder
         })

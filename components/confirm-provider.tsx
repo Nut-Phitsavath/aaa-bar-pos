@@ -1,6 +1,6 @@
 "use client"
 
-import { createContext, useCallback, useContext, useRef, useState, type ReactNode } from "react"
+import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react"
 import {
     AlertDialog,
     AlertDialogContent,
@@ -106,4 +106,54 @@ export function useConfirm() {
     const ctx = useContext(ConfirmContext)
     if (!ctx) throw new Error("useConfirm must be used within a ConfirmProvider")
     return ctx
+}
+
+/**
+ * Stops a half-filled dialog from vanishing on a stray tap.
+ *
+ * A form dialog holds its work in React state and nowhere else, so every close
+ * path throws it away. The dialog disappearing is also exactly what a
+ * successful save looks like - so the real cost is not the retyping, it is
+ * someone changing a price, brushing the overlay, and serving the rest of the
+ * night believing the new price is live.
+ *
+ * Radix routes the overlay, Escape and the × through the root's onOpenChange,
+ * so wrapping that one callback covers all three. Cancel buttons call setOpen
+ * directly and must be pointed at `requestClose` too, or Cancel becomes the one
+ * silent way to lose work.
+ *
+ *     const { requestClose, markDirty } = useDiscardGuard(open, setOpen)
+ *     <Dialog open={open} onOpenChange={requestClose}>
+ *       <DialogContent onInput={markDirty}>
+ *
+ * Dirty means "typed in", not "differs from what it opened with". `input`
+ * bubbles, so one handler on the content covers every native field including
+ * the uncontrolled forms that have no state to compare against. Controls that
+ * are not native inputs - a Radix Select, a Switch - raise no input event, so
+ * their own handlers call markDirty(). Typing a character and deleting it
+ * still counts: the error lands on asking a question nobody needed, which is
+ * the cheap direction.
+ */
+export function useDiscardGuard(open: boolean, onOpenChange: (open: boolean) => void) {
+    const confirm = useConfirm()
+    const { t } = useTranslation()
+    const [dirty, setDirty] = useState(false)
+
+    // Every opening starts clean, including reopening the same dialog.
+    useEffect(() => { if (open) setDirty(false) }, [open])
+
+    const requestClose = useCallback(async (next: boolean) => {
+        if (next) return onOpenChange(true)
+        if (dirty && !(await confirm({
+            title: t.discard_changes,
+            description: t.discard_changes_help,
+            confirmLabel: t.discard,
+            destructive: true,
+        }))) return
+        onOpenChange(false)
+    }, [dirty, confirm, onOpenChange, t])
+
+    const markDirty = useCallback(() => setDirty(true), [])
+
+    return { requestClose, markDirty }
 }

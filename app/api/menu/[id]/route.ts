@@ -5,7 +5,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     try {
         const { id } = await params
         const body = await request.json()
-        const { name, localName, description, category, image, isAvailable, variations } = body
+        const { name, localName, description, category, image, isAvailable, price } = body
 
         // Find or Create Category
         let categoryId: string
@@ -23,104 +23,40 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
             }
         } else {
             // Fallback or error?
-            // Assuming category is required or we keep existing. 
+            // Assuming category is required or we keep existing.
             // If not provided, maybe we shouldn't update it?
             // But UI sends it.
+            // This read `current?.categoryId!` - an optional chain saying the
+            // row may be missing, then a non-null assertion saying it is not.
+            // When the menu really had been deleted, `undefined` reached Prisma
+            // and it quietly skipped the field instead of failing, so the
+            // update ran against a row that was not there. Menu.categoryId is
+            // NOT NULL, so there is no sensible fallback: say the item is gone.
             const current = await prisma.menu.findUnique({ where: { id } })
-            categoryId = current?.categoryId!
+            if (!current) {
+                return NextResponse.json({ error: 'Menu item not found' }, { status: 404 })
+            }
+            categoryId = current.categoryId
         }
 
-        await prisma.$transaction(async (tx) => {
-            // 1. Update Menu
-            await tx.menu.update({
-                where: { id },
-                data: {
-                    name,
-                    localName,
-                    description,
-                    categoryId,
-                    image: image || '/placeholder.svg',
-                    isAvailable: isAvailable ?? true
-                }
-            })
-
-            // 2. Handle Variations
-            if (variations && Array.isArray(variations)) {
-                for (const v of variations) {
-                    let variationId = v.id
-
-                    if (variationId) {
-                        // Update existing variation
-                        await tx.menuVariation.update({
-                            where: { id: variationId },
-                            data: {
-                                isEnabled: v.isEnabled,
-                                displayOrder: parseInt(v.displayOrder?.toString() || "0")
-                            }
-                        })
-                    } else {
-                        // Create new variation
-                        const newVar = await tx.menuVariation.create({
-                            data: {
-                                menuId: id,
-                                type: v.type,
-                                isEnabled: v.isEnabled,
-                                displayOrder: parseInt(v.displayOrder?.toString() || "0")
-                            }
-                        })
-                        variationId = newVar.id
-                    }
-
-                    // 3. Handle Sizes
-                    if (v.sizes && Array.isArray(v.sizes)) {
-                        // Get current IDs to identify deletions
-                        const currentSizes = await tx.variationSize.findMany({
-                            where: { variationId },
-                            select: { id: true }
-                        })
-                        const currentSizeIds = currentSizes.map(s => s.id)
-                        const payloadSizeIds = v.sizes.filter((s: any) => s.id).map((s: any) => s.id)
-
-                        // Delete removed sizes
-                        const toDelete = currentSizeIds.filter(cid => !payloadSizeIds.includes(cid))
-                        if (toDelete.length > 0) {
-                            try {
-                                await tx.variationSize.deleteMany({
-                                    where: { id: { in: toDelete } }
-                                })
-                            } catch (e) {
-                                console.warn(`Could not delete sizes ${toDelete}: maybe used in orders?`, e)
-                                // Optional: mark as unavailable instead?
-                                // await tx.variationSize.updateMany({ where: { id: { in: toDelete } }, data: { isAvailable: false } })
-                            }
-                        }
-
-                        // Upsert sizes
-                        for (const s of v.sizes) {
-                            if (s.id) {
-                                await tx.variationSize.update({
-                                    where: { id: s.id },
-                                    data: {
-                                        size: s.size,
-                                        price: parseFloat(s.price.toString()),
-                                        isAvailable: s.isAvailable ?? true,
-                                        displayOrder: parseInt(s.displayOrder?.toString() || "0")
-                                    }
-                                })
-                            } else {
-                                await tx.variationSize.create({
-                                    data: {
-                                        variationId,
-                                        size: s.size,
-                                        price: parseFloat(s.price.toString()),
-                                        isAvailable: s.isAvailable ?? true,
-                                        displayOrder: parseInt(s.displayOrder?.toString() || "0")
-                                    }
-                                })
-                            }
-                        }
-                    }
-                }
+        await prisma.menu.update({
+            where: { id },
+            data: {
+                name,
+                localName,
+                description,
+                categoryId,
+                image: image || '/placeholder.svg',
+                isAvailable: isAvailable ?? true,
+                // A missing price keeps the item's current price rather than
+                // silently zeroing it out — unlike category/isAvailable above,
+                // a dropped price is a real financial change, not just a
+                // fallback. `undefined` here is simply omitted from the SQL
+                // UPDATE, so this is an atomic "leave price alone" with no
+                // read-then-write race against a concurrent price update.
+                // Explicit 0 is a real, settable price ("not priced yet"),
+                // so this stays a strict undefined/null check, not truthy.
+                price: price !== undefined && price !== null ? parseFloat(price.toString()) : undefined
             }
         })
 
@@ -140,8 +76,12 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
             return NextResponse.json({ error: 'Menu not found' }, { status: 404 })
         }
 
-        // Recipes cascade from Menu; OrderItem.variationSizeId is SetNull so
-        // historical orders keep their name/price snapshots after menu deletion.
+        // Recipes are deleted explicitly because they are the menu item's own
+        // rows. OrderItem is left alone: menuId carries no database-level
+        // foreign key, so deleting a menu item leaves that column pointing at
+        // an id that is gone rather than nulling it. Historical lines survive
+        // either way -- name and price are snapshotted onto the row at sale
+        // time, and every read site guards for a missing menu.
         await prisma.$transaction(async (tx) => {
             await tx.recipe.deleteMany({ where: { menuId: id } })
             await tx.menu.delete({ where: { id } })

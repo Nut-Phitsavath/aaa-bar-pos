@@ -5,6 +5,9 @@ import { validatePromotionInput } from '@/lib/promotions'
 export async function GET() {
     try {
         const promotions = await prisma.promotion.findMany({
+            // The shelf a deal is scoped to, so the picker on the bill screen can
+            // say "25% · Beer · needs 15+" instead of just a name.
+            include: { category: { select: { id: true, name: true } } },
             orderBy: { createdAt: 'desc' }
         })
         return NextResponse.json(promotions)
@@ -36,7 +39,8 @@ export async function POST(request: Request) {
                 endDate: v.end,
                 isActive: !!isActive,
                 staffPickable: v.staffPickable,
-                minItems: v.minItems
+                minItems: v.minItems,
+                categoryId: v.categoryId
             }
         })
 

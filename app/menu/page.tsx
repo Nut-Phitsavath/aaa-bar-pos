@@ -1,7 +1,6 @@
 "use client"
 
 import { useState, useEffect, useMemo } from "react"
-import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
@@ -11,58 +10,39 @@ import { Header } from "@/components/header"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Switch } from "@/components/ui/switch"
-import { Plus, Edit, Trash2, Search, ImageIcon, X, Check, Minus, GripVertical, ClipboardList } from "lucide-react"
+import { Plus, Edit, Trash2, Search, ImageIcon, X, Check, GripVertical, ClipboardList } from "lucide-react"
 import Link from "next/link"
 import Image from "next/image"
 import { useTranslation } from "@/hooks/use-translation"
 import { notify } from "@/components/ui/sonner"
-import { useConfirm } from "@/components/confirm-provider"
+import { useConfirm, useDiscardGuard } from "@/components/confirm-provider"
 import { ReorderPanel } from "@/components/menu/reorder-panel"
+import { MenuItemCard } from "@/components/menu-item-card"
 import { useLongPress } from "@/hooks/use-long-press"
 import { PriceInput } from "@/components/ui/PriceInput"
 import { RecipeEditor, type RecipeRow, type EditorIngredient } from "@/components/menu/recipe-editor"
 
 // --- Types ---
-type SizeItem = {
-  id?: string
-  size: string
-  price: number
-  isAvailable: boolean
-  displayOrder: number
-}
-
-type VariationItem = {
-  id?: string
-  type: string // e.g., HOT, COLD, FRAPPE, BOTTLE (Editable)
-  isEnabled: boolean
-  displayOrder: number
-  sizes: SizeItem[]
-}
-
 type MenuItem = {
   id: string
   name: string
   localName?: string
   description: string
-  // price is removed from top level in DB, but UI might still have it in type definition for legacy, ignoring it.
   category: string
   isAvailable: boolean
   image?: string
-  variations: VariationItem[]
+  price: number
   /** How many recipe rows this item has. Zero means it deducts no stock. */
   _count?: { recipes: number }
 }
-
-const DEFAULT_SIZES = [
-  { size: "Standard", price: 0, isAvailable: true, displayOrder: 1 },
-  { size: "0 Cal Sweetener", price: 0, isAvailable: true, displayOrder: 2 },
-]
 
 export default function MenuPage() {
   const { t } = useTranslation()
   const confirm = useConfirm()
   const [searchQuery, setSearchQuery] = useState("")
   const [isDialogOpen, setIsDialogOpen] = useState(false)
+  // Every way out of the edit dialog except Save runs through this.
+  const { requestClose, markDirty } = useDiscardGuard(isDialogOpen, setIsDialogOpen)
   const [editingItem, setEditingItem] = useState<MenuItem | null>(null)
   const [menuItems, setMenuItems] = useState<MenuItem[]>([])
   const [categories, setCategories] = useState<{ id: string, name: string, hasSugarLevel: boolean, hasShotType: boolean }[]>([])
@@ -76,14 +56,10 @@ export default function MenuPage() {
   const [newCatSugar, setNewCatSugar] = useState(false)
   const [newCatShot, setNewCatShot] = useState(false)
   const [editingCategory, setEditingCategory] = useState<{ id: string, name: string, hasSugarLevel: boolean, hasShotType: boolean } | null>(null)
-  const [newVariationType, setNewVariationType] = useState("")
   const [activeCategory, setActiveCategory] = useState<string>("All")
 
   // Form states
   const [formData, setFormData] = useState<Partial<MenuItem>>({})
-
-  // Variation form state
-  const [formVariations, setFormVariations] = useState<VariationItem[]>([])
 
   /**
    * The item's base recipe, buffered until Save.
@@ -223,16 +199,13 @@ export default function MenuPage() {
   const handleEdit = (item: MenuItem) => {
     setEditingItem(item)
 
-    // Load the base recipe into the buffer so Save can diff against it. Only
-    // base rows: a per-size recipe belongs to the recipes screen, and silently
-    // dropping one here would delete work this dialog never showed.
+    // Load the recipe into the buffer so Save can diff against it.
     setFormRecipe([])
     setOriginalRecipe([])
     fetch(`/api/recipes/${item.id}`)
       .then((r) => (r.ok ? r.json() : []))
-      .then((rows: { ingredientId: string; quantity: number; variationSizeId: string | null }[]) => {
+      .then((rows: { ingredientId: string; quantity: number }[]) => {
         const base = (Array.isArray(rows) ? rows : [])
-          .filter((r) => !r.variationSizeId)
           .map((r) => ({ ingredientId: r.ingredientId, quantity: r.quantity }))
         setFormRecipe(base)
         setOriginalRecipe(base)
@@ -246,20 +219,9 @@ export default function MenuPage() {
       description: item.description,
       category: item.category,
       isAvailable: item.isAvailable,
-      image: item.image
+      image: item.image,
+      price: item.price
     })
-
-    // Load existing variations directly
-    // If no variations exist (legacy item), maybe initialize with empty or standard? 
-    // Let's just load what is there.
-    if (!item.variations || item.variations.length === 0) {
-      // Option: Initialize with standard types for convenience if empty? 
-      // User asked for dynamic, so maybe start empty or with just one default?
-      // Let's start with empty and let them add.
-      setFormVariations([])
-    } else {
-      setFormVariations(item.variations.map(v => ({ ...v })))
-    }
 
     setIsDialogOpen(true)
   }
@@ -272,12 +234,10 @@ export default function MenuPage() {
       description: "",
       category: categories[0]?.name || "Coffee",
       isAvailable: true,
-      image: ""
+      image: "",
+      price: 0
     })
 
-    // Start with empty variations or maybe a default "Regular"?
-    // User requested dynamic. Let's start empty and provide "Add Variation" UI.
-    setFormVariations([])
     setFormRecipe([])
     setOriginalRecipe([])
     setIsDialogOpen(true)
@@ -316,11 +276,11 @@ export default function MenuPage() {
       await fetch(`/api/recipes/${productId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ingredientId: row.ingredientId, quantity: row.quantity, variationSizeId: null })
+        body: JSON.stringify({ ingredientId: row.ingredientId, quantity: row.quantity })
       })
     }
     for (const row of removed) {
-      await fetch(`/api/recipes/${productId}?ingredientId=${row.ingredientId}&variationSizeId=null`, {
+      await fetch(`/api/recipes/${productId}?ingredientId=${row.ingredientId}`, {
         method: 'DELETE'
       })
     }
@@ -329,17 +289,9 @@ export default function MenuPage() {
   const handleSubmit = async () => {
     setIsLoading(true)
 
-    const finalVariations = formVariations.map(v => ({
-      ...v,
-      sizes: v.sizes.map(s => ({
-        ...s,
-        price: Number(s.price)
-      }))
-    }))
-
     const payload = {
       ...formData,
-      variations: finalVariations
+      price: Number(formData.price ?? 0)
     }
 
     try {
@@ -383,72 +335,6 @@ export default function MenuPage() {
     } finally {
       setIsLoading(false)
     }
-  }
-
-  // --- Variation Helpers ---
-  const addVariationType = () => {
-    if (!newVariationType) return;
-    setFormVariations([...formVariations, {
-      type: newVariationType,
-      isEnabled: true,
-      displayOrder: formVariations.length + 1,
-      sizes: DEFAULT_SIZES.map(s => ({ ...s }))
-    }])
-    setNewVariationType("")
-  }
-
-  const removeVariationType = (index: number) => {
-    const next = [...formVariations]
-    next.splice(index, 1)
-    setFormVariations(next)
-  }
-
-  const toggleVariation = (index: number) => {
-    const next = [...formVariations]
-    next[index].isEnabled = !next[index].isEnabled
-    setFormVariations(next)
-  }
-
-  const updateSizePrice = (varIndex: number, sizeIndex: number, newPrice: number) => {
-    const next = [...formVariations]
-    next[varIndex].sizes[sizeIndex].price = newPrice
-    setFormVariations(next)
-  }
-
-
-
-  const addSize = (varIndex: number) => {
-    const next = [...formVariations]
-    next[varIndex].sizes.push({
-      size: "XL",
-      price: 0,
-      isAvailable: true,
-      displayOrder: next[varIndex].sizes.length + 1
-    })
-    setFormVariations(next)
-  }
-
-  const removeSize = (varIndex: number, sizeIndex: number) => {
-    const next = [...formVariations]
-    next[varIndex].sizes.splice(sizeIndex, 1)
-    setFormVariations(next)
-  }
-
-  const updateSizeLabel = (varIndex: number, sizeIndex: number, newLabel: string) => {
-    const next = [...formVariations]
-    next[varIndex].sizes[sizeIndex].size = newLabel
-    setFormVariations(next)
-  }
-
-  const updateOrder = (type: 'variation' | 'size', vIndex: number, value: string, sIndex?: number) => {
-    const next = [...formVariations]
-    const val = Math.max(1, parseInt(value) || 1)
-    if (type === 'variation') {
-      next[vIndex].displayOrder = val
-    } else if (type === 'size' && sIndex !== undefined) {
-      next[vIndex].sizes[sIndex].displayOrder = val
-    }
-    setFormVariations(next)
   }
 
   return (
@@ -595,14 +481,14 @@ export default function MenuPage() {
             </DialogContent>
           </Dialog>
 
-          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+          <Dialog open={isDialogOpen} onOpenChange={requestClose}>
             <DialogTrigger asChild>
               <Button className="bg-amber-600 hover:bg-amber-700" onClick={handleAddNew}>
                 <Plus className="w-4 h-4 mr-2" />
                 {t.add_item}
               </Button>
             </DialogTrigger>
-            <DialogContent className="w-[95vw] max-w-7xl max-h-[95vh] overflow-y-auto" size="xl">
+            <DialogContent className="w-[95vw] max-w-7xl max-h-[95vh] overflow-y-auto" size="xl" onInput={markDirty}>
               <form onSubmit={(e) => { e.preventDefault(); handleSubmit(); }}>
                 <DialogHeader>
                   <DialogTitle>{editingItem ? t.edit_menu_item : t.add_menu_item}</DialogTitle>
@@ -645,6 +531,14 @@ export default function MenuPage() {
                             </option>
                           ))}
                         </select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="price">{t.price}</Label>
+                        <PriceInput
+                          id="price"
+                          value={formData.price ?? 0}
+                          onChange={(value) => setFormData({ ...formData, price: value })}
+                        />
                       </div>
                       <div className="space-y-2">
                         <Label htmlFor="description">{t.description}</Label>
@@ -725,150 +619,13 @@ export default function MenuPage() {
                         <Switch
                           id="availability"
                           checked={formData.isAvailable ?? true}
-                          onCheckedChange={(checked) => setFormData({ ...formData, isAvailable: checked })}
+                          onCheckedChange={(checked) => { markDirty(); setFormData({ ...formData, isAvailable: checked }) }}
                         />
                         <Label htmlFor="availability">{t.available}</Label>
                       </div>
                     </div>
                   </div>
 
-                  {/* Variations & Pricing Section */}
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between">
-                      <h3 className="text-lg font-semibold">{t.variations_pricing}</h3>
-                    </div>
-
-                    {/* Dynamic Variation Adder */}
-                    <div className="flex gap-2">
-                      <Input
-                        placeholder={t.variation_name_placeholder}
-
-                        value={newVariationType}
-                        onChange={(e) => setNewVariationType(e.target.value.toUpperCase())}
-                        className="max-w-[300px]"
-                      />
-                      <Button type="button" onClick={addVariationType} disabled={!newVariationType}>
-                        <Plus className="w-4 h-4 mr-2" /> {t.add_variation_type}
-                      </Button>
-                    </div>
-
-                    <div className="space-y-4">
-                      {formVariations.map((variation, vIndex) => (
-                        <Card key={vIndex} className={`p-4 border ${variation.isEnabled ? 'border-amber-200 bg-amber-50/10' : 'border-slate-200 opacity-70'}`}>
-                          <div className="flex items-center justify-between mb-4">
-                            <div className="flex items-center gap-3">
-                              <Switch
-                                checked={variation.isEnabled}
-                                onCheckedChange={() => toggleVariation(vIndex)}
-                              />
-                              <Label className="text-base font-bold">{variation.type}</Label>
-                            </div>
-                            <div className="flex gap-2 items-center">
-                              {variation.isEnabled && (
-                                <>
-                                  <div className="flex items-center gap-1">
-                                    <Button
-                                      type="button"
-                                      variant="outline"
-                                      size="sm"
-                                      className="h-11 w-11 p-0 text-amber-600 border-amber-200"
-                                      onClick={() => updateOrder("variation", vIndex, (variation.displayOrder - 1).toString())}
-                                      disabled={variation.displayOrder <= 1}
-                                    >
-                                      <Minus className="w-3 h-3" />
-                                    </Button>
-                                    <div className="w-8 h-8 flex items-center justify-center bg-white border rounded font-bold text-xs">
-                                      {variation.displayOrder}
-                                    </div>
-                                    <Button
-                                      type="button"
-                                      variant="outline"
-                                      size="sm"
-                                      className="h-11 w-11 p-0 text-amber-600 border-amber-200"
-                                      onClick={() => updateOrder("variation", vIndex, (variation.displayOrder + 1).toString())}
-                                    >
-                                      <Plus className="w-3 h-3" />
-                                    </Button>
-                                  </div>
-                                  <Button type="button" variant="ghost" size="sm" onClick={() => addSize(vIndex)} className="text-amber-600">
-                                    <Plus className="w-4 h-4 mr-2" /> {t.add_choice}
-                                  </Button>
-                                </>
-                              )}
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="sm"
-                                className="text-red-500 hover:text-red-700 hover:bg-red-50"
-                                onClick={() => removeVariationType(vIndex)}
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </Button>
-                            </div>
-                          </div>
-
-                          {variation.isEnabled && (
-                            <div className="grid grid-cols-1 gap-3">
-                              {variation.sizes.map((size, sIndex) => (
-                                <div key={sIndex} className="flex items-center gap-2 bg-white p-2 rounded border shadow-sm">
-                                  <div className="flex items-center gap-1">
-                                    <Button
-                                      type="button"
-                                      variant="outline"
-                                      size="sm"
-                                      className="h-10 w-10 p-0 text-slate-500 border-slate-200"
-                                      onClick={() => updateOrder("size", vIndex, (size.displayOrder - 1).toString(), sIndex)}
-                                      disabled={size.displayOrder <= 1}
-                                    >
-                                      <Minus className="w-5 h-5" />
-                                    </Button>
-                                    <div className="w-10 h-10 flex items-center justify-center bg-white border rounded font-bold text-sm">
-                                      {size.displayOrder}
-                                    </div>
-                                    <Button
-                                      type="button"
-                                      variant="outline"
-                                      size="sm"
-                                      className="h-10 w-10 p-0 text-slate-500 border-slate-200"
-                                      onClick={() => updateOrder("size", vIndex, (size.displayOrder + 1).toString(), sIndex)}
-                                    >
-                                      <Plus className="w-5 h-5" />
-                                    </Button>
-                                  </div>
-                                  <div className="flex-[2]">
-                                    <Input
-                                      value={size.size}
-                                      onChange={(e) => updateSizeLabel(vIndex, sIndex, e.target.value)}
-                                      className="h-10 text-left font-bold"
-                                      placeholder={t.size_label}
-                                    />
-                                  </div>
-                                  <div className="w-32">
-                                    <PriceInput
-                                      value={size.price}
-                                      onChange={(num) => updateSizePrice(vIndex, sIndex, num)}
-                                      className="h-10 text-right font-mono"
-                                      placeholder={t.price_lak}
-                                      currency="₭"
-                                    />
-                                  </div>
-                                  <Button
-                                    type="button"
-                                    variant="ghost"
-                                    size="icon"
-                                    className="h-9 w-9 text-red-400 hover:text-red-600"
-                                    onClick={() => removeSize(vIndex, sIndex)}
-                                  >
-                                    <Trash2 className="w-4 h-4" />
-                                  </Button>
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                        </Card>
-                      ))}
-                    </div>
-                  </div>
                 </div>
 
                 {/* Sits with the price it has to justify. Creating the item and
@@ -879,7 +636,7 @@ export default function MenuPage() {
                     value={formRecipe}
                     onChange={setFormRecipe}
                     ingredients={editorIngredients}
-                    price={formVariations.flatMap((v) => v.sizes)[0]?.price ?? 0}
+                    price={formData.price ?? 0}
                     categoryName={formData.category}
                   />
                 </div>
@@ -888,7 +645,7 @@ export default function MenuPage() {
                     ingredient" and "save and close" were a thumb-width apart on
                     the same vertical axis. */}
                 <DialogFooter className="mt-8 pt-5 border-t border-slate-200">
-                  <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
+                  <Button type="button" variant="outline" onClick={() => requestClose(false)}>
                     {t.cancel}
                   </Button>
                   <Button type="submit" className="bg-amber-600 hover:bg-amber-700" disabled={isLoading}>
@@ -902,11 +659,13 @@ export default function MenuPage() {
 
         {/* Categories Bar */}
         <div className="flex flex-wrap gap-2 p-1 overflow-x-auto pb-2 no-scrollbar border-b">
+          {/* Same chip as the till's category row, down to the corner radius.
+              Pill here and rectangle there was the loudest tell that these were
+              two unrelated screens rather than the same menu, twice. */}
           <Button
             variant={activeCategory === "All" ? "default" : "outline"}
-            size="sm"
             onClick={() => setActiveCategory("All")}
-            className={activeCategory === "All" ? "bg-amber-600 hover:bg-amber-700 h-11 px-4 rounded-full" : "h-11 px-4 rounded-full"}
+            className={activeCategory === "All" ? "bg-amber-600 hover:bg-amber-700 text-lg h-11" : "text-lg h-11"}
           >
             {t.all_categories || "All Categories"}
           </Button>
@@ -914,9 +673,8 @@ export default function MenuPage() {
             <Button
               key={cat.id}
               variant={activeCategory === cat.name ? "default" : "outline"}
-              size="sm"
               onClick={() => setActiveCategory(cat.name)}
-              className={activeCategory === cat.name ? "bg-amber-600 hover:bg-amber-700 h-11 px-4 rounded-full" : "h-11 px-4 rounded-full"}
+              className={activeCategory === cat.name ? "bg-amber-600 hover:bg-amber-700 text-lg h-11" : "text-lg h-11"}
             >
               {cat.name}
             </Button>
@@ -928,9 +686,8 @@ export default function MenuPage() {
           {!reordering && (
             <Button
               variant="outline"
-              size="sm"
               onClick={() => setReordering(true)}
-              className="h-11 px-4 rounded-full ms-auto border-slate-300 text-slate-600"
+              className="h-11 ms-auto border-slate-300 text-slate-600"
             >
               <GripVertical className="w-4 h-4 mr-1.5" />
               {t.reorder}
@@ -948,7 +705,7 @@ export default function MenuPage() {
               id: i.id,
               name: i.name,
               localName: i.localName,
-              price: i.variations?.[0]?.sizes?.[0]?.price,
+              price: i.price,
               category: i.category,
             }))}
             activeCategory={activeCategory === "All" ? null : activeCategory}
@@ -956,119 +713,81 @@ export default function MenuPage() {
             onSaved={() => { fetchMenuItems(); fetchCategories() }}
           />
         ) : (
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-4">
-          {filteredItems.map((item) => (
-            <Card
+        /* The till's grid rule, not a copy of its numbers. Six columns of tall
+           photo tiles here against four compact rows there was two products,
+           not one, and the till is the screen staff learn first - so this page
+           follows it: same auto-fill, same 1.5 gap, no breakpoints.
+
+           21rem, not the till's 15rem, because this row carries the 6rem
+           edit/delete pair the till has no use for. Sized that way the two
+           grids land on the same column count on the same screen - four at the
+           bar's 1920 - and both step down together on a smaller one. */
+        <div
+          className="grid gap-1.5"
+          style={{ gridTemplateColumns: "repeat(auto-fill, minmax(21rem, 1fr))" }}
+        >
+          {filteredItems.map((item, index) => (
+            <MenuItemCard
               key={item.id}
+              item={item}
+              index={index}
               // Press and hold to rearrange. The card has no tap action of its
               // own - edit and delete are their own buttons - so a long press
               // costs nothing and is the gesture people already try.
               {...longPress}
-              className="flex flex-col group overflow-hidden border-2 border-slate-100 hover:border-amber-200 transition-all duration-300 shadow-sm hover:shadow-xl bg-white"
-            >
-              {/* Image Container */}
-              <div className="relative aspect-square overflow-hidden bg-slate-50">
-                {item.image ? (
-                  <Image
-                    src={item.image}
-                    alt={item.name}
-                    fill
-                    sizes="(max-width: 768px) 50vw, (max-width: 1200px) 33vw, 20vw"
-                    className="object-cover transition-transform duration-500 group-hover:scale-110"
-                  />
-                ) : (
-                  <div className="flex items-center justify-center w-full h-full text-4xl bg-gradient-to-br from-amber-50 to-orange-100">
-                    ☕
-                  </div>
-                )}
-                
-                {/* Status Badge */}
-                {!item.isAvailable && (
-                  <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px] flex items-center justify-center z-10">
-                    <Badge variant="destructive" className="px-3 py-1 font-bold tracking-widest uppercase">
-                      {t.unavailable}
-                    </Badge>
-                  </div>
-                )}
-
-                {/* Quick actions overlay */}
-                {/* Hover-reveal on anything with a mouse, always visible on touch.
-                    Tailwind gates hover: behind @media (hover:hover), so a plain
-                    hover-reveal is unreachable on the till -- pointer-fine: scopes
-                    the hiding to devices that can actually hover. */}
-                <div className="absolute bottom-2 right-2 flex gap-2 z-20 transition-all duration-300
-                                pointer-fine:opacity-0 pointer-fine:translate-y-2
-                                pointer-fine:group-hover:opacity-100 pointer-fine:group-hover:translate-y-0">
-                  <Button 
-                    variant="secondary" 
-                    size="icon" 
-                    className="h-11 w-11 rounded-full shadow-lg bg-white/95 backdrop-blur hover:bg-white"
+              className={item.isAvailable ? "" : "opacity-60"}
+              trailing={
+                <>
+                  {/* stopPropagation, not preventDefault: without it the press
+                      that opens the editor also starts the reorder timer. */}
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-11 w-11 text-amber-600 hover:bg-amber-50"
+                    aria-label={`${t.edit} ${item.localName || item.name}`}
+                    onPointerDown={(e) => e.stopPropagation()}
                     onClick={() => handleEdit(item)}
                   >
-                    <Edit className="w-5 h-5 text-amber-600" />
+                    <Edit className="w-5 h-5" />
                   </Button>
-                  <Button 
-                    variant="secondary" 
-                    size="icon" 
-                    className="h-11 w-11 rounded-full shadow-lg bg-white/95 backdrop-blur hover:bg-red-50"
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-11 w-11 text-red-600 hover:bg-red-50"
+                    aria-label={`${t.delete} ${item.localName || item.name}`}
+                    onPointerDown={(e) => e.stopPropagation()}
                     onClick={() => handleDelete(item.id)}
                   >
-                    <Trash2 className="w-5 h-5 text-red-600" />
+                    <Trash2 className="w-5 h-5" />
                   </Button>
-                </div>
-              </div>
+                </>
+              }
+            >
+              {/* Everything that is true of the item rather than of this page
+                  sits on the price line, so the row keeps one height. */}
+              {!item.isAvailable && (
+                <Badge variant="destructive" className="text-[9px] px-1.5 py-0 font-bold uppercase shrink-0">
+                  {t.unavailable}
+                </Badge>
+              )}
+              {/* Sells but moves no stock - invisible until stocktake.
+                  Flagged rather than blocked: a corkage fee or a service
+                  charge legitimately has no recipe.
 
-              {/* Info Container */}
-              <div className="p-3 flex-1 flex flex-col justify-between">
-                <div>
-                  <div className="flex items-start justify-between gap-1 mb-1">
-                    <h3 className="font-black text-amber-950 leading-tight line-clamp-1">{item.localName || item.name}</h3>
-                  </div>
-                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest line-clamp-1 mb-2">{item.name}</p>
-                </div>
-
-                <div className="flex items-center justify-between mt-1">
-                  <div className="flex items-center gap-1">
-                    <Badge variant="outline" className="text-[9px] font-bold bg-slate-50 border-slate-200 text-slate-500 uppercase">
-                      {item.category}
-                    </Badge>
-                    {/* Sells but moves no stock - invisible until stocktake.
-                        Flagged rather than blocked: a corkage fee or a service
-                        charge legitimately has no recipe.
-
-                        The flag is also the way to fix it: it opens this item's
-                        recipe directly, rather than telling someone there is a
-                        problem and leaving them to find the screen. */}
-                    {item._count?.recipes === 0 && (
-                      <Link
-                        href={`/menu/recipes?product=${item.id}`}
-                        title={t.no_recipe_help}
-                        onPointerDown={(e) => e.stopPropagation()}
-                        className="text-[9px] font-bold bg-amber-50 border border-amber-200 text-amber-700 uppercase rounded-md px-1.5 py-0.5 hover:bg-amber-100 hover:border-amber-400 transition-colors duration-150"
-                      >
-                        {t.no_recipe}
-                      </Link>
-                    )}
-                  </div>
-                  <div className="flex -space-x-1">
-                    {item.variations?.filter(v => v.isEnabled).slice(0, 3).map((v, i) => (
-                      <div 
-                        key={i} 
-                        className="w-5 h-5 rounded-full border border-white bg-amber-100 flex items-center justify-center text-[8px] font-black text-amber-700 shadow-sm"
-                        title={v.type}
-                      >
-                        {v.type[0]}
-                      </div>
-                    ))}
-                    {(item.variations?.filter(v => v.isEnabled).length || 0) > 3 && (
-                      <div className="w-5 h-5 rounded-full border border-white bg-slate-100 flex items-center justify-center text-[8px] font-black text-slate-500">
-                        +{(item.variations?.filter(v => v.isEnabled).length || 0) - 3}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </Card>
+                  The flag is also the way to fix it: it opens this item's
+                  recipe directly, rather than telling someone there is a
+                  problem and leaving them to find the screen. */}
+              {item._count?.recipes === 0 && (
+                <Link
+                  href={`/menu/recipes?product=${item.id}`}
+                  title={t.no_recipe_help}
+                  onPointerDown={(e) => e.stopPropagation()}
+                  className="text-[9px] font-bold bg-amber-50 border border-amber-200 text-amber-700 uppercase rounded-md px-1.5 py-0.5 shrink-0 hover:bg-amber-100 hover:border-amber-400 transition-colors duration-150"
+                >
+                  {t.no_recipe}
+                </Link>
+              )}
+            </MenuItemCard>
           ))}
         </div>
         )}

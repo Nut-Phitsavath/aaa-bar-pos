@@ -4,6 +4,8 @@ import { getSessionUser } from '@/lib/auth'
 import { decrementStock } from '@/lib/stock'
 import { reverseSwap } from '@/lib/swap-charge'
 import { isVoidReason, canVoid, totalsFrom, allVoided } from '@/lib/voids'
+// Striking a line can take a bill back under a deal's minimum.
+import { refreshSessionPromo } from '@/lib/session-promo'
 
 export const dynamic = 'force-dynamic'
 
@@ -76,25 +78,18 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
             // A negative decrement is the same path a sale takes, so the value
             // lands rounded rather than as accumulated float noise.
             for (const item of targets) {
-                if (!item.variationSizeId) continue
-                const vs = await tx.variationSize.findUnique({
-                    where: { id: item.variationSizeId },
-                    include: { variation: { include: { menu: true } } },
-                })
-                if (!vs?.variation?.menu) continue
+                // Delete this line and voiding one line credits stock the bar
+                // never sold: an undefined menuId filters nothing, so findMany
+                // returns every recipe. Not defensive - load-bearing.
+                if (!item.menuId) continue
 
                 const recipes = await tx.recipe.findMany({
-                    where: {
-                        OR: [
-                            { menuId: vs.variation.menu.id, variationSizeId: null },
-                            { variationSizeId: item.variationSizeId },
-                        ],
-                    },
+                    where: { menuId: item.menuId },
                 })
                 for (const recipe of recipes) {
                     await decrementStock(tx, recipe.ingredientId, -(recipe.quantity * item.quantity), {
                         type: 'SALE_VOID', userId: user.id, notes: `void order ${id}`,
-                        reason: vs.variation.menu.id,
+                        reason: item.menuId,
                     })
                 }
             }
@@ -121,7 +116,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
             const after = await tx.orderItem.findMany({ where: { orderId: id } })
             const totals = totalsFrom(after)
 
-            return tx.order.update({
+            const round = await tx.order.update({
                 where: { id },
                 data: {
                     subtotal: totals.subtotal,
@@ -136,6 +131,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
                 },
                 include: { items: true },
             })
+
+            // Striking a line can drop the bill back under a deal's minimum.
+            // Without this the discount would survive the drinks that earned it.
+            if (order.sessionId) await refreshSessionPromo(tx as any, order.sessionId)
+
+            return round
         })
 
         return NextResponse.json({

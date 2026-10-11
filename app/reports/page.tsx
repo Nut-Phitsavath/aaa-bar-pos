@@ -7,6 +7,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ZReport } from "@/components/reports/z-report"
 import { ServerPerformance } from "@/components/reports/server-performance"
 import { VoidAudit } from "@/components/reports/void-audit"
+import { NotesReport } from "@/components/reports/notes-report"
 import { VarianceReport } from "@/components/reports/variance"
 import { ExchangeAudit } from "@/components/reports/exchange-audit"
 import {
@@ -15,10 +16,11 @@ import {
 } from "recharts"
 import {
   Calendar as CalendarIcon, Download, TrendingUp, DollarSign, ShoppingBag,
-  CreditCard, TrendingDown, Clock, Tag, Package, AlertTriangle, Search, Filter, Target, ArrowRightLeft, ShoppingCart, History, Droplets, Coffee
+  CreditCard, TrendingDown, Clock, Tag, Package, AlertTriangle, Search, Filter, Target, ArrowRightLeft, ShoppingCart, History
 } from "lucide-react"
 import Link from "next/link"
 import { formatTHB } from "@/lib/currency"
+import { formatStockOf } from "@/lib/units"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Calendar } from "@/components/ui/calendar"
 import { format, subDays, startOfDay, endOfDay, isSameDay, startOfToday, endOfToday } from "date-fns"
@@ -79,7 +81,17 @@ export default function ReportsPage() {
     }
   }
 
-  const [refunds, setRefunds] = useState<any[]>([])
+  // Which hours a deal ran. Indices into hourlySales, which the route already
+  // returns in trading-day order - so a window that crosses midnight is just a
+  // contiguous slice and needs no wrap-around arithmetic.
+  //
+  // Null until somebody picks, so the card can fall back to a window derived
+  // from the data. Deriving it rather than seeding state in an effect keeps
+  // this a plain render and avoids a second pass.
+  const [windowFrom, setWindowFrom] = useState<number | null>(null)
+  const [windowTo, setWindowTo] = useState<number | null>(null)
+
+  const [refunds, setRefunds] = useState<any>(null)
   const [isLoadingRefunds, setIsLoadingRefunds] = useState(false)
 
   const fetchRefunds = async () => {
@@ -133,6 +145,51 @@ export default function ReportsPage() {
 
     return t.selected_period_sales
   }
+
+  /**
+   * Did the deal work?
+   *
+   * Compares the hours a promotion ran against the rest of the night, on ALL
+   * sales - table bills included. That matters because the promo engine can
+   * only attach a code to a counter order, so the promotions report can never
+   * see the 87% of trade that goes through a table. A clock does not have that
+   * problem: whatever the deal was, it ran between two hours, and those hours
+   * either sold better than the others or they did not.
+   *
+   * Revenue per hour is the figure to read, not the total. A four-hour window
+   * will always out-sell a two-hour one, and comparing the raw totals of
+   * unequal windows is how a bad deal looks like a good one.
+   */
+  const hours: any[] = data?.hourlySales ?? []
+
+  // Where to point the card before anyone touches it. The trading day starts
+  // at 06:00, so indices 0-2 are the dead morning and a fixed default opened
+  // this card reading "-96%" on three empty hours - which looks like a broken
+  // report rather than an honest one. The busiest hour and its neighbours is
+  // both meaningful and true of any bar, whatever hours it keeps.
+  const peak = hours.reduce((best, h, i) => (h.revenue > (hours[best]?.revenue ?? -1) ? i : best), 0)
+  const lo = Math.min(windowFrom ?? Math.max(0, peak - 1), windowTo ?? Math.min(hours.length - 1, peak + 1))
+  const hi = Math.max(windowFrom ?? Math.max(0, peak - 1), windowTo ?? Math.min(hours.length - 1, peak + 1))
+  const inWindow = hours.slice(lo, hi + 1)
+  const outWindow = hours.filter((_, i) => i < lo || i > hi)
+
+  const band = (rows: any[]) => {
+    const revenue = rows.reduce((n, h) => n + (h.revenue || 0), 0)
+    const rounds = rows.reduce((n, h) => n + (h.orders || 0), 0)
+    return {
+      revenue,
+      rounds,
+      hours: rows.length,
+      perHour: rows.length ? revenue / rows.length : 0,
+      avgRound: rounds ? revenue / rounds : 0,
+    }
+  }
+  const inside = band(inWindow)
+  const outside = band(outWindow)
+  // Percent difference in the per-hour rate. Null rather than Infinity when
+  // there is nothing to compare against, so the card says "—" instead of a
+  // number that means nothing.
+  const lift = outside.perHour > 0 ? ((inside.perHour - outside.perHour) / outside.perHour) * 100 : null
 
   if (isLoading && !data) return <div className="p-10 text-center">{t.loading_analytics}</div>
 
@@ -239,7 +296,10 @@ export default function ReportsPage() {
               <CardHeader className="p-4">
                 <CardDescription>{t.revenue || "Revenue"}</CardDescription>
                 <CardTitle className="text-2xl font-bold">{formatTHB(data?.summary.totalRevenue || 0)}</CardTitle>
-                <p className="text-[14px] text-muted-foreground mt-1 uppercase tracking-wider font-semibold">{t.gross_sales_tax_incl}</p>
+                {/* Net of the per-table discount, so this is the same figure
+                    the Z-report calls `net`. It used to be the gross, which is
+                    why the two documents disagreed on the same night. */}
+                <p className="text-[14px] text-muted-foreground mt-1 uppercase tracking-wider font-semibold">{t.billed_tax_incl}</p>
               </CardHeader>
             </Card>
             <Card className="border-l-4 border-l-emerald-500 shadow-none bg-slate-50/50">
@@ -284,6 +344,32 @@ export default function ReportsPage() {
                 <p className="text-[14px] text-muted-foreground mt-1 uppercase tracking-wider font-semibold">{t.revenue_minus_cogs}</p>
               </CardHeader>
             </Card>
+            {/* What the bar gave away at the table (req #15). It was computed
+                and returned and then rendered nowhere, so a manager could not
+                see the number even when it was right - and it was reading the
+                cafe's per-order column, which this bar never writes, so it was
+                ฿0 on every night a table was discounted. */}
+            <Card className="border-l-4 border-l-orange-500 shadow-none bg-slate-50/50">
+              <CardHeader className="p-4">
+                <CardDescription>{t.discounts_given}</CardDescription>
+                <CardTitle className="text-2xl font-bold text-orange-600">{formatTHB(data?.summary.totalDiscounts || 0)}</CardTitle>
+                <p className="text-[14px] text-muted-foreground mt-1 uppercase tracking-wider font-semibold">{t.table_discounts_desc}</p>
+              </CardHeader>
+            </Card>
+            {/* The number a bar is actually run on, and the one this page made
+                you derive from two other cards. Coloured against the same
+                bands the recipe editor uses. */}
+            <Card className="border-l-4 border-l-teal-500 shadow-none bg-slate-50/50">
+              <CardHeader className="p-4">
+                <CardDescription>{t.pour_cost}</CardDescription>
+                <CardTitle className="text-2xl font-bold tabular-nums">
+                  {typeof data?.summary.pourCostPct === "number"
+                    ? `${data.summary.pourCostPct.toFixed(1)}%`
+                    : "—"}
+                </CardTitle>
+                <p className="text-[14px] text-muted-foreground mt-1 uppercase tracking-wider font-semibold">{t.pour_cost_desc}</p>
+              </CardHeader>
+            </Card>
 
           </div>
         </div>
@@ -304,7 +390,6 @@ export default function ReportsPage() {
             <TabsList className="bg-muted p-1 rounded-lg flex flex-wrap h-auto justify-start gap-1">
             <TabsTrigger value="overview">{t.overview}</TabsTrigger>
             <TabsTrigger value="products">{t.product_performance}</TabsTrigger>
-            <TabsTrigger value="customers">{t.customers}</TabsTrigger>
             <TabsTrigger value="inventory">{t.inventory}</TabsTrigger>
             <TabsTrigger value="advanced" onClick={fetchRefunds}>{t.advanced_and_refunds}</TabsTrigger>
             <TabsTrigger value="operations">{t.operations_payments}</TabsTrigger>
@@ -317,6 +402,17 @@ export default function ReportsPage() {
             </TabsList>
           </div>
 
+          {/* Holds a screenful open while a tab swaps.
+
+              Radix unmounts the old panel, and every report here renders a
+              128-256px skeleton before its data arrives. Switching tabs from
+              part-way down a long report therefore collapsed the document from
+              thousands of pixels to a few hundred, the browser clamped the
+              scroll position to whatever was left, and the reader was thrown to
+              the top - which is exactly what making the tab strip sticky was
+              meant to avoid. */}
+          <div className="min-h-[calc(100vh-10rem)]">
+
           <TabsContent value="servers">
             {dateRange?.from && dateRange?.to && (
               <ServerPerformance
@@ -326,12 +422,22 @@ export default function ReportsPage() {
             )}
           </TabsContent>
 
-          <TabsContent value="voids">
+          {/* Voids and notes share a tab because they are the same kind of
+              question: what did staff do during service that nobody stopped
+              them doing? One is a line struck off, the other a line annotated,
+              and both are read the morning after rather than at the till. */}
+          <TabsContent value="voids" className="space-y-6">
             {dateRange?.from && dateRange?.to && (
-              <VoidAudit
-                startDate={startOfDay(dateRange.from).toISOString()}
-                endDate={endOfDay(dateRange.to).toISOString()}
-              />
+              <>
+                <VoidAudit
+                  startDate={startOfDay(dateRange.from).toISOString()}
+                  endDate={endOfDay(dateRange.to).toISOString()}
+                />
+                <NotesReport
+                  startDate={startOfDay(dateRange.from).toISOString()}
+                  endDate={endOfDay(dateRange.to).toISOString()}
+                />
+              </>
             )}
           </TabsContent>
 
@@ -400,6 +506,98 @@ export default function ReportsPage() {
                       <Tooltip formatter={(v) => formatTHB(v as number)} />
                     </PieChart>
                   </ResponsiveContainer>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Where in the room the money came from.
+                `Table.area` has carried INDOOR / OUTDOOR / VIP and this bar's
+                own named floors since the floor plan was built, and no report
+                had ever grouped by it - the first question an owner asks about
+                a bar with VIP rooms, and the page could not answer it.
+
+                Per-hour is the column to read. Takings alone reward a table for
+                sitting there all night; a room that turns 8,000 in two hours
+                and one that turns 9,000 in six are not the same room. */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Target className="w-5 h-5 text-amber-600" />
+                    {t.by_area}
+                  </CardTitle>
+                  <CardDescription>{t.by_area_desc}</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead className="bg-slate-50 text-xs uppercase text-muted-foreground">
+                        <tr>
+                          <th className="py-2 px-3 text-left">{t.area_label}</th>
+                          <th className="py-2 px-3 text-right">{t.revenue}</th>
+                          <th className="py-2 px-3 text-right">{t.bills}</th>
+                          <th className="py-2 px-3 text-right">{t.avg_bill}</th>
+                          <th className="py-2 px-3 text-right">{t.avg_time}</th>
+                          <th className="py-2 px-3 text-right">{t.per_hour}</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(data?.areaStats || []).map((a: any) => (
+                          <tr key={a.area} className="border-b last:border-0">
+                            <td className="py-2 px-3 font-bold text-slate-800">{a.area}</td>
+                            <td className="py-2 px-3 text-right tabular-nums font-semibold">{formatTHB(a.revenue)}</td>
+                            <td className="py-2 px-3 text-right tabular-nums text-muted-foreground">{a.bills}</td>
+                            <td className="py-2 px-3 text-right tabular-nums">{formatTHB(a.avgBill)}</td>
+                            <td className="py-2 px-3 text-right tabular-nums text-muted-foreground">
+                              {Math.floor(a.avgMinutes / 60)}h {String(a.avgMinutes % 60).padStart(2, '0')}m
+                            </td>
+                            <td className="py-2 px-3 text-right tabular-nums font-black text-amber-600">{formatTHB(a.revenuePerHour)}</td>
+                          </tr>
+                        ))}
+                        {(!data?.areaStats || data.areaStats.length === 0) && (
+                          <tr><td colSpan={6} className="py-10 text-center italic text-muted-foreground">{t.no_data_for_period}</td></tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Pour cost per shelf, against the band that shelf is judged on.
+                  Beer at 25% and spirits at 25% are not the same news, which is
+                  exactly what a single bar-wide percentage hides. */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Target className="w-5 h-5 text-teal-600" />
+                    {t.pour_cost_by_category}
+                  </CardTitle>
+                  <CardDescription>{t.pour_cost_by_category_desc}</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3">
+                    {(data?.categoryShare || []).map((c: any) => (
+                      <div key={c.category} className="flex items-center justify-between border-b pb-2 last:border-0 last:pb-0">
+                        <div>
+                          <p className="font-bold text-slate-800">{c.category}</p>
+                          <p className="text-xs text-muted-foreground">{formatTHB(c.revenue)} · {formatTHB(c.cost || 0)} {t.value_at_cost}</p>
+                        </div>
+                        <div className="text-right">
+                          <p className={`font-black tabular-nums ${c.verdict === "OK" ? "text-emerald-600"
+                            : c.verdict === "BELOW_COST" ? "text-rose-600"
+                              : "text-amber-600"}`}>
+                            {typeof c.pourCostPct === "number" ? `${c.pourCostPct.toFixed(1)}%` : "—"}
+                          </p>
+                          {c.band && (
+                            <p className="text-[10px] text-muted-foreground uppercase">{t.target} {c.band[0]}–{c.band[1]}%</p>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                    {(!data?.categoryShare || data.categoryShare.length === 0) && (
+                      <p className="text-center py-10 text-muted-foreground italic">{t.no_data_for_period}</p>
+                    )}
+                  </div>
                 </CardContent>
               </Card>
             </div>
@@ -494,9 +692,6 @@ export default function ReportsPage() {
                           </div>
                           <div>
                             <p className="font-bold text-slate-900 leading-tight">{p.productName}</p>
-                            <div className="flex gap-1.5 mt-1">
-                              <Badge variant="outline" className="text-[10px] py-0 px-1.5 bg-slate-50 border-slate-200 font-medium text-slate-500 uppercase">{p.variantType}</Badge>
-                            </div>
                           </div>
                         </div>
                         <div className="text-right">
@@ -540,7 +735,6 @@ export default function ReportsPage() {
                           </div>
                           <div>
                             <p className="font-bold text-sm text-slate-800 leading-tight">{p.productName}</p>
-                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">{p.variantType}</span>
                           </div>
                         </div>
                         <div className="text-right">
@@ -603,205 +797,59 @@ export default function ReportsPage() {
                 </Card>
               </div>
 
-            {/* Performance by Attributes */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-amber-800 flex items-center gap-2">
-                    <TrendingUp className="w-5 h-5" />
-                    {t.variation_performance}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-3">
-                    {data?.variationStats.map((v: any, i: number) => (
-                      <div key={i} className="flex justify-between items-center p-3 rounded-xl border bg-white shadow-sm">
-                        <div className="flex items-center gap-3">
-                          <Badge variant="outline" className="border-amber-200 text-amber-700 bg-amber-50 font-bold px-3 py-1 uppercase">{v.name}</Badge>
-                        </div>
-                        <div className="text-right">
-                          <p className="font-bold text-slate-900">{v.sold} items</p>
-                          <p className="text-xs text-muted-foreground">{formatTHB(v.revenue)}</p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-amber-800 flex items-center gap-2">
-                    <Package className="w-5 h-5" />
-                    {t.choice_performance}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-3">
-                    {data?.sizeStats.map((s: any, i: number) => (
-                      <div key={i} className="flex justify-between items-center p-3 rounded-xl border bg-white shadow-sm">
-                        <div className="flex items-center gap-3">
-                          <Badge className="bg-amber-600 text-white w-8 h-8 rounded-full flex items-center justify-center p-0">{s.name}</Badge>
-                          <span className="font-bold text-slate-700">{s.name}</span>
-                        </div>
-                        <div className="text-right">
-                          <p className="font-bold text-slate-900">{s.sold} items</p>
-                          <p className="text-xs text-muted-foreground">{formatTHB(s.revenue)}</p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-
-            {/* Customization Stats */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-indigo-800 flex items-center gap-2">
-                    <Droplets className="w-5 h-5 text-blue-500" />
-                    {t.sugar_levels_usage}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-3">
-                    {data?.sugarStats?.map((s: any, i: number) => (
-                      <div key={i} className="flex justify-between items-center p-3 rounded-xl border bg-white shadow-sm">
-                        <span className="font-bold text-slate-700">{s.name}</span>
-                        <Badge variant="secondary" className="font-black text-blue-700 bg-blue-50">{s.count} orders</Badge>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-purple-800 flex items-center gap-2">
-                    <Coffee className="w-5 h-5 text-purple-500" />
-                    {t.extra_shot_usage}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-3">
-                    {data?.shotStats?.map((s: any, i: number) => (
-                      <div key={i} className="flex justify-between items-center p-3 rounded-xl border bg-white shadow-sm">
-                        <span className="font-bold text-slate-700">{s.name}</span>
-                        <Badge variant="secondary" className="font-black text-purple-700 bg-purple-50">{s.count} orders</Badge>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
+            {/* Sugar level and extra shot used to be reported here. They are a
+                cafe's modifier axis - one drink sold four ways - and this bar
+                sells four drinks. Across the whole database they hold a single
+                value each, "Normal Sweet" and "Normal Shot", on the 50 lines
+                that carry them at all: the defaults, never chosen by anyone. */}
           </TabsContent>
 
-          <TabsContent value="customers" className="space-y-6">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <Card>
-                <CardHeader>
-                  <CardTitle>{t.member_vs_guest_orders}</CardTitle>
-                  <CardDescription>{t.order_dist_by_customer_type}</CardDescription>
-                </CardHeader>
-                <CardContent className="h-[350px]">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie
-                        data={data?.customerStats?.memberVsGuest || []}
-                        dataKey="count"
-                        nameKey="type"
-                        innerRadius={60}
-                        outerRadius={100}
-                        paddingAngle={5}
-                        label
-                      >
-                        {(data?.customerStats?.memberVsGuest || []).map((entry: any, index: number) => (
-                          <Cell key={`cell-${index}`} fill={index === 0 ? '#16a34a' : '#94a3b8'} />
-                        ))}
-                      </Pie>
-                      <Tooltip />
-                      <Legend />
-                    </PieChart>
-                  </ResponsiveContainer>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle>{t.revenue_member_vs_guest}</CardTitle>
-                  <CardDescription>{t.revenue_by_customer_type}</CardDescription>
-                </CardHeader>
-                <CardContent className="h-[350px]">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={data?.customerStats?.memberVsGuest || []}>
-                      <XAxis dataKey="type" />
-                      <YAxis fontSize={11} tickFormatter={(v) => `${(v / 1000)}k`} />
-                      <Tooltip formatter={(v) => formatTHB(v as number)} />
-                      <Bar dataKey="revenue" fill="#16a34a" radius={[4, 4, 0, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </CardContent>
-              </Card>
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Target className="w-5 h-5 text-amber-600" />
-                    {t.top_customers_by_loyalty}
-                  </CardTitle>
-                  <CardDescription>{t.highest_loyalty_holders}</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-3">
-                    {(data?.customerStats?.topLoyalty || []).map((c: any, i: number) => (
-                      <div key={i} className="flex justify-between items-center p-3 rounded-xl border bg-white shadow-sm">
-                        <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center font-bold text-amber-900 border border-amber-200">
-                            {i + 1}
-                          </div>
-                          <div>
-                            <p className="font-bold text-slate-900">{c.name}</p>
-                            <p className="text-xs text-muted-foreground">{c.visitCount} {t.visits}</p>
-                          </div>
+          <TabsContent value="promotions" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>{t.promotions_roi}</CardTitle>
+                <CardDescription>{t.promo_efficiency}</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {(data?.promoImpact || []).map((p: any, i: number) => (
+                    <Card key={i} className="p-4 bg-muted/50">
+                      <div className="flex items-center gap-2 mb-3">
+                        <Tag className="w-5 h-5 text-rose-600 shrink-0" />
+                        <h4 className="font-bold text-amber-900 truncate">{p.name}</h4>
+                        {p.code && (
+                          <Badge variant="outline" className="ms-auto font-mono text-[10px]">{p.code}</Badge>
+                        )}
+                      </div>
+                      <div className="space-y-2">
+                        <div className="flex justify-between text-sm">
+                          <span className="text-muted-foreground">{t.times_used}</span>
+                          <span className="font-bold tabular-nums">{p.usageCount}</span>
                         </div>
-                        <div className="text-right">
-                          <p className="font-bold text-amber-600">{c.loyaltyPoints} {t.pts}</p>
-                          <p className="text-xs text-muted-foreground">{formatTHB(c.totalSpent)}</p>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-muted-foreground">{t.revenue_gained}</span>
+                          <span className="font-bold text-green-600 tabular-nums">{formatTHB(p.totalRevenue)}</span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-muted-foreground">{t.total_discount_cost}</span>
+                          <span className="font-bold text-rose-600 tabular-nums">−{formatTHB(p.totalDiscount)}</span>
+                        </div>
+                        {/* What the deal actually left behind, which is the
+                            question "ROI" is asking and the old card made you
+                            work out in your head. */}
+                        <div className="flex justify-between text-sm border-t pt-2">
+                          <span className="font-semibold">{t.net_after_promo}</span>
+                          <span className="font-black tabular-nums">{formatTHB(p.totalRevenue - p.totalDiscount)}</span>
                         </div>
                       </div>
-                    ))}
-                    {(!data?.customerStats?.topLoyalty || data.customerStats.topLoyalty.length === 0) && (
-                      <p className="text-sm text-center text-muted-foreground py-4">{t.no_customer_data}</p>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle>{t.loyalty_points_overview}</CardTitle>
-                  <CardDescription>{t.points_earned_and_redeemed}</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
-                    <div className="p-4 bg-green-50 rounded-lg border border-green-100">
-                      <p className="text-sm text-muted-foreground">{t.total_points_earned}</p>
-                      <p className="text-3xl font-bold text-green-700">{data?.customerStats?.totalPointsEarned || 0}</p>
-                    </div>
-                    <div className="p-4 bg-blue-50 rounded-lg border border-blue-100">
-                      <p className="text-sm text-muted-foreground">{t.total_points_redeemed}</p>
-                      <p className="text-3xl font-bold text-blue-700">{data?.customerStats?.totalPointsRedeemed || 0}</p>
-                    </div>
-                    <div className="p-4 bg-amber-50 rounded-lg border border-amber-100">
-                      <p className="text-sm text-muted-foreground">{t.active_members}</p>
-                      <p className="text-3xl font-bold text-amber-700">{data?.customerStats?.activeMembers || 0}</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
+                    </Card>
+                  ))}
+                  {(!data?.promoImpact || data.promoImpact.length === 0) && (
+                    <p className="text-center py-10 text-muted-foreground w-full col-span-full italic">{t.no_promo_usage}</p>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
           </TabsContent>
 
           <TabsContent value="operations" className="space-y-6">
@@ -852,19 +900,105 @@ export default function ReportsPage() {
               </Card>
             </div>
 
+            {/* Did the deal work?
+                Deliberately keyed on the clock rather than on a promo code.
+                A promotion can only attach to a counter order, so the ROI tab
+                cannot see a table bill - but every deal ran between two hours,
+                and the hours are on every sale the bar makes. */}
+            <Card>
+              <CardHeader className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 space-y-0">
+                <div>
+                  <CardTitle className="flex items-center gap-2">
+                    <Clock className="w-5 h-5 text-amber-600" />
+                    {t.happy_hour_check}
+                  </CardTitle>
+                  <CardDescription>{t.happy_hour_desc}</CardDescription>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <label className="text-xs text-muted-foreground" htmlFor="hh-from">{t.window_from}</label>
+                  <select
+                    id="hh-from"
+                    value={lo}
+                    onChange={(e) => setWindowFrom(Number(e.target.value))}
+                    className="h-10 rounded-md border border-slate-200 bg-white px-2 text-sm tabular-nums"
+                  >
+                    {hours.map((h: any, i: number) => (
+                      <option key={i} value={i}>{h.hour}:00</option>
+                    ))}
+                  </select>
+                  <label className="text-xs text-muted-foreground" htmlFor="hh-to">{t.window_to}</label>
+                  <select
+                    id="hh-to"
+                    value={hi}
+                    onChange={(e) => setWindowTo(Number(e.target.value))}
+                    className="h-10 rounded-md border border-slate-200 bg-white px-2 text-sm tabular-nums"
+                  >
+                    {hours.map((h: any, i: number) => (
+                      <option key={i} value={i}>{h.hour}:59</option>
+                    ))}
+                  </select>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {hours.length === 0 ? (
+                  <p className="py-10 text-center italic text-muted-foreground">{t.no_hourly_data}</p>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+                      <p className="text-[11px] font-black uppercase tracking-widest text-amber-700">{t.in_window}</p>
+                      <p className="mt-1 text-2xl font-black tabular-nums text-amber-900">{formatTHB(inside.perHour)}</p>
+                      <p className="text-[11px] uppercase text-amber-700/70">{t.per_hour}</p>
+                      <div className="mt-3 space-y-0.5 text-xs text-slate-600 tabular-nums">
+                        <p>{formatTHB(inside.revenue)} · {inside.rounds} {t.rounds_label}</p>
+                        <p>{t.avg_round} {formatTHB(inside.avgRound)}</p>
+                      </div>
+                    </div>
+
+                    <div className="rounded-xl border border-slate-200 bg-white p-4">
+                      <p className="text-[11px] font-black uppercase tracking-widest text-slate-500">{t.outside_window}</p>
+                      <p className="mt-1 text-2xl font-black tabular-nums text-slate-800">{formatTHB(outside.perHour)}</p>
+                      <p className="text-[11px] uppercase text-slate-400">{t.per_hour}</p>
+                      <div className="mt-3 space-y-0.5 text-xs text-slate-600 tabular-nums">
+                        <p>{formatTHB(outside.revenue)} · {outside.rounds} {t.rounds_label}</p>
+                        <p>{t.avg_round} {formatTHB(outside.avgRound)}</p>
+                      </div>
+                    </div>
+
+                    {/* The whole point of the card, so it gets the big number. */}
+                    <div className="rounded-xl border border-slate-200 bg-white p-4 flex flex-col justify-center">
+                      <p className="text-[11px] font-black uppercase tracking-widest text-slate-500">{t.vs_rest}</p>
+                      <p className={`mt-1 text-3xl font-black tabular-nums ${lift === null ? "text-slate-400"
+                        : lift > 0 ? "text-emerald-700" : "text-rose-600"}`}>
+                        {lift === null ? "—" : `${lift > 0 ? "+" : ""}${lift.toFixed(0)}%`}
+                      </p>
+                      <p className="mt-1 text-xs text-slate-500 tabular-nums">
+                        {inside.hours}h {t.vs_rest} {outside.hours}h
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
             {/* Staff Sales Performance */}
             <div className="grid grid-cols-1 gap-6">
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
                     <TrendingUp className="w-5 h-5 text-indigo-600" />
-                    {t.staff_sales_performance}
+                    {t.server_sales_performance}
                   </CardTitle>
-                  <CardDescription>{t.revenue_per_staff}</CardDescription>
+                  {/* Credited to the waiter who worked the table, not the
+                      person who keyed it in. Three staff rotating on the till
+                      made this a chart of the roster - three near-identical
+                      bars - where the servers behind the same sales differ by
+                      almost threefold. Counter sales have no waiter and are
+                      nobody's performance, so they are not in here. */}
+                  <CardDescription>{t.revenue_per_server}</CardDescription>
                 </CardHeader>
                 <CardContent className="h-[350px]">
                   <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={data?.staffSales || []}>
+                    <BarChart data={data?.serverSales || []}>
                       <XAxis dataKey="name" />
                       <YAxis fontSize={11} tickFormatter={(v) => `${(v / 1000)}k`} />
                       <Tooltip formatter={(v) => formatTHB(v as number)} />
@@ -877,37 +1011,53 @@ export default function ReportsPage() {
           </TabsContent>
 
           <TabsContent value="inventory" className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-              <Card className="p-4 border-l-4 border-l-blue-500">
+            {/* Counted on the movements this bar actually writes. The row
+                used to lead with Transfers, Withdrawals and Total Usage -
+                three types the database has never held a single row of - so
+                three of five cards read 0 every night while the movements
+                that do happen had no card at all. */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
+              <Card className="p-4 border-l-4 border-l-purple-500">
                 <div className="flex items-center gap-3">
-                  <div className="bg-blue-100 p-2 rounded-lg">
-                    <ArrowRightLeft className="w-5 h-5 text-blue-600" />
+                  <div className="bg-purple-100 p-2 rounded-lg">
+                    <ShoppingCart className="w-5 h-5 text-purple-600" />
                   </div>
                   <div>
-                    <p className="text-xs text-muted-foreground uppercase font-bold">{t.transfers_caps}</p>
-                    <p className="text-xl font-bold">{data?.inventoryStats?.transactionTypes?.transfers || 0}</p>
+                    <p className="text-xs text-muted-foreground uppercase font-bold">{t.poured_caps}</p>
+                    <p className="text-xl font-bold">{data?.inventoryStats?.transactionTypes?.sold || 0}</p>
                   </div>
                 </div>
               </Card>
               <Card className="p-4 border-l-4 border-l-green-500">
                 <div className="flex items-center gap-3">
                   <div className="bg-green-100 p-2 rounded-lg">
-                    <ShoppingCart className="w-5 h-5 text-green-600" />
+                    <Package className="w-5 h-5 text-green-600" />
                   </div>
                   <div>
-                    <p className="text-xs text-muted-foreground uppercase font-bold">{t.deposits_caps}</p>
-                    <p className="text-xl font-bold">{data?.inventoryStats?.transactionTypes?.deposits || 0}</p>
+                    <p className="text-xs text-muted-foreground uppercase font-bold">{t.received_caps}</p>
+                    <p className="text-xl font-bold">{data?.inventoryStats?.transactionTypes?.received || 0}</p>
                   </div>
                 </div>
               </Card>
-              <Card className="p-4 border-l-4 border-l-rose-500">
+              <Card className="p-4 border-l-4 border-l-blue-500">
                 <div className="flex items-center gap-3">
-                  <div className="bg-rose-100 p-2 rounded-lg">
-                    <History className="w-5 h-5 text-rose-600" />
+                  <div className="bg-blue-100 p-2 rounded-lg">
+                    <History className="w-5 h-5 text-blue-600" />
                   </div>
                   <div>
-                    <p className="text-xs text-muted-foreground uppercase font-bold">{t.withdrawals_caps}</p>
-                    <p className="text-xl font-bold">{data?.inventoryStats?.transactionTypes?.withdrawals || 0}</p>
+                    <p className="text-xs text-muted-foreground uppercase font-bold">{t.returned_caps}</p>
+                    <p className="text-xl font-bold">{data?.inventoryStats?.transactionTypes?.returned || 0}</p>
+                  </div>
+                </div>
+              </Card>
+              <Card className="p-4 border-l-4 border-l-indigo-500">
+                <div className="flex items-center gap-3">
+                  <div className="bg-indigo-100 p-2 rounded-lg">
+                    <ArrowRightLeft className="w-5 h-5 text-indigo-600" />
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground uppercase font-bold">{t.exchanged_caps}</p>
+                    <p className="text-xl font-bold">{data?.inventoryStats?.transactionTypes?.exchanged || 0}</p>
                   </div>
                 </div>
               </Card>
@@ -917,19 +1067,19 @@ export default function ReportsPage() {
                     <Package className="w-5 h-5 text-amber-600" />
                   </div>
                   <div>
-                    <p className="text-xs text-muted-foreground uppercase font-bold">{t.shop_adjusts_caps}</p>
-                    <p className="text-xl font-bold">{data?.inventoryStats?.transactionTypes?.shopAdjustments || 0}</p>
+                    <p className="text-xs text-muted-foreground uppercase font-bold">{t.adjusted_caps}</p>
+                    <p className="text-xl font-bold">{data?.inventoryStats?.transactionTypes?.adjusted || 0}</p>
                   </div>
                 </div>
               </Card>
-              <Card className="p-4 border-l-4 border-l-purple-500">
+              <Card className="p-4 border-l-4 border-l-rose-500">
                 <div className="flex items-center gap-3">
-                  <div className="bg-purple-100 p-2 rounded-lg">
-                    <Package className="w-5 h-5 text-purple-600" />
+                  <div className="bg-rose-100 p-2 rounded-lg">
+                    <AlertTriangle className="w-5 h-5 text-rose-600" />
                   </div>
                   <div>
-                    <p className="text-xs text-muted-foreground uppercase font-bold">{t.total_usage_caps}</p>
-                    <p className="text-xl font-bold">{data?.inventoryStats?.transactionTypes?.usage || 0}</p>
+                    <p className="text-xs text-muted-foreground uppercase font-bold">{t.voided_back_caps}</p>
+                    <p className="text-xl font-bold">{data?.inventoryStats?.transactionTypes?.voidedBack || 0}</p>
                   </div>
                 </div>
               </Card>
@@ -967,17 +1117,60 @@ export default function ReportsPage() {
                 </CardContent>
               </Card>
 
+              {/* This was "Most Transferred to Shop", reading TRANSFER rows -
+                  a movement this bar does not have, so the card was always
+                  empty while the movement that matters, stock leaving as
+                  drinks, had no card at all. Valued as well as counted: "180
+                  bottles" and "3,200 baht" are the same fact told to two
+                  different people, and only one of them orders stock. */}
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
-                    <ArrowRightLeft className="w-5 h-5 text-blue-500" />
-                    {t.most_transferred_shop}
+                    <ShoppingCart className="w-5 h-5 text-purple-500" />
+                    {t.off_the_shelf}
                   </CardTitle>
-                  <CardDescription>{t.top_items_warehouse_to_shop}</CardDescription>
+                  <CardDescription>{t.off_the_shelf_desc}</CardDescription>
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-4">
-                    {data?.inventoryStats?.mostTransferred?.map((item: any, i: number) => (
+                    {data?.inventoryStats?.depletion?.map((item: any, i: number) => (
+                      <div key={i} className="flex items-center justify-between border-b pb-2 last:border-0 last:pb-0">
+                        <div className="flex items-center gap-3">
+                          <Badge variant="outline" className="w-6 h-6 rounded-full flex items-center justify-center p-0">{i + 1}</Badge>
+                          <div>
+                            <p className="font-bold text-slate-800">{item.name}</p>
+                            <p className="text-xs text-muted-foreground">{formatStockOf(item.quantity, item)}</p>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <p className="font-black text-purple-600">{formatTHB(item.valueAtCost)}</p>
+                          <p className="text-[10px] text-muted-foreground uppercase">{t.value_at_cost}</p>
+                        </div>
+                      </div>
+                    ))}
+                    {(!data?.inventoryStats?.depletion || data.inventoryStats.depletion.length === 0) && (
+                      <p className="text-center py-10 text-muted-foreground italic">{t.no_data_for_period}</p>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Every one of these is stock back on the shelf on a member of
+                staff's word, with nobody checking it arrived (req #14). When a
+                count comes up short, this is where to look first. */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <History className="w-5 h-5 text-blue-500" />
+                    {t.returned_unopened_title}
+                  </CardTitle>
+                  <CardDescription>{t.returned_unopened_desc}</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    {data?.inventoryStats?.returnedUnopened?.map((item: any, i: number) => (
                       <div key={i} className="flex items-center justify-between border-b pb-2 last:border-0 last:pb-0">
                         <div className="flex items-center gap-3">
                           <Badge variant="outline" className="w-6 h-6 rounded-full flex items-center justify-center p-0">{i + 1}</Badge>
@@ -991,7 +1184,7 @@ export default function ReportsPage() {
                         </div>
                       </div>
                     ))}
-                    {(!data?.inventoryStats?.mostTransferred || data.inventoryStats.mostTransferred.length === 0) && (
+                    {(!data?.inventoryStats?.returnedUnopened || data.inventoryStats.returnedUnopened.length === 0) && (
                       <p className="text-center py-10 text-muted-foreground italic">{t.no_data_for_period}</p>
                     )}
                   </div>
@@ -1059,38 +1252,68 @@ export default function ReportsPage() {
 
           <TabsContent value="advanced" className="space-y-6">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Refund Tracking */}
+              {/* Money handed back.
+                  This listed cancelled ORDERS - rounds struck before anyone
+                  paid - under a heading promising refunds, so the one thing a
+                  manager opens this for, cash leaving the drawer after a sale,
+                  appeared nowhere on the page. It now reads Payment.voidedAt,
+                  the source the Z-report has used all along.
+
+                  Two names per row: one rang the money in, the other signed it
+                  back out. The pattern worth finding is the same name in the
+                  second column over and over. */}
               <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <History className="w-5 h-5 text-rose-500" />
-                    {t.refund_tracking}
-                  </CardTitle>
-                  <CardDescription>{t.all_cancelled_orders_reasons}</CardDescription>
+                <CardHeader className="flex flex-row items-start justify-between space-y-0">
+                  <div>
+                    <CardTitle className="flex items-center gap-2">
+                      <History className="w-5 h-5 text-rose-500" />
+                      {t.refund_tracking}
+                    </CardTitle>
+                    <CardDescription>{t.refunds_desc}</CardDescription>
+                  </div>
+                  {refunds?.totalCount > 0 && (
+                    <div className="text-right">
+                      <p className="text-xl font-black text-rose-600 tabular-nums">{formatTHB(refunds.totalValue)}</p>
+                      <p className="text-[10px] uppercase text-muted-foreground">{refunds.totalCount} {t.refunded}</p>
+                    </div>
+                  )}
                 </CardHeader>
                 <CardContent>
                   <div className="overflow-x-auto">
                     <table className="w-full text-sm">
                       <thead>
                         <tr className="border-b bg-muted/30 text-slate-500 font-bold">
-                          <th className="py-2 px-3 text-left">{t.order_label}</th>
-                          <th className="py-2 px-3 text-left">{t.customer}</th>
+                          <th className="py-2 px-3 text-left">{t.date_label}</th>
+                          <th className="py-2 px-3 text-left">{t.table}</th>
+                          <th className="py-2 px-3 text-left">{t.payment_method}</th>
                           <th className="py-2 px-3 text-right">{t.amount}</th>
+                          <th className="py-2 px-3 text-left">{t.staff}</th>
                           <th className="py-2 px-3 text-left">{t.reason}</th>
                         </tr>
                       </thead>
                       <tbody>
                         {isLoadingRefunds ? (
-                          <tr><td colSpan={4} className="py-10 text-center">{t.loading_refunds}</td></tr>
-                        ) : refunds.length === 0 ? (
-                          <tr><td colSpan={4} className="py-10 text-center italic text-muted-foreground">{t.no_refunds_found}</td></tr>
+                          <tr><td colSpan={6} className="py-10 text-center">{t.loading_refunds}</td></tr>
+                        ) : !refunds?.rows?.length ? (
+                          <tr><td colSpan={6} className="py-10 text-center italic text-muted-foreground">{t.no_refunds_found}</td></tr>
                         ) : (
-                          refunds.map((r: any) => (
+                          refunds.rows.map((r: any) => (
                             <tr key={r.id} className="border-b hover:bg-muted/10">
-                              <td className="py-2 px-3 font-medium text-slate-700">{r.orderNumber}</td>
-                              <td className="py-2 px-3 text-slate-500">{r.customerName}</td>
-                              <td className="py-2 px-3 text-right font-bold text-rose-600">{formatTHB(r.total)}</td>
-                              <td className="py-2 px-3 text-xs italic text-slate-400">{r.reason}</td>
+                              <td className="py-2 px-3 text-slate-500 whitespace-nowrap">
+                                {r.refundedAt ? format(new Date(r.refundedAt), "d MMM HH:mm") : "—"}
+                              </td>
+                              {/* A walk-in counter sale has no table; saying so
+                                  beats an empty cell. */}
+                              <td className="py-2 px-3 font-medium text-slate-700">{r.table ?? t.walk_in}</td>
+                              <td className="py-2 px-3 text-slate-500">{r.method}</td>
+                              <td className="py-2 px-3 text-right font-bold text-rose-600">{formatTHB(r.amount)}</td>
+                              <td className="py-2 px-3 text-xs text-slate-500">
+                                {r.refundedBy ?? "—"}
+                                {r.takenBy && r.takenBy !== r.refundedBy && (
+                                  <span className="text-slate-400"> · {r.takenBy}</span>
+                                )}
+                              </td>
+                              <td className="py-2 px-3 text-xs italic text-slate-400">{r.reason || "—"}</td>
                             </tr>
                           ))
                         )}
@@ -1116,7 +1339,6 @@ export default function ReportsPage() {
                         <div className="flex justify-between items-start mb-2">
                           <div>
                             <p className="font-bold text-slate-800">{item.menuName}</p>
-                            <p className="text-[10px] text-muted-foreground uppercase">{item.variation} - {item.size}</p>
                           </div>
                           <Badge variant={item.marginPercent < 20 ? "destructive" : "outline"} className="text-[10px] font-black">
                             {item.marginPercent.toFixed(1)}% {t.margin}
@@ -1136,6 +1358,31 @@ export default function ReportsPage() {
                             <p className="font-bold text-emerald-600">{formatTHB(item.margin)}</p>
                           </div>
                         </div>
+
+                        {/* Pour cost, which is the number a bar actually runs
+                            on. Margin says what is left; pour cost says whether
+                            the pour itself is right, against a band that
+                            differs by category - a beer at 30% is healthy where
+                            a spirit at 30% is being given away. The verdict is
+                            the same one the recipe editor shows, so a manager
+                            reading a report and a manager editing a recipe are
+                            looking at one number. */}
+                        {typeof item.pourCostPct === "number" && item.band && (
+                          <div className="flex items-center justify-between gap-2 border-t pt-2 mt-2">
+                            <span className="text-[10px] text-muted-foreground uppercase">{t.pour_cost}</span>
+                            <span className="flex items-baseline gap-1.5">
+                              <span className={`font-black tabular-nums ${item.verdict === "OK" ? "text-emerald-600"
+                                : item.verdict === "BELOW_COST" ? "text-rose-600"
+                                  : "text-amber-600"
+                                }`}>
+                                {item.pourCostPct.toFixed(1)}%
+                              </span>
+                              <span className="text-[10px] text-slate-400 tabular-nums">
+                                {t.target} {item.band[0]}–{item.band[1]}%
+                              </span>
+                            </span>
+                          </div>
+                        )}
                       </div>
                     ))}
                     {(!data?.advanced?.lowMarginItems || data.advanced.lowMarginItems.length === 0) && (
@@ -1218,41 +1465,7 @@ export default function ReportsPage() {
             </div>
           </TabsContent>
 
-          <TabsContent value="promotions" className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>{t.promotions_roi}</CardTitle>
-                <CardDescription>{t.promo_efficiency || "Promo efficiency."}</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {data?.promoImpact.map((p: any, i: number) => (
-                    <Card key={i} className="p-4 bg-muted/50 border-rose-100">
-                      <div className="flex items-center gap-2 mb-2">
-                        <Tag className="w-5 h-5 text-rose-600" />
-                        <h4 className="font-bold text-amber-900">{p.name}</h4>
-                      </div>
-                      <div className="space-y-2">
-                        <div className="flex justify-between text-sm">
-                          <span>{t.times_used}:</span>
-                          <span className="font-bold">{p.usageCount}</span>
-                        </div>
-                        <div className="flex justify-between text-sm">
-                          <span>{t.revenue_gained}:</span>
-                          <span className="font-bold text-green-600">{formatTHB(p.totalRevenue)}</span>
-                        </div>
-                        <div className="flex justify-between text-sm">
-                          <span>{t.total_discount_cost}:</span>
-                          <span className="font-bold text-rose-600">-{formatTHB(p.totalDiscount)}</span>
-                        </div>
-                      </div>
-                    </Card>
-                  ))}
-                  {data?.promoImpact.length === 0 && <p className="text-center py-10 text-muted-foreground w-full col-span-full italic">{t.no_promo_usage}</p>}
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
+          </div>
         </Tabs>
       </div>
     </div>

@@ -18,9 +18,29 @@ export async function GET(request: Request) {
 
     try {
         const { searchParams } = new URL(request.url)
+        const startDate = searchParams.get('startDate')
+        const endDate = searchParams.get('endDate')
+
+        // The reports page sends a full ISO timestamp, already snapped to the
+        // start and end of the day in the bar's own timezone. This route used
+        // to staple a SECOND time onto the end of it - "...000ZT00:00:00.000Z"
+        // - which is not a date, so every request from the tab it serves threw
+        // on an Invalid Date and returned a 500. The empty state on screen is
+        // what a failed fetch looks like here, which is why it read as "no
+        // counts yet" rather than as a fault.
+        //
+        // Honour what the caller sent, the way every other report route does.
+        // Only the no-parameter case still has to invent a window, and today in
+        // UTC is as good a guess as any for a hand-typed URL.
         const today = new Date().toISOString().split('T')[0]
-        const start = new Date(`${searchParams.get('startDate') || today}T00:00:00.000Z`)
-        const end = new Date(`${searchParams.get('endDate') || today}T23:59:59.999Z`)
+        const start = startDate ? new Date(startDate) : new Date(`${today}T00:00:00.000Z`)
+        const end = endDate ? new Date(endDate) : new Date(`${today}T23:59:59.999Z`)
+
+        // A bad date reaches Prisma as an Invalid Date and surfaces as a 500
+        // with nothing on screen to say so. Saying it plainly costs two lines.
+        if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+            return NextResponse.json({ error: 'Invalid date range' }, { status: 400 })
+        }
 
         const counts = await prisma.stockCount.findMany({
             where: { createdAt: { gte: start, lte: end } },

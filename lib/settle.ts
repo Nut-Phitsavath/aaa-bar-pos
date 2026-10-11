@@ -1,7 +1,7 @@
 import { prisma } from './prisma'
-import { sessionTotal } from './sessions'
-import { isFullySettled, isConfirmed, billTotalOf } from './payments'
-import { DEFAULT_RATE_LAK, DEFAULT_RATE_USD } from './currency'
+import { sessionTotal, sessionBillTotal } from './sessions'
+import { isFullySettled, isConfirmed } from './payments'
+import { DEFAULT_RATE_LAK, DEFAULT_RATE_USD, taxRateOf } from './currency'
 
 /**
  * Server-side settlement. The one place a table bill becomes closed.
@@ -26,24 +26,28 @@ export async function closeSessionIfSettled(sessionId: string): Promise<{
     })
 
     if (!session) return { closed: false, reason: 'SESSION_NOT_FOUND' }
-    const total = billTotalOf(sessionTotal(session.orders), session.discountType, session.discountValue)
+    const total = sessionBillTotal(session)
     if (session.status === "CLOSED") return { closed: true, total }
 
     if (!isFullySettled(total, session.payments)) {
         return { closed: false, reason: 'BALANCE_OUTSTANDING', total }
     }
 
-    // Stamp the rate this bill settles at; after this it never reads settings
-    // again (req #18).
+    // Stamp the rates this bill settles at; after this it never reads settings
+    // again (req #18). VAT is stamped with them: an Order already stores its own
+    // taxAmount, and without this a table bill reprints at whatever rate the
+    // owner has since set.
     const rateRows = await prisma.setting.findMany({
-        where: { key: { in: ['rate_lak', 'rate_usd'] } }
+        where: { key: { in: ['rate_lak', 'rate_usd', 'taxRate', 'tax_rate'] } }
     })
+    const valueOf = (key: string) => rateRows.find((r) => r.key === key)?.value
     const rateOf = (key: string, fallback: number) => {
-        const parsed = Number(rateRows.find((r) => r.key === key)?.value)
+        const parsed = Number(valueOf(key))
         return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback
     }
     const fxRateLAK = rateOf('rate_lak', DEFAULT_RATE_LAK)
     const fxRateUSD = rateOf('rate_usd', DEFAULT_RATE_USD)
+    const taxRate = taxRateOf(valueOf('taxRate') ?? valueOf('tax_rate'))
 
     const openShift = await prisma.shift.findFirst({ where: { status: 'OPEN' } })
     const closedAt = new Date()
@@ -78,10 +82,30 @@ export async function closeSessionIfSettled(sessionId: string): Promise<{
             data: { paymentStatus: 'CANCELLED' }
         })
 
-        await tx.tableSession.update({
+        const closedSession = await tx.tableSession.update({
             where: { id: sessionId },
-            data: { status: 'CLOSED', closedAt, fxRateLAK, fxRateUSD }
+            data: { status: 'CLOSED', closedAt, fxRateLAK, fxRateUSD, taxRate }
         })
+
+        // The party has paid and left; the glasses have not. Marking the table
+        // rather than freeing it is what stops a host seating somebody onto a
+        // table nobody has collected - the floor plan used to call it free the
+        // instant this row changed.
+        //
+        // Only when the last bill goes: a split table with one half still
+        // drinking is not ready to be cleared.
+        const stillOpen = await tx.tableSession.count({
+            where: {
+                tableId: closedSession.tableId,
+                status: { not: 'CLOSED' },
+            },
+        })
+        if (stillOpen === 0) {
+            await tx.table.update({
+                where: { id: closedSession.tableId },
+                data: { needsClearing: true },
+            })
+        }
     })
 
     return { closed: true, total }

@@ -79,6 +79,8 @@ export function refundableTotal(payments: RefundablePayment[]): number {
 
 export type ExceptionBill = {
     discount: number
+    /** What a promotion took off. Optional: counter bills never have one. */
+    promoDiscount?: number
     status: string
     voidedLines: number
     total: number
@@ -95,12 +97,16 @@ export type ExceptionBill = {
  * the same question asked of the range on screen.
  */
 export function exceptionsOf(bills: ExceptionBill[]) {
-    const discounted = bills.filter((b) => (b.discount || 0) > 0)
+    // Everything that came off a bill, not just the manual write-off. A
+    // promotion is money given away too, and a "discounts given" figure that
+    // counted only one of them understates the night.
+    const givenAway = (b: ExceptionBill) => (b.discount || 0) + (b.promoDiscount || 0)
+    const discounted = bills.filter((b) => givenAway(b) > 0)
     const comped = bills.filter((b) => b.status === 'COMPED')
     const owing = bills.filter((b) => b.status === 'TAB' || b.status === 'PART_PAID')
 
     return {
-        discountTotal: discounted.reduce((sum, b) => sum + (b.discount || 0), 0),
+        discountTotal: discounted.reduce((sum, b) => sum + givenAway(b), 0),
         discountCount: discounted.length,
         compedTotal: comped.reduce((sum, b) => sum + (b.total || 0), 0),
         compedCount: comped.length,

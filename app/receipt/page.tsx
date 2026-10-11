@@ -72,8 +72,8 @@ function ReceiptContent() {
                         name: i.name,
                         quantity: i.quantity,
                         total: i.price * i.quantity,
-                        variation: i.variation ?? i.variationSize?.variation?.type ?? null,
-                        size: i.cupSize ?? i.size ?? i.variationSize?.size ?? null,
+                        variation: i.variation ?? null,
+                        size: i.cupSize ?? i.size ?? null,
                         sugar: i.sugarLevel ?? null,
                         shot: i.shotType ?? null,
                         isTakeaway: i.isTakeaway,
@@ -138,8 +138,12 @@ function ReceiptContent() {
                 const qr = (bill.payments ?? []).find(
                     (p: any) => p.method === "ONEPAY" && p.paymentStatus === "PENDING" && p.qrCodeData
                 )
-                const taxRate = Number(settings?.taxRate) || 0
-                const tax = taxRate > 0 ? Math.round(bill.total - bill.total / (1 + taxRate / 100)) : 0
+                // The bill's own VAT rate, not today's: the API hands back the
+                // rate stamped at close for a settled bill and the live one
+                // while it is open. Null means a bill from before the rate was
+                // stamped - it prints no VAT line rather than inventing one.
+                const taxRate = bill.taxRate
+                const tax = taxRate ? Math.round(bill.total - bill.total / (1 + taxRate / 100)) : 0
 
                 setData({
                     heading: bill.table.name,
@@ -154,6 +158,7 @@ function ReceiptContent() {
                     gross: bill.gross,
                     discount: bill.discount ?? 0,
                     tax,
+                    taxRate,
                     total: bill.total,
                     paid,
                     balance: bill.balance,
@@ -164,8 +169,8 @@ function ReceiptContent() {
                 })
             })
             .catch((e) => { console.error(e); setError(e.message) })
-        // Waits on settings so the VAT rate is known before the slip renders.
-    }, [sessionId, settings])
+        // No longer waits on settings: the VAT rate arrives on the bill itself.
+    }, [sessionId])
 
     if (error) {
         return (

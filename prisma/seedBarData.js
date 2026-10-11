@@ -154,8 +154,6 @@ async function main() {
     await prisma.recipe.deleteMany({})
     await prisma.stockCount.deleteMany({})
     await prisma.stockTransaction.deleteMany({})
-    await prisma.variationSize.deleteMany({})
-    await prisma.menuVariation.deleteMany({})
     await prisma.menu.deleteMany({})
     await prisma.category.deleteMany({})
     await prisma.ingredient.deleteMany({})
@@ -232,13 +230,7 @@ async function main() {
 
     for (const item of MENU) {
         const menu = await prisma.menu.create({
-            data: { name: item.name, localName: item.lao, categoryId: categoryId[item.cat] },
-        })
-        const variation = await prisma.menuVariation.create({
-            data: { menuId: menu.id, type: "STANDARD", displayOrder: 1 },
-        })
-        await prisma.variationSize.create({
-            data: { variationId: variation.id, size: "Standard", price: item.price, displayOrder: 1 },
+            data: { name: item.name, localName: item.lao, categoryId: categoryId[item.cat], price: item.price },
         })
         for (const [ing, qty] of Object.entries(item.recipe)) {
             await prisma.recipe.create({

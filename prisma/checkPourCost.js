@@ -35,7 +35,6 @@ async function main() {
     const menus = await prisma.menu.findMany({
         include: {
             category: true,
-            variations: { include: { sizes: true } },
             recipes: { include: { ingredient: true } },
         },
         orderBy: { name: "asc" },
@@ -50,10 +49,8 @@ async function main() {
     const rows = []
 
     for (const menu of menus) {
-        const price = Math.min(
-            ...menu.variations.flatMap((v) => v.sizes.map((s) => s.price)).filter((n) => n > 0)
-        )
-        if (!Number.isFinite(price)) continue
+        const price = menu.price
+        if (!(price > 0)) continue
 
         if (menu.recipes.length === 0) {
             console.error(`FAIL  ${menu.name}: sells for ${price} but deducts no stock`)

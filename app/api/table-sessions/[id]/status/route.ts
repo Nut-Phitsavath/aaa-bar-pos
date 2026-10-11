@@ -27,7 +27,19 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
             return NextResponse.json({ error: 'SESSION_ALREADY_CLOSED' }, { status: 409 })
         }
 
-        const session = await prisma.tableSession.update({ where: { id }, data: { status } })
+        // Stamped the first time the bill is asked for, and not moved after.
+        // The floor plan ages this to say nobody has gone yet, and re-stamping
+        // it on a second tap would reset the clock on exactly the table that
+        // has been waiting longest.
+        const session = await prisma.tableSession.update({
+            where: { id },
+            data: {
+                status,
+                ...(status === 'BILL_REQUESTED' && !existing.billRequestedAt
+                    ? { billRequestedAt: new Date() }
+                    : {}),
+            },
+        })
         return NextResponse.json(session)
     } catch (error) {
         console.error('[table-sessions] status PUT failed', error)

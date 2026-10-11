@@ -40,6 +40,9 @@ export type ReceiptData = {
     gross?: number
     discount?: number
     tax: number
+    /** The rate `tax` was worked out at. A reprint quotes the night's rate, not
+     *  today's, so the percentage on the slip matches the baht beside it. */
+    taxRate?: number | null
     total: number
 
     paymentMethod?: string | null
@@ -214,7 +217,7 @@ export function BillReceipt({ data, settings }: { data: ReceiptData; settings: a
                 )}
                 {data.tax > 0 && (
                     <div className="flex justify-between gap-4 opacity-70 text-[11px]">
-                        <span>VAT ({settings?.taxRate ?? 0}%)</span>
+                        <span>VAT ({data.taxRate ?? settings?.taxRate ?? 0}%)</span>
                         <span>{formatTHB(data.tax)}</span>
                     </div>
                 )}

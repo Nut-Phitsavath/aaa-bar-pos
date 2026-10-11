@@ -1,9 +1,10 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requireManager } from '@/lib/auth'
-import { sessionTotal, BILLABLE_ORDER_STATUSES } from '@/lib/sessions'
-import { billTotalOf } from '@/lib/payments'
+import { sessionTotal, BILLABLE_ORDER_STATUSES, sessionBillTotal } from '@/lib/sessions'
 import { outstandingByCustomer } from '@/lib/customer-tabs'
+import { parseMinSpend } from '@/lib/min-spend'
+import { paidTotal } from '@/lib/payments'
 
 // The floor plan polls this every 5s; it must never be served stale.
 export const dynamic = 'force-dynamic'
@@ -25,7 +26,13 @@ export async function GET() {
                         customer: { select: { id: true, name: true } },
                         orders: {
                             select: { status: true, total: true, waiterId: true }
-                        }
+                        },
+                        // So the floor plan can say a table has started paying.
+                        // PART_PAID already existed in lib/bills.ts and drove
+                        // the reports; it never reached the room, so a table
+                        // that had handed over 3,000 of 3,500 looked exactly
+                        // like one that had paid nothing.
+                        payments: true
                     }
                 }
             }
@@ -45,10 +52,20 @@ export async function GET() {
                     id: session.id,
                     status: session.status,
                     openedAt: session.openedAt.toISOString(),
+                    // Distinguishes two bills that share an openedAt, so this
+                    // screen and the till letter them the same way. See
+                    // orderBills in lib/table-ops.
+                    createdAt: session.createdAt.toISOString(),
                     orderCount: billable.length,
                     waiterCount: new Set(billable.map((o) => o.waiterId).filter(Boolean)).size,
                     // What they will actually pay, discount included.
-                    total: billTotalOf(sessionTotal(session.orders), session.discountType, session.discountValue),
+                    total: sessionBillTotal(session),
+                    // Confirmed tenders only: a customer scanning a QR is not
+                    // the bank paying, and a table is not part paid because
+                    // somebody opened their phone.
+                    paid: paidTotal(session.payments),
+                    // When the bill was asked for, so the floor plan can age it.
+                    billRequestedAt: session.billRequestedAt?.toISOString() ?? null,
                     isOwnerVip: session.isOwnerVip,
                     customer: session.customer
                         ? {
@@ -66,6 +83,15 @@ export async function GET() {
                 area: table.area,
                 seats: table.seats,
                 displayOrder: table.displayOrder,
+                // The room's floor, so the manage screen can show which rooms
+                // carry one. Null on an ordinary table.
+                minSpend: table.minSpend,
+                // Settled but not yet cleared, and any booking held on it. The
+                // floor plan resolves these into one state alongside the
+                // sessions - see resolveTableState in lib/table-state.
+                needsClearing: table.needsClearing,
+                reservedFor: table.reservedFor,
+                reservedAt: table.reservedAt?.toISOString() ?? null,
                 sessions,
                 // The oldest bill, which is the party who sat down. Kept so a
                 // table with one bill - almost all of them - reads exactly as
@@ -89,7 +115,7 @@ export async function POST(request: Request) {
     if (gate instanceof Response) return gate
 
     try {
-        const { name, area, seats, displayOrder } = await request.json()
+        const { name, area, seats, displayOrder, minSpend } = await request.json()
 
         if (!name || typeof name !== 'string' || !name.trim()) {
             return NextResponse.json({ error: 'Table name is required' }, { status: 400 })
@@ -103,7 +129,8 @@ export async function POST(request: Request) {
                 // appears as a new tab without a migration.
                 area: String(area || 'INDOOR').trim().slice(0, 24) || 'INDOOR',
                 seats: Number(seats) || 4,
-                displayOrder: Number(displayOrder) || 0
+                displayOrder: Number(displayOrder) || 0,
+                minSpend: parseMinSpend(minSpend)
             }
         })
 

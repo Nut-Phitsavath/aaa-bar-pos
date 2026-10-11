@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog"
-import { Plus, Edit, Trash2, Package, ShoppingCart, Minus, Settings, Search, ArrowUpDown, Store, Warehouse, Printer, Pencil } from "lucide-react"
+import { Plus, Edit, Trash2, Package, ShoppingCart, Minus, Settings, Search, ArrowUpDown, Store, Warehouse, Printer, Pencil, ClipboardCheck } from "lucide-react"
 import { formatTHB } from "@/lib/currency"
 import { formatStock } from "@/lib/stock"
 import { formatStockOf, toBase, fromBase } from "@/lib/units"
@@ -32,7 +32,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useTranslation } from "@/hooks/use-translation"
 import { notify } from "@/components/ui/sonner"
-import { useConfirm } from "@/components/confirm-provider"
+import { useConfirm, useDiscardGuard } from "@/components/confirm-provider"
 
 type Ingredient = {
   id: string
@@ -71,6 +71,8 @@ export default function InventoryPage() {
   const [ingredients, setIngredients] = useState<Ingredient[]>([])
   const [categories, setCategories] = useState<Category[]>([])
   const [isDialogOpen, setIsDialogOpen] = useState(false)
+  // Overlay, Escape, × and Cancel all ask before throwing away typing.
+  const { requestClose, markDirty } = useDiscardGuard(isDialogOpen, (open) => { setIsDialogOpen(open); if (!open) resetForm() })
   const [isCatDialogOpen, setIsCatDialogOpen] = useState(false)
   const [newCatName, setNewCatName] = useState("")
   // Which category row is currently being renamed in place, and the draft.
@@ -446,11 +448,11 @@ export default function InventoryPage() {
           return 0
         }
 
-        // @ts-ignore
+        // @ts-expect-error sortConfig.key indexes a union the sort cannot narrow
         if (a[sortConfig.key] < b[sortConfig.key]) {
           return sortConfig.direction === 'asc' ? -1 : 1;
         }
-        // @ts-ignore
+        // @ts-expect-error same union as above
         if (a[sortConfig.key] > b[sortConfig.key]) {
           return sortConfig.direction === 'asc' ? 1 : -1;
         }
@@ -500,7 +502,7 @@ export default function InventoryPage() {
                 ))}
               </select>
               
-              {/* Req #22: the count starts on paper, at the fridge. */}
+              {/* Req #22: the count starts on paper, at the fridge... */}
               <Button
                 variant="outline"
                 className="border-slate-200"
@@ -508,6 +510,19 @@ export default function InventoryPage() {
               >
                 <Printer className="w-4 h-4 mr-2" />
                 {t.print_count_sheet}
+              </Button>
+
+              {/* ...and ends here. Without this the sheet printed, somebody
+                  walked the room with a pen, and there was nowhere to type the
+                  numbers back in - which is why the variance report had never
+                  had a single row to read. */}
+              <Button
+                variant="outline"
+                className="border-slate-200"
+                onClick={() => router.push('/inventory/count')}
+              >
+                <ClipboardCheck className="w-4 h-4 mr-2" />
+                {t.enter_count}
               </Button>
 
               <Dialog
@@ -642,14 +657,14 @@ export default function InventoryPage() {
               </Dialog>
 
               {(activeTab == "MAIN" || activeTab == "SUB") ? (
-                <Dialog open={isDialogOpen} onOpenChange={(open) => { setIsDialogOpen(open); if (!open) resetForm(); }}>
+                <Dialog open={isDialogOpen} onOpenChange={requestClose}>
                   <DialogTrigger asChild>
                     <Button className="bg-amber-600 hover:bg-amber-700">
                       <Plus className="w-4 h-4 mr-2" />
                       {t.add_ingredient}
                     </Button>
                   </DialogTrigger>
-                  <DialogContent>
+                  <DialogContent onInput={markDirty}>
                     <DialogHeader>
                       <DialogTitle>{editingItem ? t.edit : t.add_item} {t.inventory}</DialogTitle>
                     </DialogHeader>
@@ -722,7 +737,7 @@ export default function InventoryPage() {
                       </div>
                     </div>
                     <DialogFooter>
-                      <Button variant="outline" onClick={() => setIsDialogOpen(false)}>{t.cancel}</Button>
+                      <Button variant="outline" onClick={() => requestClose(false)}>{t.cancel}</Button>
                       <Button className="bg-amber-600 hover:bg-amber-700" onClick={handleSubmit}>
                         {editingItem ? t.update : t.save}
                       </Button>

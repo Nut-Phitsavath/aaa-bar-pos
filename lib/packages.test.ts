@@ -14,19 +14,19 @@ import {
 
 /** The seeded menu, trimmed to what a package draws on. */
 const MENUS: SellableMenu[] = [
-    { menuId: 'm-beerlao', variationSizeId: 'v-beerlao', name: 'Beer Lao', unitPrice: 45, recipe: [{ ingredientId: 'i-beerlao', quantity: 1 }] },
-    { menuId: 'm-heineken', variationSizeId: 'v-heineken', name: 'Heineken', unitPrice: 60, recipe: [{ ingredientId: 'i-heineken', quantity: 1 }] },
-    { menuId: 'm-water', variationSizeId: 'v-water', name: 'Drinking Water', unitPrice: 20, recipe: [{ ingredientId: 'i-water', quantity: 1 }] },
+    { menuId: 'm-beerlao', name: 'Beer Lao', unitPrice: 45, recipe: [{ ingredientId: 'i-beerlao', quantity: 1 }] },
+    { menuId: 'm-heineken', name: 'Heineken', unitPrice: 60, recipe: [{ ingredientId: 'i-heineken', quantity: 1 }] },
+    { menuId: 'm-water', name: 'Drinking Water', unitPrice: 20, recipe: [{ ingredientId: 'i-water', quantity: 1 }] },
     // Not single-serve: a bucket is 2kg of ice, a mojito is six things.
-    { menuId: 'm-icebucket', variationSizeId: 'v-icebucket', name: 'Ice Bucket', unitPrice: 20, recipe: [{ ingredientId: 'i-ice', quantity: 2 }] },
-    { menuId: 'm-mojito', variationSizeId: 'v-mojito', name: 'Mojito', unitPrice: 150, recipe: [{ ingredientId: 'i-rum', quantity: 0.06 }, { ingredientId: 'i-lime', quantity: 1 }] },
+    { menuId: 'm-icebucket', name: 'Ice Bucket', unitPrice: 20, recipe: [{ ingredientId: 'i-ice', quantity: 2 }] },
+    { menuId: 'm-mojito', name: 'Mojito', unitPrice: 150, recipe: [{ ingredientId: 'i-rum', quantity: 0.06 }, { ingredientId: 'i-lime', quantity: 1 }] },
 ]
 
 /** The owner's example: a package of one wine, four Beer Lao, two Heineken. */
 const PACKAGE: Component[] = [
-    { menuId: 'wine', variationSizeId: null, name: 'Wine', unitPrice: 400, quantity: 1 },
-    { menuId: 'beerlao', variationSizeId: null, name: 'Beer Lao', unitPrice: 45, quantity: 4 },
-    { menuId: 'heineken', variationSizeId: null, name: 'Heineken', unitPrice: 60, quantity: 2 },
+    { menuId: 'wine', name: 'Wine', unitPrice: 400, quantity: 1 },
+    { menuId: 'beerlao', name: 'Beer Lao', unitPrice: 45, quantity: 4 },
+    { menuId: 'heineken', name: 'Heineken', unitPrice: 60, quantity: 2 },
 ]
 
 test('a dearer replacement is charged at the difference', () => {
@@ -215,7 +215,7 @@ test('what a swap put in can be swapped out again', () => {
     const held = remainingContents(
         PACKAGE,
         [{ menuId: 'heineken', quantity: 2 }],
-        [{ menuId: 'beerlao', variationSizeId: null, name: 'Beer Lao', unitPrice: 45, quantity: 2 }],
+        [{ menuId: 'beerlao', name: 'Beer Lao', unitPrice: 45, quantity: 2 }],
     )
     // The set named four Beer Lao and the swap added two more.
     assert.equal(held.find((c) => c.menuId === 'beerlao')?.quantity, 6)
@@ -230,7 +230,7 @@ test('a drink the recipe never named still joins the package', () => {
     const held = remainingContents(
         PACKAGE,
         [{ menuId: 'heineken', quantity: 1 }],
-        [{ menuId: 'water', variationSizeId: null, name: 'Drinking Water', unitPrice: 20, quantity: 1 }],
+        [{ menuId: 'water', name: 'Drinking Water', unitPrice: 20, quantity: 1 }],
     )
     assert.equal(held.find((c) => c.menuId === 'water')?.quantity, 1)
     assert.equal(held.find((c) => c.menuId === 'heineken')?.quantity, 1)
@@ -253,7 +253,7 @@ test('taking drinks out with nothing in return is refused', () => {
 
 test('an EACH ingredient at quantity 1 is exchangeable', () => {
     const menus: SellableMenu[] = [
-        { menuId: 'm-heineken', variationSizeId: 'v', name: 'Heineken', unitPrice: 60,
+        { menuId: 'm-heineken', name: 'Heineken', unitPrice: 60,
           recipe: [{ ingredientId: 'i-heineken', quantity: 1, measureType: 'EACH' }] },
     ]
     assert.equal(componentIndex(menus).get('i-heineken')?.name, 'Heineken')
@@ -264,7 +264,7 @@ test('a WEIGHT ingredient is never exchangeable, whatever its quantity', () => {
     // somebody defined a 1kg ice bag. The rule now says what it means: you can
     // hand back a bottle, not a gram of ice.
     const menus: SellableMenu[] = [
-        { menuId: 'm-ice', variationSizeId: 'v', name: 'Ice 1kg', unitPrice: 20,
+        { menuId: 'm-ice', name: 'Ice 1kg', unitPrice: 20,
           recipe: [{ ingredientId: 'i-ice', quantity: 1, measureType: 'WEIGHT' }] },
     ]
     assert.equal(componentIndex(menus).get('i-ice'), undefined)
@@ -274,8 +274,22 @@ test('a VOLUME ingredient is never exchangeable either', () => {
     // A spirit measured in ml: after migration a Chivas Set holds 700ml, not
     // "1 bottle", and nobody trades away the bottle that IS the package.
     const menus: SellableMenu[] = [
-        { menuId: 'm-chivas', variationSizeId: 'v', name: 'Chivas shot', unitPrice: 200,
+        { menuId: 'm-chivas', name: 'Chivas shot', unitPrice: 200,
           recipe: [{ ingredientId: 'i-chivas', quantity: 1, measureType: 'VOLUME' }] },
     ]
     assert.equal(componentIndex(menus).get('i-chivas'), undefined)
+})
+
+test('a package component carries the menu item, not a size row', () => {
+    // The size level is gone: a component is priced and re-stocked by menu
+    // item alone. A stray variationSizeId here means a caller is still
+    // threading the old shape through.
+    const index = componentIndex([
+        { menuId: 'm1', name: 'Heineken', unitPrice: 60,
+          recipe: [{ ingredientId: 'i1', quantity: 1, measureType: 'EACH' }] },
+    ])
+    const [component] = contentsOf([{ ingredientId: 'i1', quantity: 2 }], index)
+    assert.deepEqual(component, {
+        menuId: 'm1', name: 'Heineken', localName: null, unitPrice: 60, quantity: 2,
+    })
 })

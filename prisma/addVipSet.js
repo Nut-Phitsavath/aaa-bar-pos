@@ -38,13 +38,7 @@ async function ensureMenu({ name, lao, categoryName, price, recipe }, ingredient
     if (!category) throw new Error(`No category named ${categoryName}`)
 
     const menu = await prisma.menu.create({
-        data: { name, localName: lao, categoryId: category.id },
-    })
-    const variation = await prisma.menuVariation.create({
-        data: { menuId: menu.id, type: 'STANDARD', displayOrder: 1 },
-    })
-    await prisma.variationSize.create({
-        data: { variationId: variation.id, size: 'Standard', price, displayOrder: 1 },
+        data: { name, localName: lao, categoryId: category.id, price },
     })
     for (const [ingredientName, quantity] of Object.entries(recipe)) {
         const ingredientId = ingredients[ingredientName]
@@ -77,9 +71,9 @@ async function main() {
 
     const set = await prisma.menu.findFirst({
         where: { name: 'VIP Set' },
-        include: { recipes: { include: { ingredient: true } }, variations: { include: { sizes: true } } },
+        include: { recipes: { include: { ingredient: true } } },
     })
-    console.log('VIP Set', set.variations[0].sizes[0].price, 'contains:')
+    console.log('VIP Set', set.price, 'contains:')
     for (const r of set.recipes) console.log('  ', r.quantity, 'x', r.ingredient.name)
 }
 
