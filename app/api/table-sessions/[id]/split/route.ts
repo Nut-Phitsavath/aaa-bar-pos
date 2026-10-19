@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getSessionUser } from '@/lib/auth'
 import { isConfirmed } from '@/lib/payments'
-import { canSplitQuantities, swapChargeLineIds, type MovingLine } from '@/lib/table-ops'
+import { canSplitQuantities, swapChargeLineIds, splitIndexes, SESSION_OPEN_STATUSES, type MovingLine } from '@/lib/table-ops'
 import { recomputeOrderTotal } from '@/lib/swap-charge'
 import { placeLinesOnOrder } from '@/lib/line-moves'
 // Splitting changes the line count a deal is measured against.
@@ -100,10 +100,32 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         const sourceOrder = session.orders.find((o) => o.items.some((i) => i.id === all[0].itemId))!
 
         const created = await prisma.$transaction(async (tx) => {
+            // The letters both halves keep (see splitIndexes). "Tonight" is the
+            // table's current occupancy: from the oldest bill still open on it,
+            // so a half that has already paid and gone still holds its letter.
+            const open = await tx.tableSession.findMany({
+                where: { tableId: session.tableId, status: { in: [...SESSION_OPEN_STATUSES] } },
+                select: { openedAt: true },
+            })
+            const since = new Date(Math.min(...open.map((s) => s.openedAt.getTime()), session.openedAt.getTime()))
+            const lettered = await tx.tableSession.findMany({
+                where: {
+                    tableId: session.tableId,
+                    splitIndex: { not: null },
+                    OR: [{ status: { in: [...SESSION_OPEN_STATUSES] } }, { closedAt: { gte: since } }],
+                },
+                select: { splitIndex: true },
+            })
+            const letters = splitIndexes(session.splitIndex, lettered.map((s) => s.splitIndex!))
+            if (session.splitIndex !== letters.parent) {
+                await tx.tableSession.update({ where: { id: session.id }, data: { splitIndex: letters.parent } })
+            }
+
             const child = await tx.tableSession.create({
                 data: {
                     tableId: session.tableId,
                     status: 'OPEN',
+                    splitIndex: letters.child,
                     openedById: user.id,
                     // Its own opening time: the bill starts when it is split off,
                     // and a slip claiming it opened when the party sat down would

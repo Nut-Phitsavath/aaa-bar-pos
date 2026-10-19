@@ -8,7 +8,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
     canMove, canMerge, canSplit, withSwapCharges,
-    canSplitQuantities, swapChargeLineIds, billLabel, orderBills, canSendLines, canPrintBill,
+    canSplitQuantities, swapChargeLineIds, billLabel, orderBills, canSendLines, canPrintBill, splitIndexes,
 } from './table-ops.ts'
 
 const open = (over = {}) => ({ id: 's1', status: 'OPEN', paidCount: 0, ...over })
@@ -408,4 +408,42 @@ test('a table with nothing sent has no bill to print', () => {
         canPrintBill({ rounds: [{ status: 'HOLD' }, { status: 'CANCELLED' }], unsentLines: 0 }),
         { ok: false, reason: 'NOTHING_SENT' },
     )
+})
+
+// --- The letter a split bill keeps -------------------------------------------
+//
+// Worked out from whichever bills were still open, the letter moved: once T1-a
+// paid, T1-b became plain "T1", and a reprint of either said "T1". The slips a
+// party walks away with have to say which half each one was, for good.
+
+test('the first split letters the original a and the new bill b', () => {
+    assert.deepEqual(splitIndexes(null, []), { parent: 0, child: 1 })
+})
+
+test('splitting a split bill carries on down the alphabet', () => {
+    // T1-b splits again while T1-a is still at the table.
+    assert.deepEqual(splitIndexes(1, [0, 1]), { parent: 1, child: 2 })
+    // T1-a splits after T1-b and T1-c exist: the next letter is d, not b again.
+    assert.deepEqual(splitIndexes(0, [0, 1, 2]), { parent: 0, child: 3 })
+})
+
+test('a letter already given out tonight is not given out twice', () => {
+    // T1-a has paid and gone; T1-b splits. The new bill is T1-c - a second
+    // "T1-a" slip in the same night is the confusion this exists to stop.
+    assert.deepEqual(splitIndexes(1, [0, 1]), { parent: 1, child: 2 })
+    // An unlettered bill on a table that already has lettered ones (bills
+    // split before letters were saved) takes the next free letter.
+    assert.deepEqual(splitIndexes(null, [0, 1]), { parent: 2, child: 3 })
+})
+
+test('a saved letter wins over working it out from the open bills', () => {
+    // T1-a has paid, so only T1-b is still open. It stays T1-b.
+    assert.equal(billLabel('T1', [{ id: 'b', openedAt: '2026-10-19T20:00:00Z', splitIndex: 1 }], 'b'), 'T1-b')
+    // Both open, saved letters given in the opposite order to opening time.
+    const both = [
+        { id: 'x', openedAt: '2026-10-19T19:00:00Z', splitIndex: 1 },
+        { id: 'y', openedAt: '2026-10-19T20:00:00Z', splitIndex: 0 },
+    ]
+    assert.equal(billLabel('T1', both, 'x'), 'T1-b')
+    assert.equal(billLabel('T1', both, 'y'), 'T1-a')
 })

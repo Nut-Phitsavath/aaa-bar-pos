@@ -31,7 +31,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
                         sessions: {
                             where: { status: { not: 'CLOSED' } },
                             orderBy: { openedAt: 'asc' },
-                            select: { id: true, status: true, openedAt: true, createdAt: true },
+                            select: { id: true, status: true, openedAt: true, createdAt: true, splitIndex: true },
                         },
                     },
                 },

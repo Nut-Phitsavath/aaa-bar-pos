@@ -395,6 +395,11 @@ model TableSession {
   /// history can say where a ฿0 closed bill's rounds went, rather than leaving
   /// an empty table session nobody can account for.
   mergedIntoId         String?
+  /// The letter this bill got when its table was split (0 = a, 1 = b): T1-a,
+  /// T1-b. Saved, not worked out from the open bills, so the slip, a reprint
+  /// and the till all keep calling it the same thing after the other half has
+  /// paid. Null for a bill that was never split.
+  splitIndex           Int?
   orders               Order[]
   payments             Payment[]
   /// Package swaps made at this table (req #9: the log lives on the session).
