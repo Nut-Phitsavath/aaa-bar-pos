@@ -201,3 +201,15 @@
     mask-image: linear-gradient(to bottom, #000 calc(100% - 2rem), transparent 100%);
   }
 }
+
+/* Every printout in the app - receipt, Z-report, count sheet - sits inside the
+   app shell, which is min-h-screen twice over. On paper 100vh is one whole
+   page, so the shell alone fills page 1 and anything after it in <body> starts
+   a page 2 that is blank but for itself: a browser extension's injected button,
+   the toaster. Paper is as tall as what is on it, and only the app prints.
+   No transition: <main> animates its size, and a print taken mid-animation
+   still has the screen-tall shell. */
+@media print {
+  .min-h-screen { min-height: 0 !important; transition: none !important; }
+  body > :not(:has(main)) { display: none !important; }
+}
