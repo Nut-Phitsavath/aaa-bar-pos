@@ -24,6 +24,7 @@ import Link from "next/link"
 import { Badge } from "@/components/ui/badge"
 import { formatTHB, calculateChange, THB_DENOMINATIONS, calculateTax, calculateInclusiveTax } from "@/lib/currency"
 import { promoBlocker, promoDiscountFor, type PromoBlocker } from "@/lib/promotions"
+import { recentDuplicates, type DuplicateWarning } from "@/lib/duplicates"
 import { PaymentQR } from "@/components/payment-qr"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
 import { MenuItemCard } from "@/components/menu-item-card"
@@ -161,6 +162,8 @@ function POSPageInner() {
   const searchParams = useSearchParams()
   const sessionIdParam = searchParams.get("session")
   const [session, setSession] = useState<TicketBill | null>(null)
+  /** Lines this table was already served minutes ago, pending a yes or no. */
+  const [duplicateWarnings, setDuplicateWarnings] = useState<DuplicateWarning[]>([])
   const [receiptSrc, setReceiptSrc] = useState<string | null>(null)
   const [waiters, setWaiters] = useState<Waiter[]>([])
   const [waiterId, setWaiterId] = useState("")
@@ -479,7 +482,7 @@ function POSPageInner() {
    * its stock is deducted server-side because the drink has left the shelf, and
    * the money is only booked when the bill is settled.
    */
-  const sendToTable = useCallback(async () => {
+  const performSend = useCallback(async () => {
     if (!session || cart.length === 0) return
     if (!waiterId) { toast.error(t.waiter_required); return }
 
@@ -513,6 +516,14 @@ function POSPageInner() {
         setCart([])
         await loadSession()
         toast.success(t.order_sent)
+
+        // A docket that never printed is food nobody is making. The round is
+        // saved either way, so this is a warning, not a failure.
+        const failed = ((await res.json().catch(() => ({}))).dockets ?? [])
+          .filter((d: { ok: boolean }) => !d.ok)
+        for (const docket of failed) {
+          toast.error(`${docket.station}: ${t.printer_unreachable}`)
+        }
       } else {
         const err = await res.json().catch(() => ({}))
         toast.error(err.error || "Failed to send order")
@@ -523,6 +534,25 @@ function POSPageInner() {
       setIsProcessing(false)
     }
   }, [session, cart, waiterId, total, subtotal, tax, loadSession, t])
+
+  /**
+   * The duplicate case req #5 names: a guest asks two servers, both key it.
+   *
+   * A warning rather than a block - only the person at the table can tell a
+   * duplicate from a second round - and it asks before the drink is poured
+   * instead of leaving it to be voided after it arrives.
+   */
+  const sendToTable = useCallback(() => {
+    if (!session || cart.length === 0) return
+    if (!waiterId) { toast.error(t.waiter_required); return }
+
+    const duplicates = recentDuplicates(cart, session.orders)
+    if (duplicates.length > 0) {
+      setDuplicateWarnings(duplicates)
+      return
+    }
+    void performSend()
+  }, [session, cart, waiterId, performSend, t])
 
   const handleCheckout = useCallback(async () => {
     if (!beeperNumber) {
@@ -1600,6 +1630,38 @@ function POSPageInner() {
             <span className="text-amber-600">{formatTHB(total)}</span>
           </div>
         </div>
+
+        {/* Already sent to this table minutes ago - two servers, one guest. */}
+        <AlertDialog
+          open={duplicateWarnings.length > 0}
+          onOpenChange={(open) => { if (!open) setDuplicateWarnings([]) }}
+        >
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>{t.duplicate_order_title}</AlertDialogTitle>
+              <AlertDialogDescription>{t.duplicate_order_desc}</AlertDialogDescription>
+            </AlertDialogHeader>
+            <ul className="space-y-1 text-sm">
+              {duplicateWarnings.map((d, i) => (
+                <li key={i} className="flex justify-between gap-4 rounded-lg bg-amber-50 px-3 py-2">
+                  <span className="font-semibold">{d.quantity}× {d.name}</span>
+                  <span className="text-muted-foreground">
+                    {d.waiter ? `${d.waiter} · ` : ""}{d.minutesAgo === 0 ? t.just_now : `${d.minutesAgo} ${t.minutes_ago}`}
+                  </span>
+                </li>
+              ))}
+            </ul>
+            <AlertDialogFooter>
+              <AlertDialogCancel onClick={() => setDuplicateWarnings([])}>{t.cancel}</AlertDialogCancel>
+              <AlertDialogAction
+                className="bg-amber-600 hover:bg-amber-700"
+                onClick={() => { setDuplicateWarnings([]); void performSend() }}
+              >
+                {t.send_anyway}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
 
         {/* Resume Warning Dialog */}
         <AlertDialog open={isResumeWarningOpen} onOpenChange={setIsResumeWarningOpen}>

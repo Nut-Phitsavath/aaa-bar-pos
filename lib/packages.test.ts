@@ -236,6 +236,27 @@ test('a drink the recipe never named still joins the package', () => {
     assert.equal(held.find((c) => c.menuId === 'heineken')?.quantity, 1)
 })
 
+test('a drink an earlier swap added can be swapped away again', () => {
+    // The table traded 2 Heineken for 4 water, then changed its mind and traded
+    // 2 of those waters back for Heineken. Two waters are standing on the table.
+    //
+    // Netting the removal only against the recipe left all 4 waters counted:
+    // the exchange screen would let the same bottles be traded a second time,
+    // and the cleanup screen would let 4 of them be restocked - two bottles of
+    // stock invented out of a customer changing their mind twice.
+    const held = remainingContents(
+        PACKAGE,
+        [{ menuId: 'heineken', quantity: 2 }, { menuId: 'water', quantity: 2 }],
+        [
+            { menuId: 'water', name: 'Drinking Water', unitPrice: 20, quantity: 4 },
+            { menuId: 'heineken', name: 'Heineken', unitPrice: 60, quantity: 2 },
+        ],
+    )
+    assert.equal(held.find((c) => c.menuId === 'water')?.quantity, 2)
+    assert.equal(held.find((c) => c.menuId === 'heineken')?.quantity, 2)
+    assert.equal(canSwap(held, [{ menuId: 'water', quantity: 3 }], [{ quantity: 1 }]).ok, false)
+})
+
 test('reversed swaps leave the contents untouched', () => {
     // A reversed swap contributes neither an OUT nor an IN: the caller filters
     // them out, so the package reads exactly as its recipe does.

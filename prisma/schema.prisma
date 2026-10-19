@@ -45,6 +45,14 @@ model Category {
   name          String
   hasSugarLevel Boolean  @default(false)
   hasShotType   Boolean  @default(false)
+  /// Which printer a round's lines go to: BAR or KITCHEN (req #11).
+  ///
+  /// On the category, not the item, because that is the grain a bar actually
+  /// works at - everything in Snacks is made in the kitchen, everything in Beer
+  /// is poured at the bar - and it is the same mapping SambaPOS routes print
+  /// jobs by. Default BAR: in this venue most of the menu is a drink, so the
+  /// wrong default is the rarer mistake.
+  station       String   @default("BAR")
   /// Where this chip sits on the till (0 = first). Neither categories nor menu
   /// items had any order at all: the till showed whatever came back from an
   /// alphabetical query, so the drinks that sell most sat wherever the alphabet

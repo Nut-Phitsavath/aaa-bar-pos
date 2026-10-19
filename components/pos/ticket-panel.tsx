@@ -21,6 +21,8 @@ export type TicketOrder = {
     user: { id: string; name: string } | null
     items: {
         id: string; name: string; localName: string | null; quantity: number; total: number
+        /** Carried so the till can spot the same drink sent twice in minutes. */
+        menuId?: string | null
         note?: string | null
         swappable?: boolean
         swaps?: { lines: { direction: string; name: string; quantity: number }[] }[]

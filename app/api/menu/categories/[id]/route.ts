@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { isStation } from '@/lib/dockets'
 
 export async function PUT(
     request: Request,
@@ -7,7 +8,7 @@ export async function PUT(
 ) {
     try {
         const { id } = await params
-        const { name, hasSugarLevel, hasShotType } = await request.json()
+        const { name, hasSugarLevel, hasShotType, station } = await request.json()
 
         if (!name) return NextResponse.json({ error: 'Name required' }, { status: 400 })
 
@@ -16,7 +17,10 @@ export async function PUT(
             data: {
                 name,
                 hasSugarLevel: Boolean(hasSugarLevel),
-                hasShotType: Boolean(hasShotType)
+                hasShotType: Boolean(hasShotType),
+                // Anything but a known station would route this category's
+                // dockets nowhere; the bar is where most of the menu is made.
+                ...(isStation(station) ? { station } : {})
             }
         })
 

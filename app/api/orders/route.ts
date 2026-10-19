@@ -8,6 +8,7 @@ import { decrementStock } from '@/lib/stock'
 // A bill's promo is a snapshot; adding a round can change what it is worth.
 import { refreshSessionPromo } from '@/lib/session-promo'
 import { requireOpenShift } from '@/lib/shift-guard'
+import { printRound } from '@/lib/printers'
 
 // Force dynamic to prevent caching issues with Orders
 export const dynamic = 'force-dynamic'
@@ -559,7 +560,47 @@ export async function POST(request: Request) {
             return savedOrder
         })
 
-        return NextResponse.json(result)
+        // The paper, once the round is safely saved (req #11).
+        //
+        // Outside the transaction on purpose: a printer that is off, unplugged
+        // or still booting must not roll back an order the bar has already
+        // poured. What the till gets back is which stations printed, so it can
+        // say "kitchen printer not answering" instead of the staff finding out
+        // when the food never arrives.
+        //
+        // ponytail: table rounds only. A counter sale is made in front of the
+        // customer and already prints a receipt; wire it here too the day the
+        // bar starts taking walk-in food orders.
+        let dockets: Awaited<ReturnType<typeof printRound>> = []
+        if (status === 'SENT' && sessionId) {
+            const printable = await prisma.order.findUnique({
+                where: { id: result.id },
+                include: {
+                    session: { include: { table: { select: { name: true } } } },
+                    waiter: { select: { name: true } },
+                    items: {
+                        where: { voidedAt: null },
+                        include: { menu: { select: { category: { select: { station: true } } } } },
+                    },
+                },
+            })
+            if (printable) {
+                dockets = await printRound({
+                    table: printable.session?.table?.name ?? '—',
+                    round: printable.tableOrderNumber,
+                    waiter: printable.waiter?.name ?? null,
+                    at: printable.createdAt,
+                    items: printable.items.map((i) => ({
+                        name: i.name,
+                        quantity: i.quantity,
+                        note: i.note,
+                        station: i.menu?.category?.station ?? 'BAR',
+                    })),
+                })
+            }
+        }
+
+        return NextResponse.json({ ...result, dockets })
 
     } catch (error: any) {
         console.error("Order Transaction Failed:", error)

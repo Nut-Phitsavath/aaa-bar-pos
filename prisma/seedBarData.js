@@ -132,6 +132,8 @@ const MENU = [
 ]
 
 const CATEGORIES = ["Beer", "Sets", "Spirits", "Cocktails", "Mixers", "Snacks"]
+/** Made in the kitchen, so its dockets print there. Everything else: the bar. */
+const KITCHEN_CATEGORIES = ["Snacks"]
 
 const TABLES = [
     { name: "T1", area: "INDOOR", seats: 4 }, { name: "T2", area: "INDOOR", seats: 4 },
@@ -224,7 +226,9 @@ async function main() {
     for (const name of CATEGORIES) {
         // hasSugarLevel / hasShotType stay off: they are the inherited cafe
         // modifiers and a bar has no use for them.
-        const row = await prisma.category.create({ data: { name } })
+        const row = await prisma.category.create({
+            data: { name, station: KITCHEN_CATEGORIES.includes(name) ? "KITCHEN" : "BAR" },
+        })
         categoryId[name] = row.id
     }
 

@@ -269,6 +269,32 @@ export default function SettingsPage() {
                 onCheckedChange={(checked) => setSettings({ ...settings, boldReceipt: checked ? 'true' : 'false' })}
               />
             </div>
+
+            {/* Where a sent round's dockets go. Blank = that station has no
+                printer yet, and nothing is attempted. */}
+            <div className="space-y-3 pt-2">
+              <Label>{t.docket_printers}</Label>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-1">
+                  <p className="text-xs font-semibold text-muted-foreground">{t.station_bar}</p>
+                  <Input
+                    inputMode="url"
+                    placeholder={t.printer_bar_hint}
+                    value={settings.printer_bar || ""}
+                    onChange={(e) => setSettings({ ...settings, printer_bar: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <p className="text-xs font-semibold text-muted-foreground">{t.station_kitchen}</p>
+                  <Input
+                    inputMode="url"
+                    placeholder={t.printer_kitchen_hint}
+                    value={settings.printer_kitchen || ""}
+                    onChange={(e) => setSettings({ ...settings, printer_kitchen: e.target.value })}
+                  />
+                </div>
+              </div>
+            </div>
           </div>
         </Card>
 
