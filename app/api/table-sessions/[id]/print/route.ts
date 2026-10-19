@@ -5,6 +5,7 @@ import { generateOnepayQR } from '@/lib/onepay'
 import { classifyPaymentFailure } from '@/lib/net-status'
 import { sessionTotal, sessionBillTotal } from '@/lib/sessions'
 import { balanceOf } from '@/lib/payments'
+import { canPrintBill } from '@/lib/table-ops'
 
 export const dynamic = 'force-dynamic'
 
@@ -37,6 +38,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
             }
         })
         if (!session) return NextResponse.json({ error: 'Session not found' }, { status: 404 })
+
+        // The till greys the button out; this is for whatever calls it anyway.
+        // It has no cart to see, so it refuses only the bill with nothing sent.
+        const printable = canPrintBill({ rounds: session.orders, unsentLines: 0 })
+        if (!printable.ok) {
+            return NextResponse.json({ error: 'Nothing has been sent to this table yet', reason: printable.reason }, { status: 400 })
+        }
 
         const total = sessionBillTotal(session)
         const balance = balanceOf(total, session.payments)

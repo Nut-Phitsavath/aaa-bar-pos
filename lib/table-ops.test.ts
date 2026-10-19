@@ -8,7 +8,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
     canMove, canMerge, canSplit, withSwapCharges,
-    canSplitQuantities, swapChargeLineIds, billLabel, orderBills, canSendLines,
+    canSplitQuantities, swapChargeLineIds, billLabel, orderBills, canSendLines, canPrintBill,
 } from './table-ops.ts'
 
 const open = (over = {}) => ({ id: 's1', status: 'OPEN', paidCount: 0, ...over })
@@ -377,5 +377,35 @@ test('the split rules still apply to the sending bill', () => {
         canSendLines(open(), otherBill(), [{ id: 'pkg', quantity: 2, hasSwap: true }, { id: 'b', quantity: 5 }],
             [{ itemId: 'pkg', quantity: 1 }], 'shift1'),
         { ok: false, reason: 'SWAPPED_LINE_MOVES_WHOLE' },
+    )
+})
+
+// The printed bill is what the customer pays from, and it carries the QR. It
+// can only show rounds that were sent, so printing with drinks still in the
+// cart hands over a bill - and a QR - for less than the screen says.
+test('a bill prints once every round on it has been sent', () => {
+    assert.deepEqual(canPrintBill({ rounds: [{ status: 'SENT' }], unsentLines: 0 }), { ok: true })
+    assert.deepEqual(canPrintBill({ rounds: [{ status: 'SENT' }, { status: 'COMPLETED' }], unsentLines: 0 }), { ok: true })
+})
+
+test('drinks still in the cart keep the bill from printing', () => {
+    assert.deepEqual(
+        canPrintBill({ rounds: [{ status: 'SENT' }], unsentLines: 2 }),
+        { ok: false, reason: 'UNSENT_ITEMS' },
+    )
+    // Unsent items with nothing sent yet is still "send first", not "empty".
+    assert.deepEqual(
+        canPrintBill({ rounds: [], unsentLines: 3 }),
+        { ok: false, reason: 'UNSENT_ITEMS' },
+    )
+})
+
+test('a table with nothing sent has no bill to print', () => {
+    // A ฿0 bill flips the table to "waiting to pay" with nobody owing anything.
+    assert.deepEqual(canPrintBill({ rounds: [], unsentLines: 0 }), { ok: false, reason: 'NOTHING_SENT' })
+    // Held and cancelled rounds are not on the printed bill either.
+    assert.deepEqual(
+        canPrintBill({ rounds: [{ status: 'HOLD' }, { status: 'CANCELLED' }], unsentLines: 0 }),
+        { ok: false, reason: 'NOTHING_SENT' },
     )
 })

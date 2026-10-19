@@ -333,3 +333,24 @@ export function canSendLines(
     }
     return check
 }
+
+/**
+ * Whether a table's bill can be printed yet.
+ *
+ * The printed bill is what the customer pays from, and Print Bill mints its QR
+ * and marks the table as waiting to pay. It can only list rounds that were
+ * sent, so with drinks still in the cart it would hand over a bill and a QR for
+ * less than the screen says - and with nothing sent at all, a ฿0 bill that
+ * flips the table to "waiting to pay". Send first, then print. Held and
+ * cancelled rounds are not on the printed bill, so they do not count as sent.
+ *
+ * The till passes its cart; the route has no cart and passes 0, so it refuses
+ * only the empty bill.
+ */
+export function canPrintBill(bill: { rounds: { status: string }[]; unsentLines: number }): Check {
+    if (bill.unsentLines > 0) return { ok: false, reason: 'UNSENT_ITEMS' }
+    if (!bill.rounds.some((r) => r.status !== 'HOLD' && r.status !== 'CANCELLED')) {
+        return { ok: false, reason: 'NOTHING_SENT' }
+    }
+    return { ok: true }
+}
