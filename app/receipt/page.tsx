@@ -9,6 +9,7 @@ import { BillReceipt, type ReceiptData } from "@/components/bill-receipt"
 import { useTranslation } from "@/hooks/use-translation"
 import { APP_NAME } from "@/lib/shop"
 import { summariseSwaps } from "@/lib/packages"
+import { tendersOf, counterTenders } from "@/lib/bills"
 
 /** One set of print rules, whether the slip is a page or inside the dialog. */
 const PRINT_CSS = `
@@ -84,6 +85,7 @@ function ReceiptContent() {
                     total: order.total,
                     paymentMethod: order.paymentMethod === "BANK_NOTE" ? "CASH" : order.paymentMethod,
                     cashReceived: order.cashReceived ?? null,
+                    tenders: counterTenders(order),
                 })
             })
             .catch((e) => { console.error(e); setError(e.message) })
@@ -162,6 +164,7 @@ function ReceiptContent() {
                     total: bill.total,
                     paid,
                     balance: bill.balance,
+                    tenders: tendersOf(bill.payments ?? []),
                     fxRateLAK: bill.fxRateLAK,
                     fxRateUSD: bill.fxRateUSD,
                     showUsd: bill.showUsd,

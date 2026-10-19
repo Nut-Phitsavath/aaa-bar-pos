@@ -23,6 +23,7 @@ import Link from "next/link"
 
 import { Badge } from "@/components/ui/badge"
 import { formatTHB, calculateChange, THB_DENOMINATIONS, calculateTax, calculateInclusiveTax } from "@/lib/currency"
+import { counterTenders } from "@/lib/bills"
 import { promoBlocker, promoDiscountFor, type PromoBlocker } from "@/lib/promotions"
 import { recentDuplicates, type DuplicateWarning } from "@/lib/duplicates"
 import { PaymentQR } from "@/components/payment-qr"
@@ -1366,6 +1367,7 @@ function POSPageInner() {
     total: lastOrderInfo.total,
     paymentMethod: lastOrderInfo.paymentMethod,
     cashReceived: lastOrderInfo.cashReceived ?? null,
+    tenders: counterTenders({ paymentMethod: lastOrderInfo.paymentMethod, total: lastOrderInfo.total }),
   } : null
 
   return (

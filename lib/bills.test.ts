@@ -8,7 +8,7 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { tendersOf, billStatus, PAID, PART_PAID, TAB, COMPED, OPEN, VOIDED } from './bills.ts'
+import { tendersOf, billStatus, tenderLabelKey, counterTenders, PAID, PART_PAID, TAB, COMPED, OPEN, VOIDED } from './bills.ts'
 
 const cash = (amount: number) => ({ method: 'CASH', amount, paymentStatus: 'PAID' })
 const qr = (amount: number, paymentStatus = 'PAID') => ({ method: 'ONEPAY', amount, paymentStatus })
@@ -95,4 +95,28 @@ test('a comp of a zero bill still reads as COMPED', () => {
 
 test('an overpaid bill is PAID, not part-paid', () => {
     assert.equal(billStatus({ status: 'CLOSED', total: 880, payments: [cash(1000)] }), PAID)
+})
+
+// --- How it was paid, on the slip -------------------------------------------
+
+test('every tender the bar takes has a printed name', () => {
+    assert.equal(tenderLabelKey('CASH'), 'pay_cash')
+    assert.equal(tenderLabelKey('ONEPAY'), 'pay_onepay')
+    assert.equal(tenderLabelKey('TRANSFER'), 'pay_transfer')
+    // A comp prints as what it is, so it cannot pass for a paid bill.
+    assert.equal(tenderLabelKey('OWNER_VIP'), 'owner_vip')
+    // An old note-counter sale was cash.
+    assert.equal(tenderLabelKey('BANK_NOTE'), 'pay_cash')
+    // Something new prints as itself rather than as nothing.
+    assert.equal(tenderLabelKey('CRYPTO'), null)
+})
+
+test('a counter sale was paid in full, by its one method', () => {
+    assert.deepEqual(counterTenders({ paymentMethod: 'TRANSFER', total: 90 }), [{ method: 'TRANSFER', amount: 90 }])
+    assert.deepEqual(counterTenders({ paymentMethod: 'BANK_NOTE', total: 90 }), [{ method: 'CASH', amount: 90 }])
+})
+
+test('a counter sale nobody has paid for prints no tender', () => {
+    assert.deepEqual(counterTenders({ paymentMethod: 'PAY_LATER', total: 90 }), [])
+    assert.deepEqual(counterTenders({ paymentMethod: null, total: 90 }), [])
 })

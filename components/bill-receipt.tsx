@@ -5,6 +5,7 @@ import { formatTHB, formatLAK, formatUSD, thbToLak, thbToUsd } from "@/lib/curre
 import { APP_NAME } from "@/lib/shop"
 import { QRCodeSVG } from "qrcode.react"
 import { parseNames } from "@/lib/receipt-names"
+import { tenderLabelKey, type Tender } from "@/lib/bills"
 
 export type ReceiptLine = {
     name: string
@@ -50,6 +51,8 @@ export type ReceiptData = {
     /** Table bills only: settled so far, and what is still owed. */
     paid?: number
     balance?: number
+    /** How it was paid, one line per method. Confirmed money only. */
+    tenders?: Tender[]
 
     fxRateLAK?: number | null
     fxRateUSD?: number | null
@@ -244,29 +247,38 @@ export function BillReceipt({ data, settings }: { data: ReceiptData; settings: a
                     </div>
                 ) : null}
 
-                {data.paymentMethod === "CASH" && data.cashReceived != null && (
+                {/* How it was paid: one line per method, so a split bill says
+                    what came in each way and a comp reads as a comp rather
+                    than as a paid bill. */}
+                {(data.tenders?.length ?? 0) > 0 && (
                     <div className="mt-5 pt-3 border-t border-dashed border-slate-300 space-y-2">
-                        <div className="flex justify-between gap-4 opacity-70 text-[11px]">
-                            <span>{t.cash_received}</span>
-                            <span>{formatTHB(data.cashReceived)}</span>
-                        </div>
-                        <div className="flex justify-between gap-4 font-black text-lg text-emerald-700">
-                            <span>{t.change}</span>
-                            <span>{formatTHB(Math.max(0, data.cashReceived - data.total))}</span>
-                        </div>
-                    </div>
-                )}
-
-                {(data.paid ?? 0) > 0 && (
-                    <div className="mt-5 pt-3 border-t border-dashed border-slate-300 space-y-2">
-                        <div className="flex justify-between gap-4 opacity-70 text-[11px]">
-                            <span>{t.amount_paid}</span>
-                            <span>-{formatTHB(data.paid!)}</span>
-                        </div>
-                        <div className="flex justify-between gap-4 font-black text-lg">
-                            <span>{t.balance_due}</span>
-                            <span>{formatTHB(data.balance ?? 0)}</span>
-                        </div>
+                        {data.tenders!.map((tender) => {
+                            const key = tenderLabelKey(tender.method)
+                            return (
+                                <div key={tender.method} className="flex justify-between gap-4 text-[11px]">
+                                    <span>{t.paid_by} · {key ? t[key] : tender.method}</span>
+                                    <span>-{formatTHB(tender.amount)}</span>
+                                </div>
+                            )
+                        })}
+                        {data.paymentMethod === "CASH" && data.cashReceived != null && (
+                            <>
+                                <div className="flex justify-between gap-4 opacity-70 text-[11px]">
+                                    <span>{t.cash_received}</span>
+                                    <span>{formatTHB(data.cashReceived)}</span>
+                                </div>
+                                <div className="flex justify-between gap-4 font-black text-lg text-emerald-700">
+                                    <span>{t.change}</span>
+                                    <span>{formatTHB(Math.max(0, data.cashReceived - data.total))}</span>
+                                </div>
+                            </>
+                        )}
+                        {data.balance != null && (
+                            <div className="flex justify-between gap-4 font-black text-lg">
+                                <span>{t.balance_due}</span>
+                                <span>{formatTHB(data.balance)}</span>
+                            </div>
+                        )}
                     </div>
                 )}
 

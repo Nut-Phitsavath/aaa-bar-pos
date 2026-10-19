@@ -113,7 +113,7 @@ const CASES = [
         },
         look: [
             'Table name large at the top, the reference under it, opened and closed times.',
-            'Balance due ฿0.',
+            '"Paid · <method>" for each way it was paid, then Balance due ฿0.',
             'The kip line (1 ฿ = … ₭) and the total in kip.',
             'The footer, then enough blank paper that tearing does not cut the footer.',
         ],
@@ -126,8 +126,8 @@ const CASES = [
             return s && bill(s.id)
         },
         look: [
-            'Items at full price, "Amount paid" equal to the total, Balance due ฿0.',
-            'Known: nothing on the slip says it was comped - it reads exactly like a paid bill. Decide if that is acceptable.',
+            'Items at full price, then "Paid · Owner VIP" for the whole total, Balance due ฿0.',
+            'It reads as a comp, not as a bill somebody paid.',
         ],
         make: 'Settle a table as Owner / VIP.',
     },
@@ -235,7 +235,7 @@ const CASES = [
         },
         look: [
             'Order number at the top instead of a table.',
-            '"Cash received" and "Change": change = received minus total.',
+            '"Paid · Cash", then "Cash received" and "Change": change = received minus total.',
             'Known: the date prints US-style (9/2/2026, 10:16 PM) while table bills print 02/09/2026 22:16. A customer cannot tell 9 Feb from 2 Sep.',
         ],
         make: 'Ring up a walk-in sale, pay cash with more than the total.',
@@ -247,8 +247,8 @@ const CASES = [
             return o && sale(o.id)
         },
         look: [
+            '"Paid · BCEL QR" or "Paid · Bank transfer" for the total.',
             'No cash received or change lines.',
-            'Known: the slip does not say how it was paid (transfer / QR).',
         ],
         make: 'Ring up a walk-in sale paid by OnePay / transfer.',
     },
