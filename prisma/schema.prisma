@@ -252,6 +252,10 @@ model Order {
   taxAmount          Float?        @default(0)
   cashReceived       Float?        @default(0)
   changeAmount       Float?        @default(0)
+  /// The kip rate a walk-in sale was struck at, so its slip - in kip at a kip
+  /// till, or the kip line on a baht one - reprints the same next month
+  /// (req #18). Table rounds leave it null: their bill stamps the rate at close.
+  fxRateLAK          Float?
   isReportable       Boolean       @default(true)
   userId             String?
   bankReference      String?       @unique

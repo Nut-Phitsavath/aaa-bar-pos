@@ -6,7 +6,8 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
-import { Store, Receipt, DollarSign, Languages, AlertTriangle, Trash2, Bold } from "lucide-react"
+import { Store, Receipt, DollarSign, Languages, AlertTriangle, Trash2, Bold, Banknote, QrCode } from "lucide-react"
+import { BILL_QR_MODES, billQrMode } from "@/lib/bank-qr"
 import { Switch } from "@/components/ui/switch"
 import { useTranslation } from "@/hooks/use-translation"
 import { APP_NAME } from "@/lib/shop"
@@ -14,12 +15,25 @@ import { notify } from "@/components/ui/sonner"
 import { useConfirm } from "@/components/confirm-provider"
 import { useLanguage } from "@/components/language-provider"
 import { Header } from "@/components/header"
+import { useTillCurrency, saveTillCurrency } from "@/lib/till"
+import type { ReceiptCurrency } from "@/lib/currency"
 
 export default function SettingsPage() {
   const [user, setUser] = useState<any>(null)
   const [settings, setSettings] = useState<any>({})
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
+  // Whether the server holds a OnePay account; OnePay for bills is offered only then.
+  const [onepayReady, setOnepayReady] = useState(false)
+  // This device's own choice, not a shop setting: it never goes through Save.
+  const tillCurrency = useTillCurrency()
+  const chooseTillCurrency = (currency: ReceiptCurrency) => {
+    if (saveTillCurrency(currency)) {
+      notify.success(currency === "LAK" ? t.till_prints_kip : t.till_prints_baht)
+    } else {
+      notify.error(t.till_currency_not_saved)
+    }
+  }
   const { t } = useTranslation()
   const confirm = useConfirm()
   const { setLang } = useLanguage()
@@ -31,11 +45,13 @@ export default function SettingsPage() {
 
   const fetchData = async () => {
     try {
-      const [uRes, sRes] = await Promise.all([
+      const [uRes, sRes, oRes] = await Promise.all([
         fetch('/api/auth/me'),
-        fetch('/api/settings')
+        fetch('/api/settings'),
+        fetch('/api/payments/onepay/configured'),
       ])
       if (uRes.ok) setUser((await uRes.json()).user)
+      if (oRes.ok) setOnepayReady(Boolean((await oRes.json()).configured))
       if (sRes.ok) {
         const data = await sRes.json()
         setSettings({
@@ -274,6 +290,85 @@ export default function SettingsPage() {
                 onCheckedChange={(checked) => setSettings({ ...settings, boldReceipt: checked ? 'true' : 'false' })}
               />
             </div>
+
+            {/* This till's slips: kip at the main bar, baht at the VIP counter.
+                Saved on the device the moment it is picked - see lib/till.ts. */}
+            <div className="flex flex-col gap-3 p-4 bg-slate-50 rounded-xl border border-slate-100 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-center gap-3">
+                <div className="bg-slate-200 p-2 rounded-lg">
+                  <Banknote className="w-5 h-5 text-slate-700" />
+                </div>
+                <div>
+                  <p className="font-bold">{t.till_receipt_currency}</p>
+                  <p className="text-xs text-muted-foreground">{t.till_receipt_currency_desc}</p>
+                </div>
+              </div>
+              <div role="radiogroup" aria-label={t.till_receipt_currency} className="flex gap-2 shrink-0">
+                {(["THB", "LAK"] as const).map((currency) => (
+                  <Button
+                    key={currency}
+                    type="button"
+                    role="radio"
+                    aria-checked={tillCurrency === currency}
+                    variant={tillCurrency === currency ? "default" : "outline"}
+                    className="h-11 min-w-24"
+                    onClick={() => chooseTillCurrency(currency)}
+                  >
+                    {currency === "LAK" ? t.currency_kip : t.currency_baht}
+                  </Button>
+                ))}
+              </div>
+            </div>
+
+            {/* Which QR a bill carries - see lib/bank-qr. A shop setting, saved
+                with Save: both counters pay into the same account. */}
+            {(() => {
+              const mode = billQrMode(settings.bill_qr_mode, Boolean(settings.transfer_qr_url))
+              const label = { OFF: t.bill_qr_off, BANK: t.bill_qr_bank, ONEPAY: t.bill_qr_onepay }
+              return (
+                <div className="space-y-3 p-4 bg-slate-50 rounded-xl border border-slate-100">
+                  <div className="flex items-center gap-3">
+                    <div className="bg-slate-200 p-2 rounded-lg">
+                      <QrCode className="w-5 h-5 text-slate-700" />
+                    </div>
+                    <div>
+                      <p className="font-bold">{t.bill_qr}</p>
+                      <p className="text-xs text-muted-foreground">{t.bill_qr_desc}</p>
+                    </div>
+                  </div>
+                  <div role="radiogroup" aria-label={t.bill_qr} className="flex flex-wrap gap-2">
+                    {BILL_QR_MODES.map((option) => (
+                      <Button
+                        key={option}
+                        type="button"
+                        role="radio"
+                        aria-checked={mode === option}
+                        variant={mode === option ? "default" : "outline"}
+                        className="h-11 min-w-24"
+                        disabled={option === "ONEPAY" && !onepayReady && mode !== "ONEPAY"}
+                        onClick={() => setSettings({ ...settings, bill_qr_mode: option })}
+                      >
+                        {label[option]}
+                      </Button>
+                    ))}
+                  </div>
+                  {mode === "BANK" && !settings.transfer_qr_url && (
+                    <p className="text-xs text-amber-700">{t.bill_qr_needs_upload}</p>
+                  )}
+                  {!onepayReady && <p className="text-xs text-muted-foreground">{t.bill_qr_onepay_not_set_up}</p>}
+                  {mode === "ONEPAY" && (
+                    <div className="flex items-center justify-between gap-3 pt-1">
+                      <Label htmlFor="bill-qr-fallback" className="text-sm font-normal">{t.bill_qr_fallback}</Label>
+                      <Switch
+                        id="bill-qr-fallback"
+                        checked={settings.bill_qr_fallback !== "false"}
+                        onCheckedChange={(checked) => setSettings({ ...settings, bill_qr_fallback: checked ? "true" : "false" })}
+                      />
+                    </div>
+                  )}
+                </div>
+              )
+            })()}
 
             {/* Where a sent round's dockets go. Blank = that station has no
                 printer yet, and nothing is attempted. */}

@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getSessionUser } from '@/lib/auth'
-import { generateOnepayQR } from '@/lib/onepay'
+import { generateOnepayQR, onepayConfigured } from '@/lib/onepay'
+import { billQrMode } from '@/lib/bank-qr'
 import { classifyPaymentFailure } from '@/lib/net-status'
 import { sessionTotal, sessionBillTotal } from '@/lib/sessions'
 import { balanceOf } from '@/lib/payments'
@@ -59,7 +60,19 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         let qrCode: string | null = null
         let qrError: string | null = null
 
-        if (balance > 0) {
+        // Only when the owner chose OnePay for bills (Settings -> QR on bills)
+        // and this server is set up for it. The bank QR and Off need no call:
+        // the slip prints the static QR, or nothing, by itself.
+        const qrSettings = await prisma.setting.findMany({ where: { key: { in: ['bill_qr_mode', 'transfer_qr_url'] } } })
+        const mode = billQrMode(
+            qrSettings.find((s) => s.key === 'bill_qr_mode')?.value,
+            Boolean(qrSettings.find((s) => s.key === 'transfer_qr_url')?.value),
+        )
+        if (mode === 'ONEPAY' && balance > 0 && !onepayConfigured()) {
+            qrError = 'OnePay is not set up on this POS'
+        }
+
+        if (mode === 'ONEPAY' && balance > 0 && onepayConfigured()) {
             const payment = await prisma.payment.create({
                 data: {
                     session: { connect: { id } },

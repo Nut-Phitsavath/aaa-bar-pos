@@ -128,3 +128,34 @@ export function billRates(
     }
     return { lak: live.lak, usd: live.usd, tax: live.tax }
 }
+
+/** What a till can print its slips in. Baht is the money; kip is a view of it. */
+export const RECEIPT_CURRENCIES = ['THB', 'LAK'] as const
+export type ReceiptCurrency = (typeof RECEIPT_CURRENCIES)[number]
+
+export function isReceiptCurrency(value: unknown): value is ReceiptCurrency {
+    return typeof value === 'string' && (RECEIPT_CURRENCIES as readonly string[]).includes(value)
+}
+
+/**
+ * How every amount on one slip is written.
+ *
+ * The main bar's customers pay in kip and the VIP counter's in baht, so the
+ * slip follows the till that prints it. Every figure behind it stays in baht;
+ * a kip slip converts each one at the bill's own rate - the rate stamped at
+ * close, so a reprint next month says the same - and does not round, because
+ * the owner wants the exact figure.
+ *
+ * A kip till with no rate to hand (an old counter sale, a bill from before
+ * rates were stamped) prints baht. Quoting today's rate would put a figure on
+ * paper that nobody was charged.
+ */
+export function slipMoney(
+    currency: ReceiptCurrency,
+    rateLak: number | null | undefined,
+): { currency: ReceiptCurrency; format: (thb: number) => string } {
+    if (currency === 'LAK' && rateLak && rateLak > 0) {
+        return { currency: 'LAK', format: (thb) => formatLAK(thbToLak(thb, rateLak)) }
+    }
+    return { currency: 'THB', format: formatTHB }
+}

@@ -18,6 +18,16 @@ const BCEL_BASE_URL = 'https://bcel.la:8093/onepayservice';
 let cachedToken: string | null = null;
 let tokenExpiry: number | null = null;
 
+/**
+ * Whether this server holds a BCEL OnePay account at all. Settings only offers
+ * OnePay for bills when it does, and Print Bill only calls the bank when it is
+ * both chosen and set up - before this, every bill tried, failed, and told
+ * staff the bank was "not responding" when it had never been connected.
+ */
+export function onepayConfigured(): boolean {
+    return Boolean(process.env.ONEPAY_USERNAME && process.env.ONEPAY_PASSWORD)
+}
+
 async function authenticateOnepay(): Promise<{ jwt: string; mcid: string }> {
     // Check cache
     if (cachedToken && tokenExpiry && Date.now() < tokenExpiry) {
