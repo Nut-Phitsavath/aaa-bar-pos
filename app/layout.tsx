@@ -1,5 +1,5 @@
 import type { Metadata } from 'next'
-import { Geist, Geist_Mono, Noto_Sans_Lao } from 'next/font/google'
+import localFont from 'next/font/local'
 import { Analytics } from '@vercel/analytics/next'
 import './globals.css'
 import { ShiftProvider } from '@/components/shift-provider'
@@ -7,15 +7,17 @@ import { ClientLayout } from '@/components/client-layout'
 import { SidebarProvider } from '@/components/sidebar-provider'
 import { LanguageProvider } from '@/components/language-provider'
 
-const _geist = Geist({ subsets: ["latin"] });
-const _geistMono = Geist_Mono({ subsets: ["latin"] });
-
-const notoLaos = Noto_Sans_Lao({
-  subsets: ["lao"],
-  weight: ["400", "700"],
+// Kept in the repo (app/fonts, SIL Open Font License) rather than fetched from
+// Google at build time: Turbopack failed the whole build whenever Google
+// answered with its newer /l/font?kit=... URLs (vercel/next.js#99114), and a
+// bar's internet is not something a build should depend on. One variable file
+// covers every weight the app uses. The two Geist fonts loaded here before
+// were never applied to anything and went with it.
+const notoLaos = localFont({
+  src: './fonts/NotoSansLao-Variable.ttf',
+  weight: '100 900',
   variable: '--font-laos',
   display: 'swap',
-
 });
 
 export const metadata: Metadata = {
