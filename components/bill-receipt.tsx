@@ -4,7 +4,7 @@ import { useEffect, useState } from "react"
 import { useTranslation } from "@/hooks/use-translation"
 import { formatTHB, formatLAK, formatUSD, thbToLak, thbToUsd, slipMoney } from "@/lib/currency"
 import { useTillCurrency } from "@/lib/till"
-import { bankQrFor, decodeQrImage } from "@/lib/bank-qr"
+import { billQrFor, billQrMode, decodeQrImage } from "@/lib/bank-qr"
 import { APP_NAME } from "@/lib/shop"
 import { QRCodeSVG } from "qrcode.react"
 import { parseNames } from "@/lib/receipt-names"
@@ -84,7 +84,13 @@ export function BillReceipt({ data, settings }: { data: ReceiptData; settings: a
 
     // Kip or baht, by the till this prints at - see lib/till.ts.
     const money = slipMoney(useTillCurrency(), data.fxRateLAK)
-    const bankQr = bankQrFor(data, settings?.transfer_qr_url)
+    // Settings -> "QR on bills": OnePay's, the bar's bank QR, or none - see lib/bank-qr.
+    const qr = billQrFor(data, {
+        mode: billQrMode(settings?.bill_qr_mode, Boolean(settings?.transfer_qr_url)),
+        fallback: settings?.bill_qr_fallback !== "false",
+        bankQrUrl: settings?.transfer_qr_url,
+    })
+    const bankQr = qr?.kind === "BANK" ? qr : null
     // What the uploaded QR picture says - see decodeQrImage. Read once per slip.
     const [bankQrPayload, setBankQrPayload] = useState<string | null>(null)
     const bankQrSrc = bankQr?.src
@@ -306,13 +312,13 @@ export function BillReceipt({ data, settings }: { data: ReceiptData; settings: a
                     </div>
                 )}
 
-                {data.qrCodeData && (data.balance ?? 0) > 0 && (
+                {qr?.kind === "ONEPAY" && (
                     <div className="text-center mt-5 pt-4 border-t border-dashed border-slate-300">
                         <p className="text-[10px] font-black">{t.scan_to_pay}</p>
                         <div className="inline-block mt-1">
-                            <QRCodeSVG value={data.qrCodeData} size={150} level="H" />
+                            <QRCodeSVG value={qr.payload} size={150} level="H" />
                         </div>
-                        <p className="font-black mt-1">{money.format(data.balance ?? 0)}</p>
+                        <p className="font-black mt-1">{money.format(qr.thb)}</p>
                     </div>
                 )}
 
