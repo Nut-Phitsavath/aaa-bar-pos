@@ -4,6 +4,7 @@ import { useState, useEffect } from "react"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import { Store, Receipt, DollarSign, Languages, AlertTriangle, Trash2, Bold } from "lucide-react"
 import { Switch } from "@/components/ui/switch"
@@ -246,12 +247,16 @@ export default function SettingsPage() {
 
           <div className="space-y-6">
             <div className="space-y-2">
-              <Label>{t.receipt_footer_message}</Label>
-              <Input
+              <Label htmlFor="receipt-footer">{t.receipt_footer_message}</Label>
+              {/* Several lines: a bar here thanks people in Lao and English. */}
+              <Textarea
+                id="receipt-footer"
+                rows={3}
                 placeholder={t.thank_you}
                 value={settings.receiptFooter || ""}
                 onChange={(e) => setSettings({ ...settings, receiptFooter: e.target.value })}
               />
+              <p className="text-xs text-muted-foreground">{t.receipt_footer_hint}</p>
             </div>
 
             <div className="flex items-center justify-between p-4 bg-slate-50 rounded-xl border border-slate-100">

@@ -293,9 +293,15 @@ export function BillReceipt({ data, settings }: { data: ReceiptData; settings: a
                 )}
 
                 <div className="text-center mt-5 pt-4 border-t border-dashed border-slate-200 text-[10px] opacity-70">
-                    <p className="uppercase tracking-widest font-black mb-0.5">{t.thank_you}</p>
-                    {settings?.receiptFooter && (
-                        <p className="whitespace-pre-wrap">{settings.receiptFooter}</p>
+                    {/* The owner's footer is the footer. Printing a built-in
+                        thank-you above it thanked the customer twice whenever
+                        the owner's own text said thank you, which it usually
+                        does. The built-in line is only for an empty setting,
+                        so the slip never just stops. */}
+                    {settings?.receiptFooter?.trim() ? (
+                        <p className="whitespace-pre-wrap">{settings.receiptFooter.trim()}</p>
+                    ) : (
+                        <p className="uppercase tracking-widest font-black">{t.thank_you}</p>
                     )}
                 </div>
             </div>
