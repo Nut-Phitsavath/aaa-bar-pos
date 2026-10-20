@@ -124,11 +124,6 @@ $startPosContent = "@echo off`r`n" +
 "echo Starting POS Server...`r`n" +
 "start `"POS Server`" cmd /c `"node server.js`"`r`n" +
 "timeout /t 8 /nobreak > nul`r`n" +
-"if exist scripts\start-tunnel.bat (`r`n" +
-"    echo Starting Tunnel...`r`n" +
-"    start `"Cloudflare Tunnel`" cmd /c `"scripts\start-tunnel.bat`"`r`n" +
-"    timeout /t 5 /nobreak > nul`r`n" +
-")`r`n" +
 "if exist scripts\startup_automation.py (`r`n" +
 "    python scripts\startup_automation.py`r`n" +
 ") else (`r`n" +

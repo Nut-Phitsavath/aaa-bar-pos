@@ -31,19 +31,7 @@ Next.js *does not* include assets in the standalone folder by default. You must 
 - Copy the `prisma/` folder to `deploy-pos/prisma/`.
 - Copy the `scripts/` folder to `deploy-pos/scripts/`.
 
-## 6. Fix the Cloudflare Tunnel
-The `config.yml` in `.cloudflared/` has a hardcoded computer path (e.g., `C:\Users\sattavath...`). This **must** be relative to work on a different machine.
-
-1. Find your tunnel JSON file (e.g. `7f11f839-3761-49e2-a77d-8f49bb20acef.json`). It's usually in `C:\Users\username\.cloudflared`.
-2. Copy this JSON file into your project's `.cloudflared/` folder.
-3. Update `.cloudflared/config.yml` like this:
-```yaml
-tunnel: 7f11f839-3761-49e2-a77d-8f49bb20acef
-credentials-file: .cloudflared/7f11f839-3761-49e2-a77d-8f49bb20acef.json
-# ... rest of the file
-```
-
-## 7. Run on target machine
+## 6. Run on target machine
 - Use `node server.js` or the `START-POS.bat` to run.
-- Ensure the target machine has **Node.js** installed and **cloudflared** in its PATH.
-- Manual tunnel command: `cloudflared tunnel --config .cloudflared\config.yml run`
+- Ensure the target machine has **Node.js** installed.
+- No Cloudflare tunnel: that was the cafe's. The bar's till stays on its own LAN.
