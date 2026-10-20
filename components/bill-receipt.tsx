@@ -1,8 +1,10 @@
 "use client"
 
+import { useEffect, useState } from "react"
 import { useTranslation } from "@/hooks/use-translation"
 import { formatTHB, formatLAK, formatUSD, thbToLak, thbToUsd, slipMoney } from "@/lib/currency"
 import { useTillCurrency } from "@/lib/till"
+import { bankQrFor, decodeQrImage } from "@/lib/bank-qr"
 import { APP_NAME } from "@/lib/shop"
 import { QRCodeSVG } from "qrcode.react"
 import { parseNames } from "@/lib/receipt-names"
@@ -82,6 +84,16 @@ export function BillReceipt({ data, settings }: { data: ReceiptData; settings: a
 
     // Kip or baht, by the till this prints at - see lib/till.ts.
     const money = slipMoney(useTillCurrency(), data.fxRateLAK)
+    const bankQr = bankQrFor(data, settings?.transfer_qr_url)
+    // What the uploaded QR picture says - see decodeQrImage. Read once per slip.
+    const [bankQrPayload, setBankQrPayload] = useState<string | null>(null)
+    const bankQrSrc = bankQr?.src
+    useEffect(() => {
+        if (!bankQrSrc) return
+        let live = true
+        decodeQrImage(bankQrSrc).then((payload) => { if (live) setBankQrPayload(payload) })
+        return () => { live = false }
+    }, [bankQrSrc])
 
     return (
         // Lao sets vowel marks above AND below the baseline, so the tight
@@ -301,6 +313,38 @@ export function BillReceipt({ data, settings }: { data: ReceiptData; settings: a
                             <QRCodeSVG value={data.qrCodeData} size={150} level="H" />
                         </div>
                         <p className="font-black mt-1">{money.format(data.balance ?? 0)}</p>
+                    </div>
+                )}
+
+                {/* The bar's static LAO QR while a bill is owed - see lib/bank-qr.
+                    It carries no amount, so the slip says exactly what to type,
+                    in kip whichever till prints it. Large and crisp: thermal heads
+                    are one-bit and a small or smoothed QR stops scanning. */}
+                {bankQr && (
+                    <div className="text-center mt-5 pt-4 border-t border-dashed border-slate-300">
+                        <p className="text-[10px] font-black">{t.scan_with_lao_bank_app}</p>
+                        {bankQrPayload ? (
+                            // Redrawn from what the picture says: vector squares
+                            // stay crisp through the thermal driver.
+                            <QRCodeSVG
+                                value={bankQrPayload}
+                                size={256}
+                                level="M"
+                                marginSize={2}
+                                className="block mx-auto mt-2"
+                                style={{ width: "36mm", height: "36mm" }}
+                            />
+                        ) : (
+                            // The picture itself, when it holds no readable QR.
+                            // Full width and unfiltered: the only way a bitmap
+                            // still scanned through the 58 mm driver.
+                            <img src={bankQr.src} alt="" className="block mx-auto mt-2 w-[44mm] max-w-full h-auto" />
+                        )}
+                        <p className="text-[10px] mt-2">{t.amount_to_transfer}</p>
+                        <p className="font-black text-lg leading-tight">
+                            {bankQr.lak != null ? formatLAK(bankQr.lak) : formatTHB(bankQr.thb)}
+                        </p>
+                        {bankQr.lak != null && <p className="text-[11px] opacity-70">({formatTHB(bankQr.thb)})</p>}
                     </div>
                 )}
 
