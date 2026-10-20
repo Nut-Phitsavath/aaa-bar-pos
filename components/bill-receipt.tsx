@@ -1,7 +1,8 @@
 "use client"
 
 import { useTranslation } from "@/hooks/use-translation"
-import { formatTHB, formatLAK, formatUSD, thbToLak, thbToUsd } from "@/lib/currency"
+import { formatTHB, formatLAK, formatUSD, thbToLak, thbToUsd, slipMoney } from "@/lib/currency"
+import { useTillCurrency } from "@/lib/till"
 import { APP_NAME } from "@/lib/shop"
 import { QRCodeSVG } from "qrcode.react"
 import { parseNames } from "@/lib/receipt-names"
@@ -78,6 +79,9 @@ const isStandard = (v?: string | null) =>
  */
 export function BillReceipt({ data, settings }: { data: ReceiptData; settings: any }) {
     const { t } = useTranslation()
+
+    // Kip or baht, by the till this prints at - see lib/till.ts.
+    const money = slipMoney(useTillCurrency(), data.fxRateLAK)
 
     return (
         // Lao sets vowel marks above AND below the baseline, so the tight
@@ -160,7 +164,7 @@ export function BillReceipt({ data, settings }: { data: ReceiptData; settings: a
                                 long Lao name run straight into its own price. */}
                             <div className="flex justify-between items-start gap-3 font-black">
                                 <span className="flex-1">{lao} x{item.quantity}</span>
-                                <span className="whitespace-nowrap">{formatTHB(item.total)}</span>
+                                <span className="whitespace-nowrap">{money.format(item.total)}</span>
                             </div>
                             {english && (
                                 <div className="text-[10px] text-slate-500 font-bold leading-snug">{english}</div>
@@ -210,18 +214,18 @@ export function BillReceipt({ data, settings }: { data: ReceiptData; settings: a
             <div className="border-t border-dashed border-slate-300 pt-4 space-y-2">
                 <div className="flex justify-between gap-4 opacity-70 text-[11px]">
                     <span>{t.subtotal_net}</span>
-                    <span>{formatTHB(data.total - data.tax)}</span>
+                    <span>{money.format(data.total - data.tax)}</span>
                 </div>
                 {(data.discount ?? 0) > 0 && (
                     <div className="flex justify-between gap-4 text-rose-600 font-bold text-[11px]">
                         <span>{t.discount}</span>
-                        <span>-{formatTHB(data.discount!)}</span>
+                        <span>-{money.format(data.discount!)}</span>
                     </div>
                 )}
                 {data.tax > 0 && (
                     <div className="flex justify-between gap-4 opacity-70 text-[11px]">
                         <span>VAT ({data.taxRate ?? settings?.taxRate ?? 0}%)</span>
-                        <span>{formatTHB(data.tax)}</span>
+                        <span>{money.format(data.tax)}</span>
                     </div>
                 )}
 
@@ -230,15 +234,21 @@ export function BillReceipt({ data, settings }: { data: ReceiptData; settings: a
                     no minimum space between two items that fill the width. */}
                 <div className="flex justify-between items-baseline gap-4 font-black text-xl mt-3 pt-3 border-t border-dashed border-slate-300">
                     <span>{t.total_caps}</span>
-                    <span className="whitespace-nowrap">{formatTHB(data.total)}</span>
+                    <span className="whitespace-nowrap">{money.format(data.total)}</span>
                 </div>
 
-                {/* Requirement #17: the kip equivalent and the rate it was struck
-                    at. On a settled bill this is the rate stored on the row. */}
+                {/* Requirement #17: the other currency and the rate it was
+                    struck at. On a settled bill this is the rate stored on the
+                    row. A kip slip shows the baht it stands for; a baht slip
+                    shows the kip. */}
                 {data.fxRateLAK ? (
                     <div className="flex justify-between gap-4 opacity-70 text-[11px]">
                         <span>1 ฿ = {data.fxRateLAK.toLocaleString("en-US")} ₭</span>
-                        <span>{formatLAK(thbToLak(data.total, data.fxRateLAK))}</span>
+                        <span>
+                            {money.currency === "LAK"
+                                ? formatTHB(data.total)
+                                : formatLAK(thbToLak(data.total, data.fxRateLAK))}
+                        </span>
                     </div>
                 ) : null}
                 {data.showUsd && data.fxRateUSD ? (
@@ -257,7 +267,7 @@ export function BillReceipt({ data, settings }: { data: ReceiptData; settings: a
                             return (
                                 <div key={tender.method} className="flex justify-between gap-4 text-[11px]">
                                     <span>{t.paid_by} · {key ? t[key] : tender.method}</span>
-                                    <span>-{formatTHB(tender.amount)}</span>
+                                    <span>-{money.format(tender.amount)}</span>
                                 </div>
                             )
                         })}
@@ -267,18 +277,18 @@ export function BillReceipt({ data, settings }: { data: ReceiptData; settings: a
                             <>
                                 <div className="flex justify-between gap-4 opacity-70 text-[11px]">
                                     <span>{t.cash_received}</span>
-                                    <span>{formatTHB(data.cashReceived)}</span>
+                                    <span>{money.format(data.cashReceived)}</span>
                                 </div>
                                 <div className="flex justify-between gap-4 font-black text-lg text-emerald-700">
                                     <span>{t.change}</span>
-                                    <span>{formatTHB(Math.max(0, data.cashReceived - data.total))}</span>
+                                    <span>{money.format(Math.max(0, data.cashReceived - data.total))}</span>
                                 </div>
                             </>
                         )}
                         {data.balance != null && (
                             <div className="flex justify-between gap-4 font-black text-lg">
                                 <span>{t.balance_due}</span>
-                                <span>{formatTHB(data.balance)}</span>
+                                <span>{money.format(data.balance)}</span>
                             </div>
                         )}
                     </div>
@@ -290,7 +300,7 @@ export function BillReceipt({ data, settings }: { data: ReceiptData; settings: a
                         <div className="inline-block mt-1">
                             <QRCodeSVG value={data.qrCodeData} size={150} level="H" />
                         </div>
-                        <p className="font-black mt-1">{formatTHB(data.balance ?? 0)}</p>
+                        <p className="font-black mt-1">{money.format(data.balance ?? 0)}</p>
                     </div>
                 )}
 
