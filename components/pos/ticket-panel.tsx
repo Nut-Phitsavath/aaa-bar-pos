@@ -6,6 +6,7 @@ import { useTranslation } from "@/hooks/use-translation"
 import { Button } from "@/components/ui/button"
 import { Printer, Plus, Minus, Trash2, Ban, Repeat, ArrowRightLeft, StickyNote, ShoppingBag } from "lucide-react"
 import { formatTHB } from "@/lib/currency"
+import { canPrintBill } from "@/lib/table-ops"
 import { VoidDialog, type VoidTarget } from "@/components/pos/void-dialog"
 import { ExchangeDialog } from "@/components/pos/exchange-dialog"
 import { SwapSummary } from "@/components/pos/swap-summary"
@@ -21,6 +22,8 @@ export type TicketOrder = {
     user: { id: string; name: string } | null
     items: {
         id: string; name: string; localName: string | null; quantity: number; total: number
+        /** Carried so the till can spot the same drink sent twice in minutes. */
+        menuId?: string | null
         note?: string | null
         swappable?: boolean
         swaps?: { lines: { direction: string; name: string; quantity: number }[] }[]
@@ -111,6 +114,8 @@ export function TicketPanel({
 
     const pendingTotal = cart.reduce((sum, l) => sum + l.price * l.quantity, 0)
     const hasPending = cart.length > 0
+    // Send first, then print: the printed bill only lists sent rounds.
+    const printable = canPrintBill({ rounds, unsentLines: cart.length })
 
     return (
         <div className="w-[440px] xl:w-[520px] flex flex-col bg-white border-l border-slate-200 shrink-0">
@@ -328,6 +333,11 @@ export function TicketPanel({
                         {formatTHB(bill.balance + pendingTotal)}
                     </span>
                 </div>
+                {!printable.ok && (
+                    <p className="text-xs text-slate-600">
+                        {printable.reason === "UNSENT_ITEMS" ? t.print_bill_send_first : t.print_bill_nothing_sent}
+                    </p>
+                )}
 
                 <div className="grid grid-cols-3 gap-2 pt-1">
                     {/* Move, merge and split (req #2). One door for the three,
@@ -346,7 +356,7 @@ export function TicketPanel({
                     <Button
                         variant="outline"
                         className="h-12 border-slate-300"
-                        disabled={busy}
+                        disabled={busy || !printable.ok}
                         onClick={onPrint}
                     >
                         <Printer className="w-4 h-4 mr-2" />

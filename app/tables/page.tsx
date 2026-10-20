@@ -24,6 +24,8 @@ type TableBill = {
   status: string
   openedAt: string
   createdAt: string
+  /** The split letter, 0 = a; null if the bill was never split. */
+  splitIndex: number | null
   /** Confirmed tenders so far. Below `total` means they have started paying. */
   paid: number
   /** When the bill was asked for, so the wait can be aged. */

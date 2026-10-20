@@ -56,6 +56,9 @@ export async function GET() {
                     // screen and the till letter them the same way. See
                     // orderBills in lib/table-ops.
                     createdAt: session.createdAt.toISOString(),
+                    // The letter saved at the split, which wins over working
+                    // one out - see billLabel.
+                    splitIndex: session.splitIndex,
                     orderCount: billable.length,
                     waiterCount: new Set(billable.map((o) => o.waiterId).filter(Boolean)).size,
                     // What they will actually pay, discount included.

@@ -108,6 +108,24 @@ export function splitSuffix(existingSplits: number): string {
 }
 
 /**
+ * The letters a split hands out, saved on the bills (0 = a).
+ *
+ * Saved rather than worked out from whichever bills are still open, because
+ * that moved: once T1-a paid, T1-b became plain "T1", and a reprint of either
+ * said "T1" - two slips for one party, neither saying which half it was.
+ *
+ * `taken` is every letter already given out on this table tonight, including
+ * bills that have since paid and gone, so a letter is never handed out twice
+ * in one night. The original keeps its letter, or takes the next free one if
+ * it never had one (bills split before letters were saved, or the first split).
+ */
+export function splitIndexes(parent: number | null, taken: number[]): { parent: number; child: number } {
+    const top = taken.length ? Math.max(...taken) : -1
+    const p = parent ?? top + 1
+    return { parent: p, child: Math.max(p, top) + 1 }
+}
+
+/**
  * An exchange upcharge travels with the package line it came from.
  *
  * "ສ່ວນຕ່າງການແລກປ່ຽນ" is not a line a guest ordered - it is the price
@@ -235,6 +253,8 @@ export type BillIdentity = {
     openedAt: Date | string
     /** When the row was written. Distinguishes bills that share an openedAt. */
     createdAt?: Date | string
+    /** The letter saved when the bill was split (0 = a); null if never split. */
+    splitIndex?: number | null
 }
 
 /**
@@ -290,10 +310,21 @@ export function billLabel(
     siblings: BillIdentity[],
     sessionId: string,
 ): string {
+    // A saved letter is the bill's name for good - see splitIndexes. Working it
+    // out from the open bills is only for bills split before letters were saved.
+    const saved = siblings.find((s) => s.id === sessionId)?.splitIndex
+    if (saved != null) return `${tableName}-${splitSuffix(saved)}`
     if (siblings.length <= 1) return tableName
-    const index = orderBills(siblings).findIndex((s) => s.id === sessionId)
-    if (index < 0) return tableName
-    return `${tableName}-${splitSuffix(index)}`
+    // Unlettered bills (a new party next to a reopened half, or bills split
+    // before letters were saved) take the free letters in opening order, so
+    // none of them can land on a letter a saved bill already answers to.
+    const taken = new Set(siblings.map((s) => s.splitIndex).filter((i): i is number => i != null))
+    const unlettered = orderBills(siblings).filter((s) => s.splitIndex == null)
+    const position = unlettered.findIndex((s) => s.id === sessionId)
+    if (position < 0) return tableName
+    let letter = -1
+    for (let seen = -1; seen < position;) if (!taken.has(++letter)) seen++
+    return `${tableName}-${splitSuffix(letter)}`
 }
 
 /**
@@ -332,4 +363,25 @@ export function canSendLines(
         return { ok: false, reason: 'CANNOT_SEND_EVERYTHING' }
     }
     return check
+}
+
+/**
+ * Whether a table's bill can be printed yet.
+ *
+ * The printed bill is what the customer pays from, and Print Bill mints its QR
+ * and marks the table as waiting to pay. It can only list rounds that were
+ * sent, so with drinks still in the cart it would hand over a bill and a QR for
+ * less than the screen says - and with nothing sent at all, a ฿0 bill that
+ * flips the table to "waiting to pay". Send first, then print. Held and
+ * cancelled rounds are not on the printed bill, so they do not count as sent.
+ *
+ * The till passes its cart; the route has no cart and passes 0, so it refuses
+ * only the empty bill.
+ */
+export function canPrintBill(bill: { rounds: { status: string }[]; unsentLines: number }): Check {
+    if (bill.unsentLines > 0) return { ok: false, reason: 'UNSENT_ITEMS' }
+    if (!bill.rounds.some((r) => r.status !== 'HOLD' && r.status !== 'CANCELLED')) {
+        return { ok: false, reason: 'NOTHING_SENT' }
+    }
+    return { ok: true }
 }

@@ -10,7 +10,7 @@ import { Header } from "@/components/header"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Switch } from "@/components/ui/switch"
-import { Plus, Edit, Trash2, Search, ImageIcon, X, Check, GripVertical, ClipboardList } from "lucide-react"
+import { Plus, Edit, Trash2, Search, ImageIcon, X, Check, GripVertical, ClipboardList, Printer } from "lucide-react"
 import Link from "next/link"
 import Image from "next/image"
 import { useTranslation } from "@/hooks/use-translation"
@@ -45,7 +45,7 @@ export default function MenuPage() {
   const { requestClose, markDirty } = useDiscardGuard(isDialogOpen, setIsDialogOpen)
   const [editingItem, setEditingItem] = useState<MenuItem | null>(null)
   const [menuItems, setMenuItems] = useState<MenuItem[]>([])
-  const [categories, setCategories] = useState<{ id: string, name: string, hasSugarLevel: boolean, hasShotType: boolean }[]>([])
+  const [categories, setCategories] = useState<{ id: string, name: string, hasSugarLevel: boolean, hasShotType: boolean, station: string }[]>([])
   const [reordering, setReordering] = useState(false)
   // Press and hold anywhere on the list to rearrange it. There is a button too:
   // a gesture nobody is told about is a feature nobody finds.
@@ -55,7 +55,7 @@ export default function MenuPage() {
   const [newCategoryName, setNewCategoryName] = useState("")
   const [newCatSugar, setNewCatSugar] = useState(false)
   const [newCatShot, setNewCatShot] = useState(false)
-  const [editingCategory, setEditingCategory] = useState<{ id: string, name: string, hasSugarLevel: boolean, hasShotType: boolean } | null>(null)
+  const [editingCategory, setEditingCategory] = useState<{ id: string, name: string, hasSugarLevel: boolean, hasShotType: boolean, station: string } | null>(null)
   const [activeCategory, setActiveCategory] = useState<string>("All")
 
   // Form states
@@ -142,7 +142,9 @@ export default function MenuPage() {
         body: JSON.stringify({
           name: editingCategory.name,
           hasSugarLevel: editingCategory.hasSugarLevel,
-          hasShotType: editingCategory.hasShotType
+          hasShotType: editingCategory.hasShotType,
+          // The dialog's Bar/Kitchen choice; left out, the route keeps the old one.
+          station: editingCategory.station
         }),
         headers: { 'Content-Type': 'application/json' }
       })
@@ -449,6 +451,21 @@ export default function MenuPage() {
                                 <Label htmlFor={`shot-${cat.id}`} className="text-xs">{t.shot}</Label>
                               </div>
                             </div>
+                            {/* Which printer this category's lines come out of. */}
+                            <div className="flex items-center gap-2">
+                              <Printer className="w-3.5 h-3.5 text-slate-400" />
+                              {(["BAR", "KITCHEN"] as const).map((station) => (
+                                <Button
+                                  key={station}
+                                  size="sm"
+                                  variant={editingCategory.station === station ? "default" : "outline"}
+                                  className="h-8 px-3 text-xs"
+                                  onClick={() => setEditingCategory({ ...editingCategory, station })}
+                                >
+                                  {station === "BAR" ? t.station_bar : t.station_kitchen}
+                                </Button>
+                              ))}
+                            </div>
                           </>
                         ) : (
                           <>
@@ -464,6 +481,10 @@ export default function MenuPage() {
                               </div>
                             </div>
                             <div className="flex gap-3">
+                              <Badge variant="outline" className="text-[10px] bg-amber-50 text-amber-800 border-amber-200">
+                                <Printer className="w-3 h-3 mr-1" />
+                                {cat.station === "KITCHEN" ? t.station_kitchen : t.station_bar}
+                              </Badge>
                               {cat.hasSugarLevel && <Badge variant="outline" className="text-[10px] bg-blue-50 text-blue-700 border-blue-200">{t.sugar_level}</Badge>}
                               {cat.hasShotType && <Badge variant="outline" className="text-[10px] bg-purple-50 text-purple-700 border-purple-200">{t.shot_type}</Badge>}
                               {!cat.hasSugarLevel && !cat.hasShotType && <span className="text-[10px] text-muted-foreground italic">{t.no_customizations}</span>}

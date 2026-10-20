@@ -4,6 +4,7 @@ import { useState, useEffect } from "react"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import { Store, Receipt, DollarSign, Languages, AlertTriangle, Trash2, Bold } from "lucide-react"
 import { Switch } from "@/components/ui/switch"
@@ -246,12 +247,16 @@ export default function SettingsPage() {
 
           <div className="space-y-6">
             <div className="space-y-2">
-              <Label>{t.receipt_footer_message}</Label>
-              <Input
+              <Label htmlFor="receipt-footer">{t.receipt_footer_message}</Label>
+              {/* Several lines: a bar here thanks people in Lao and English. */}
+              <Textarea
+                id="receipt-footer"
+                rows={3}
                 placeholder={t.thank_you}
                 value={settings.receiptFooter || ""}
                 onChange={(e) => setSettings({ ...settings, receiptFooter: e.target.value })}
               />
+              <p className="text-xs text-muted-foreground">{t.receipt_footer_hint}</p>
             </div>
 
             <div className="flex items-center justify-between p-4 bg-slate-50 rounded-xl border border-slate-100">
@@ -268,6 +273,32 @@ export default function SettingsPage() {
                 checked={settings.boldReceipt === 'true'}
                 onCheckedChange={(checked) => setSettings({ ...settings, boldReceipt: checked ? 'true' : 'false' })}
               />
+            </div>
+
+            {/* Where a sent round's dockets go. Blank = that station has no
+                printer yet, and nothing is attempted. */}
+            <div className="space-y-3 pt-2">
+              <Label>{t.docket_printers}</Label>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-1">
+                  <p className="text-xs font-semibold text-muted-foreground">{t.station_bar}</p>
+                  <Input
+                    inputMode="url"
+                    placeholder={t.printer_bar_hint}
+                    value={settings.printer_bar || ""}
+                    onChange={(e) => setSettings({ ...settings, printer_bar: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <p className="text-xs font-semibold text-muted-foreground">{t.station_kitchen}</p>
+                  <Input
+                    inputMode="url"
+                    placeholder={t.printer_kitchen_hint}
+                    value={settings.printer_kitchen || ""}
+                    onChange={(e) => setSettings({ ...settings, printer_kitchen: e.target.value })}
+                  />
+                </div>
+              </div>
             </div>
           </div>
         </Card>

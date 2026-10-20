@@ -53,6 +53,36 @@ export function tendersOf(payments: PaymentLike[]): Tender[] {
 }
 
 /**
+ * The translation key a tender prints under, or null for one the app has no
+ * name for - which then prints as its raw method rather than as nothing.
+ * BANK_NOTE is what old counter sales stored for cash.
+ */
+export function tenderLabelKey(method: string): 'pay_cash' | 'pay_onepay' | 'pay_transfer' | 'owner_vip' | 'comped' | null {
+    switch (method) {
+        case 'CASH': case 'BANK_NOTE': return 'pay_cash'
+        case 'ONEPAY': return 'pay_onepay'
+        case 'TRANSFER': return 'pay_transfer'
+        case 'OWNER_VIP': return 'owner_vip'
+        case 'COMPED': return 'comped'
+        default: return null
+    }
+}
+
+/**
+ * How a counter sale was paid. It has no payment rows: the sale is paid in
+ * full, at once, by the one method on the order - unless it went on a tab, in
+ * which case nothing was paid and the slip says nothing about a tender.
+ *
+ * A complimentary walk-in is stored as CASH but not reportable; it prints as
+ * comped, because "Paid · Cash" on it claims money that never changed hands.
+ */
+export function counterTenders(order: { paymentMethod: string | null; total: number; isReportable?: boolean }): Tender[] {
+    if (!order.paymentMethod || order.paymentMethod === 'PAY_LATER') return []
+    if (order.isReportable === false) return [{ method: 'COMPED', amount: order.total }]
+    return [{ method: order.paymentMethod === 'BANK_NOTE' ? 'CASH' : order.paymentMethod, amount: order.total }]
+}
+
+/**
  * What state the bill ended in.
  *
  * Order matters. A comp is checked before "is it settled", because an owner

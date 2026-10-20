@@ -45,7 +45,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         if (!check.ok) return NextResponse.json({ error: check.reason }, { status: 409 })
 
         await prisma.$transaction([
-            prisma.tableSession.update({ where: { id }, data: { tableId: target.id } }),
+            // The split letter stays behind: a move only goes to a free table,
+            // where this bill is the only one, and "T3-b" there names a split
+            // that never happened at T3.
+            prisma.tableSession.update({ where: { id }, data: { tableId: target.id, splitIndex: null } }),
             prisma.tableSessionEvent.create({
                 data: {
                     sessionId: id,

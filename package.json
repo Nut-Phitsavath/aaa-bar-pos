@@ -16,7 +16,9 @@
     "check:pourcost": "node prisma/checkPourCost.js",
     "check:reports": "node prisma/checkReports.js",
     "db:counts": "node prisma/seedStockCounts.js",
-    "check:routes": "node prisma/checkRoutes.js"
+    "check:routes": "node prisma/checkRoutes.js",
+    "check:flows": "node prisma/checkBarFlows.js",
+    "check:receipts": "node prisma/checkReceipts.js"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

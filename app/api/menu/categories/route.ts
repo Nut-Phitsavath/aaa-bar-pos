@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { isStation } from '@/lib/dockets'
 
 export async function GET() {
     try {
@@ -16,14 +17,17 @@ export async function GET() {
 
 export async function POST(request: Request) {
     try {
-        const { name, hasSugarLevel, hasShotType } = await request.json()
+        const { name, hasSugarLevel, hasShotType, station } = await request.json()
         if (!name) return NextResponse.json({ error: 'Name required' }, { status: 400 })
 
         const category = await prisma.category.create({
             data: {
                 name,
                 hasSugarLevel: Boolean(hasSugarLevel),
-                hasShotType: Boolean(hasShotType)
+                hasShotType: Boolean(hasShotType),
+                // Unset or nonsense means the bar, which is where most of this
+                // menu is made. See the schema comment on Category.station.
+                ...(isStation(station) ? { station } : {})
             }
         })
 

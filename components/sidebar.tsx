@@ -5,7 +5,6 @@ import Link from "next/link"
 import { useEffect, useState } from "react"
 import {
     LayoutDashboard,
-    LayoutGrid,
     ShoppingCart,
     Receipt,
     List,
@@ -36,6 +35,31 @@ import { Label } from "@/components/ui/label"
 import { formatTHB } from "@/lib/currency"
 import { cn } from "@/lib/utils"
 import { useSidebar } from "@/components/sidebar-provider"
+
+/**
+ * A table, for the floor plan.
+ *
+ * lucide-react has no furniture table - its "Table" is a spreadsheet grid - and
+ * the grid Tables used before was the same shape as Dashboard's, so the two
+ * links sat one above the other looking alike. Four legs and a stretcher: a
+ * pedestal read as the letter T at 24px, and a table seen from above read as a
+ * cog. Drawn on lucide's own grid (24px, 2px round strokes) to sit with the
+ * icons around it.
+ */
+function TableIcon(props: React.SVGProps<SVGSVGElement>) {
+    return (
+        <svg
+            xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"
+            aria-hidden="true" {...props}
+        >
+            <rect x="2" y="6" width="20" height="3" rx="1" />
+            <path d="M5 9v11" />
+            <path d="M19 9v11" />
+            <path d="M5 14h14" />
+        </svg>
+    )
+}
 
 export function Sidebar() {
     const pathname = usePathname()
@@ -99,7 +123,7 @@ export function Sidebar() {
     // Navigation Items
     const mainNavItems = [
         { name: t.dashboard, href: "/dashboard", icon: LayoutDashboard },
-        { name: t.tables, href: "/tables", icon: LayoutGrid },
+        { name: t.tables, href: "/tables", icon: TableIcon },
         { name: t.pos, href: "/pos", icon: ShoppingCart },
         { name: t.bill_history, href: "/orders", icon: Receipt },
         { name: t.menu, href: "/menu", icon: List },

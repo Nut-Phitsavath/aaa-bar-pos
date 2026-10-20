@@ -9,6 +9,8 @@ import { BillReceipt, type ReceiptData } from "@/components/bill-receipt"
 import { useTranslation } from "@/hooks/use-translation"
 import { APP_NAME } from "@/lib/shop"
 import { summariseSwaps } from "@/lib/packages"
+import { tendersOf, counterTenders } from "@/lib/bills"
+import { splitSuffix } from "@/lib/table-ops"
 
 /** One set of print rules, whether the slip is a page or inside the dialog. */
 const PRINT_CSS = `
@@ -84,6 +86,7 @@ function ReceiptContent() {
                     total: order.total,
                     paymentMethod: order.paymentMethod === "BANK_NOTE" ? "CASH" : order.paymentMethod,
                     cashReceived: order.cashReceived ?? null,
+                    tenders: counterTenders(order),
                 })
             })
             .catch((e) => { console.error(e); setError(e.message) })
@@ -145,9 +148,13 @@ function ReceiptContent() {
                 const taxRate = bill.taxRate
                 const tax = taxRate ? Math.round(bill.total - bill.total / (1 + taxRate / 100)) : 0
 
+                // A split party walks away with two slips for one table; each
+                // says which half it is, by the letter saved at the split, so a
+                // reprint after the other half has paid still says T1-b.
+                const split = bill.splitIndex != null
                 setData({
-                    heading: bill.table.name,
-                    headingLabel: "ໂຕະ / TABLE",
+                    heading: split ? `${bill.table.name}-${splitSuffix(bill.splitIndex)}` : bill.table.name,
+                    headingLabel: split ? "ໂຕະ / TABLE · ແຍກບິນ / SPLIT BILL" : "ໂຕະ / TABLE",
                     subheading: reference,
                     date: stamp(bill.openedAt),
                     staffName: posStaff.join(", ") || null,
@@ -162,6 +169,7 @@ function ReceiptContent() {
                     total: bill.total,
                     paid,
                     balance: bill.balance,
+                    tenders: tendersOf(bill.payments ?? []),
                     fxRateLAK: bill.fxRateLAK,
                     fxRateUSD: bill.fxRateUSD,
                     showUsd: bill.showUsd,

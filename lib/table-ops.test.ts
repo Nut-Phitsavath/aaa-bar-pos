@@ -8,7 +8,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
     canMove, canMerge, canSplit, withSwapCharges,
-    canSplitQuantities, swapChargeLineIds, billLabel, orderBills, canSendLines,
+    canSplitQuantities, swapChargeLineIds, billLabel, orderBills, canSendLines, canPrintBill, splitIndexes,
 } from './table-ops.ts'
 
 const open = (over = {}) => ({ id: 's1', status: 'OPEN', paidCount: 0, ...over })
@@ -378,4 +378,90 @@ test('the split rules still apply to the sending bill', () => {
             [{ itemId: 'pkg', quantity: 1 }], 'shift1'),
         { ok: false, reason: 'SWAPPED_LINE_MOVES_WHOLE' },
     )
+})
+
+// The printed bill is what the customer pays from, and it carries the QR. It
+// can only show rounds that were sent, so printing with drinks still in the
+// cart hands over a bill - and a QR - for less than the screen says.
+test('a bill prints once every round on it has been sent', () => {
+    assert.deepEqual(canPrintBill({ rounds: [{ status: 'SENT' }], unsentLines: 0 }), { ok: true })
+    assert.deepEqual(canPrintBill({ rounds: [{ status: 'SENT' }, { status: 'COMPLETED' }], unsentLines: 0 }), { ok: true })
+})
+
+test('drinks still in the cart keep the bill from printing', () => {
+    assert.deepEqual(
+        canPrintBill({ rounds: [{ status: 'SENT' }], unsentLines: 2 }),
+        { ok: false, reason: 'UNSENT_ITEMS' },
+    )
+    // Unsent items with nothing sent yet is still "send first", not "empty".
+    assert.deepEqual(
+        canPrintBill({ rounds: [], unsentLines: 3 }),
+        { ok: false, reason: 'UNSENT_ITEMS' },
+    )
+})
+
+test('a table with nothing sent has no bill to print', () => {
+    // A ฿0 bill flips the table to "waiting to pay" with nobody owing anything.
+    assert.deepEqual(canPrintBill({ rounds: [], unsentLines: 0 }), { ok: false, reason: 'NOTHING_SENT' })
+    // Held and cancelled rounds are not on the printed bill either.
+    assert.deepEqual(
+        canPrintBill({ rounds: [{ status: 'HOLD' }, { status: 'CANCELLED' }], unsentLines: 0 }),
+        { ok: false, reason: 'NOTHING_SENT' },
+    )
+})
+
+// --- The letter a split bill keeps -------------------------------------------
+//
+// Worked out from whichever bills were still open, the letter moved: once T1-a
+// paid, T1-b became plain "T1", and a reprint of either said "T1". The slips a
+// party walks away with have to say which half each one was, for good.
+
+test('the first split letters the original a and the new bill b', () => {
+    assert.deepEqual(splitIndexes(null, []), { parent: 0, child: 1 })
+})
+
+test('splitting a split bill carries on down the alphabet', () => {
+    // T1-b splits again while T1-a is still at the table.
+    assert.deepEqual(splitIndexes(1, [0, 1]), { parent: 1, child: 2 })
+    // T1-a splits after T1-b and T1-c exist: the next letter is d, not b again.
+    assert.deepEqual(splitIndexes(0, [0, 1, 2]), { parent: 0, child: 3 })
+})
+
+test('a letter already given out tonight is not given out twice', () => {
+    // T1-a has paid and gone; T1-b splits. The new bill is T1-c - a second
+    // "T1-a" slip in the same night is the confusion this exists to stop.
+    assert.deepEqual(splitIndexes(1, [0, 1]), { parent: 1, child: 2 })
+    // An unlettered bill on a table that already has lettered ones (bills
+    // split before letters were saved) takes the next free letter.
+    assert.deepEqual(splitIndexes(null, [0, 1]), { parent: 2, child: 3 })
+})
+
+test('a saved letter wins over working it out from the open bills', () => {
+    // T1-a has paid, so only T1-b is still open. It stays T1-b.
+    assert.equal(billLabel('T1', [{ id: 'b', openedAt: '2026-10-19T20:00:00Z', splitIndex: 1 }], 'b'), 'T1-b')
+    // Both open, saved letters given in the opposite order to opening time.
+    const both = [
+        { id: 'x', openedAt: '2026-10-19T19:00:00Z', splitIndex: 1 },
+        { id: 'y', openedAt: '2026-10-19T20:00:00Z', splitIndex: 0 },
+    ]
+    assert.equal(billLabel('T1', both, 'x'), 'T1-b')
+    assert.equal(billLabel('T1', both, 'y'), 'T1-a')
+})
+
+test('an unlettered bill next to lettered ones takes a free letter, never a taken one', () => {
+    // T1-b paid, was reopened, and a new party sat down at T1 meanwhile. The
+    // new party has no saved letter; working one out from its position made it
+    // "T1-b" too, so two bills on one table answered to the same name.
+    const reopened = { id: 'b', openedAt: '2026-10-19T19:00:00Z', splitIndex: 1 }
+    const newParty = { id: 'n', openedAt: '2026-10-19T22:00:00Z', splitIndex: null }
+    assert.equal(billLabel('T1', [reopened, newParty], 'b'), 'T1-b')
+    assert.equal(billLabel('T1', [reopened, newParty], 'n'), 'T1-a')
+
+    // Split before letters were saved: A has none, B became a and its child b.
+    const bills = [
+        { id: 'A', openedAt: '2026-10-19T18:00:00Z', splitIndex: null },
+        { id: 'B', openedAt: '2026-10-19T19:00:00Z', splitIndex: 0 },
+        { id: 'C', openedAt: '2026-10-19T20:00:00Z', splitIndex: 1 },
+    ]
+    assert.deepEqual(bills.map((x) => billLabel('T1', bills, x.id)), ['T1-c', 'T1-a', 'T1-b'])
 })

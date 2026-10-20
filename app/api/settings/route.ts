@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { getSessionUser } from '@/lib/auth'
 
 export async function GET() {
     try {
@@ -16,6 +17,16 @@ export async function GET() {
 
 export async function POST(request: Request) {
     try {
+        // Settings now decide where the server sends every round (the docket
+        // printer addresses), so writing them is for the people who can open
+        // the Settings page: the owner and managers. Reading stays open - the
+        // receipt page fetches the shop name and footer without signing in.
+        const user = await getSessionUser()
+        if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+        if (user.role !== 'ADMIN' && user.role !== 'MANAGER') {
+            return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+        }
+
         const updates = await request.json()
 
         // Use a transaction for multiple updates

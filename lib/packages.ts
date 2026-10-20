@@ -167,20 +167,27 @@ export function remainingContents(
     alreadyRemoved: { menuId: string; quantity: number }[],
     alreadyAdded: Component[] = [],
 ): Component[] {
-    const net = contents.map((c) => {
-        const gone = alreadyRemoved
-            .filter((r) => r.menuId === c.menuId)
-            .reduce((sum, r) => sum + r.quantity, 0)
-        return { ...c, quantity: c.quantity - gone }
-    })
+    const net = new Map<string, Component>()
+    for (const c of contents) net.set(c.menuId, { ...c })
 
     for (const added of alreadyAdded) {
-        const at = net.find((c) => c.menuId === added.menuId)
+        const at = net.get(added.menuId)
         if (at) at.quantity += added.quantity
-        else net.push({ ...added })
+        else net.set(added.menuId, { ...added })
     }
 
-    return net.filter((c) => c.quantity > 0)
+    // Removals come off everything on the table, not only off what the recipe
+    // named. Netting them against the recipe alone dropped any removal of a
+    // drink an earlier swap had added: four waters traded in and two traded
+    // back out still read as four, so the same two bottles could be swapped
+    // again and restocked at cleanup - stock invented by a customer changing
+    // their mind twice.
+    for (const gone of alreadyRemoved) {
+        const at = net.get(gone.menuId)
+        if (at) at.quantity -= gone.quantity
+    }
+
+    return Array.from(net.values()).filter((c) => c.quantity > 0)
 }
 
 export type SwapLine = { direction: string; name: string; quantity: number }

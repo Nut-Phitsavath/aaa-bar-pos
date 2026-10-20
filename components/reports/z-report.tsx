@@ -46,11 +46,13 @@ type ZReport = {
  * itself, with the figures somewhere in the middle. Nothing in this project had
  * print styles except the receipt, and those are scoped to the receipt.
  *
- * The visibility trick rather than display:none on ancestors, because the
- * report sits several layers inside the app shell and hiding any one of those
- * layers would take the report with it. Making everything invisible and the
- * report visible again works no matter how deep it is, and re-anchoring it to
- * the top-left stops it printing at whatever offset the sidebar left it at.
+ * Everything that is neither the report nor one of the layers it sits inside
+ * goes, and the report is re-anchored to the top-left so it does not print at
+ * whatever offset the sidebar left it at. display:none, not visibility:hidden:
+ * an invisible element still takes up its room, and the reports page around
+ * the Z-report is three screens tall, so the one-page report printed with a
+ * blank page after it. Ancestors are kept by `:has`, because hiding any one of
+ * them would take the report with it.
  *
  * A4 portrait, not the receipt's 80mm roll: this is a document for an
  * accountant's file, not a slip for a customer's hand.
@@ -59,8 +61,7 @@ const PRINT_CSS = `
   @media print {
     @page { size: A4 portrait; margin: 14mm; }
     body { background: #fff !important; }
-    body * { visibility: hidden !important; }
-    #z-report, #z-report * { visibility: visible !important; }
+    body *:not(:has(#z-report)):not(#z-report):not(#z-report *) { display: none !important; }
     #z-report {
       position: absolute !important;
       left: 0; top: 0; width: 100% !important;
