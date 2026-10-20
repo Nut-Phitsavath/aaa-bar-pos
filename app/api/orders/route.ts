@@ -572,7 +572,12 @@ export async function POST(request: Request) {
         // customer and already prints a receipt; wire it here too the day the
         // bar starts taking walk-in food orders.
         let dockets: Awaited<ReturnType<typeof printRound>> = []
-        if (status === 'SENT' && sessionId) {
+        // Its own try: the round is already committed, so a failure from here
+        // on must not become a 500 - the till would keep the cart, staff would
+        // send it again, and the bar would get a second round and stock taken
+        // twice. ponytail: the till gets no printer warning in that case; a
+        // shout across the room beats a duplicate round.
+        if (status === 'SENT' && sessionId) try {
             const printable = await prisma.order.findUnique({
                 where: { id: result.id },
                 include: {
@@ -598,6 +603,8 @@ export async function POST(request: Request) {
                     })),
                 })
             }
+        } catch (printError: any) {
+            console.error('[orders] round saved, dockets not printed:', printError?.message)
         }
 
         return NextResponse.json({ ...result, dockets })

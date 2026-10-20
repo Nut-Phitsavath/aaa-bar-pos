@@ -261,7 +261,9 @@ export function BillReceipt({ data, settings }: { data: ReceiptData; settings: a
                                 </div>
                             )
                         })}
-                        {data.paymentMethod === "CASH" && data.cashReceived != null && (
+                        {/* Only when cash actually changed hands - not for a
+                            comp, which is stored as CASH but was never paid. */}
+                        {data.tenders!.some((tender) => tender.method === "CASH") && data.cashReceived != null && (
                             <>
                                 <div className="flex justify-between gap-4 opacity-70 text-[11px]">
                                     <span>{t.cash_received}</span>

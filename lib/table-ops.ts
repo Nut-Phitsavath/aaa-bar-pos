@@ -315,9 +315,16 @@ export function billLabel(
     const saved = siblings.find((s) => s.id === sessionId)?.splitIndex
     if (saved != null) return `${tableName}-${splitSuffix(saved)}`
     if (siblings.length <= 1) return tableName
-    const index = orderBills(siblings).findIndex((s) => s.id === sessionId)
-    if (index < 0) return tableName
-    return `${tableName}-${splitSuffix(index)}`
+    // Unlettered bills (a new party next to a reopened half, or bills split
+    // before letters were saved) take the free letters in opening order, so
+    // none of them can land on a letter a saved bill already answers to.
+    const taken = new Set(siblings.map((s) => s.splitIndex).filter((i): i is number => i != null))
+    const unlettered = orderBills(siblings).filter((s) => s.splitIndex == null)
+    const position = unlettered.findIndex((s) => s.id === sessionId)
+    if (position < 0) return tableName
+    let letter = -1
+    for (let seen = -1; seen < position;) if (!taken.has(++letter)) seen++
+    return `${tableName}-${splitSuffix(letter)}`
 }
 
 /**

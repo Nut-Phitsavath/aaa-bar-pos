@@ -614,6 +614,9 @@ function POSPageInner() {
           promo: appliedPromo,
           date: new Date().toLocaleString(),
           paymentMethod,
+          // Kept with the sale: the toggle resets for the next customer, and
+          // the slip still has to say this one was on the house.
+          isReportable: !isComplimentary,
           staffName: user?.name // Add staff name here
         })
         // handleNewOrder() // Removed: Don't clear cart immediately
@@ -1367,7 +1370,7 @@ function POSPageInner() {
     total: lastOrderInfo.total,
     paymentMethod: lastOrderInfo.paymentMethod,
     cashReceived: lastOrderInfo.cashReceived ?? null,
-    tenders: counterTenders({ paymentMethod: lastOrderInfo.paymentMethod, total: lastOrderInfo.total }),
+    tenders: counterTenders({ paymentMethod: lastOrderInfo.paymentMethod, total: lastOrderInfo.total, isReportable: lastOrderInfo.isReportable }),
   } : null
 
   return (

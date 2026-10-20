@@ -120,3 +120,15 @@ test('a counter sale nobody has paid for prints no tender', () => {
     assert.deepEqual(counterTenders({ paymentMethod: 'PAY_LATER', total: 90 }), [])
     assert.deepEqual(counterTenders({ paymentMethod: null, total: 90 }), [])
 })
+
+test('a free counter sale prints as comped, not as cash', () => {
+    // A complimentary walk-in is stored as CASH with isReportable false. Its
+    // slip saying "Paid · Cash" claims money changed hands when none did.
+    assert.deepEqual(
+        counterTenders({ paymentMethod: 'CASH', total: 90, isReportable: false }),
+        [{ method: 'COMPED', amount: 90 }],
+    )
+    assert.equal(tenderLabelKey('COMPED'), 'comped')
+    // A normal sale is unaffected.
+    assert.deepEqual(counterTenders({ paymentMethod: 'CASH', total: 90, isReportable: true }), [{ method: 'CASH', amount: 90 }])
+})

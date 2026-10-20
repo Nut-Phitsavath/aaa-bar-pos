@@ -142,7 +142,9 @@ export default function MenuPage() {
         body: JSON.stringify({
           name: editingCategory.name,
           hasSugarLevel: editingCategory.hasSugarLevel,
-          hasShotType: editingCategory.hasShotType
+          hasShotType: editingCategory.hasShotType,
+          // The dialog's Bar/Kitchen choice; left out, the route keeps the old one.
+          station: editingCategory.station
         }),
         headers: { 'Content-Type': 'application/json' }
       })

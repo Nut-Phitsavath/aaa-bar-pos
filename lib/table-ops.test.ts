@@ -447,3 +447,21 @@ test('a saved letter wins over working it out from the open bills', () => {
     assert.equal(billLabel('T1', both, 'x'), 'T1-b')
     assert.equal(billLabel('T1', both, 'y'), 'T1-a')
 })
+
+test('an unlettered bill next to lettered ones takes a free letter, never a taken one', () => {
+    // T1-b paid, was reopened, and a new party sat down at T1 meanwhile. The
+    // new party has no saved letter; working one out from its position made it
+    // "T1-b" too, so two bills on one table answered to the same name.
+    const reopened = { id: 'b', openedAt: '2026-10-19T19:00:00Z', splitIndex: 1 }
+    const newParty = { id: 'n', openedAt: '2026-10-19T22:00:00Z', splitIndex: null }
+    assert.equal(billLabel('T1', [reopened, newParty], 'b'), 'T1-b')
+    assert.equal(billLabel('T1', [reopened, newParty], 'n'), 'T1-a')
+
+    // Split before letters were saved: A has none, B became a and its child b.
+    const bills = [
+        { id: 'A', openedAt: '2026-10-19T18:00:00Z', splitIndex: null },
+        { id: 'B', openedAt: '2026-10-19T19:00:00Z', splitIndex: 0 },
+        { id: 'C', openedAt: '2026-10-19T20:00:00Z', splitIndex: 1 },
+    ]
+    assert.deepEqual(bills.map((x) => billLabel('T1', bills, x.id)), ['T1-c', 'T1-a', 'T1-b'])
+})
