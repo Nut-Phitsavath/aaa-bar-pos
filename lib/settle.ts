@@ -1,7 +1,7 @@
 import { prisma } from './prisma'
 import { sessionTotal, sessionBillTotal } from './sessions'
 import { isFullySettled, isConfirmed } from './payments'
-import { DEFAULT_RATE_LAK, DEFAULT_RATE_USD, taxRateOf } from './currency'
+import { DEFAULT_RATE_USD, taxRateOf } from './currency'
 
 /**
  * Server-side settlement. The one place a table bill becomes closed.
@@ -38,14 +38,13 @@ export async function closeSessionIfSettled(sessionId: string): Promise<{
     // taxAmount, and without this a table bill reprints at whatever rate the
     // owner has since set.
     const rateRows = await prisma.setting.findMany({
-        where: { key: { in: ['rate_lak', 'rate_usd', 'taxRate', 'tax_rate'] } }
+        where: { key: { in: ['rate_usd', 'taxRate', 'tax_rate'] } }
     })
     const valueOf = (key: string) => rateRows.find((r) => r.key === key)?.value
     const rateOf = (key: string, fallback: number) => {
         const parsed = Number(valueOf(key))
         return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback
     }
-    const fxRateLAK = rateOf('rate_lak', DEFAULT_RATE_LAK)
     const fxRateUSD = rateOf('rate_usd', DEFAULT_RATE_USD)
     const taxRate = taxRateOf(valueOf('taxRate') ?? valueOf('tax_rate'))
 
@@ -84,7 +83,7 @@ export async function closeSessionIfSettled(sessionId: string): Promise<{
 
         const closedSession = await tx.tableSession.update({
             where: { id: sessionId },
-            data: { status: 'CLOSED', closedAt, fxRateLAK, fxRateUSD, taxRate }
+            data: { status: 'CLOSED', closedAt, fxRateUSD, taxRate }
         })
 
         // The party has paid and left; the glasses have not. Marking the table

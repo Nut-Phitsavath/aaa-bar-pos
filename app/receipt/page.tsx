@@ -86,9 +86,6 @@ function ReceiptContent() {
                     total: order.total,
                     paymentMethod: order.paymentMethod === "BANK_NOTE" ? "CASH" : order.paymentMethod,
                     cashReceived: order.cashReceived ?? null,
-                    // Struck at the sale; null on sales from before it was kept,
-                    // which then print in baht even at a kip till.
-                    fxRateLAK: order.fxRateLAK ?? null,
                     tenders: counterTenders(order),
                 })
             })
@@ -173,7 +170,6 @@ function ReceiptContent() {
                     paid,
                     balance: bill.balance,
                     tenders: tendersOf(bill.payments ?? []),
-                    fxRateLAK: bill.fxRateLAK,
                     fxRateUSD: bill.fxRateUSD,
                     showUsd: bill.showUsd,
                     qrCodeData: qr?.qrCodeData ?? null,

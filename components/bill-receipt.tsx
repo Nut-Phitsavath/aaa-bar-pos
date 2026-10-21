@@ -2,8 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { useTranslation } from "@/hooks/use-translation"
-import { formatTHB, formatLAK, formatUSD, thbToLak, thbToUsd, slipMoney } from "@/lib/currency"
-import { useTillCurrency } from "@/lib/till"
+import { formatTHB, formatUSD, thbToUsd } from "@/lib/currency"
 import { billQrFor, billQrMode, decodeQrImage } from "@/lib/bank-qr"
 import { APP_NAME } from "@/lib/shop"
 import { QRCodeSVG } from "qrcode.react"
@@ -57,7 +56,6 @@ export type ReceiptData = {
     /** How it was paid, one line per method. Confirmed money only. */
     tenders?: Tender[]
 
-    fxRateLAK?: number | null
     fxRateUSD?: number | null
     showUsd?: boolean
     /** BCEL QR for an unpaid balance, when one has been minted. */
@@ -82,8 +80,6 @@ const isStandard = (v?: string | null) =>
 export function BillReceipt({ data, settings }: { data: ReceiptData; settings: any }) {
     const { t } = useTranslation()
 
-    // Kip or baht, by the till this prints at - see lib/till.ts.
-    const money = slipMoney(useTillCurrency(), data.fxRateLAK)
     // Settings -> "QR on bills": OnePay's, the bar's bank QR, or none - see lib/bank-qr.
     const qr = billQrFor(data, {
         mode: billQrMode(settings?.bill_qr_mode, Boolean(settings?.transfer_qr_url)),
@@ -182,7 +178,7 @@ export function BillReceipt({ data, settings }: { data: ReceiptData; settings: a
                                 long Lao name run straight into its own price. */}
                             <div className="flex justify-between items-start gap-3 font-black">
                                 <span className="flex-1">{lao} x{item.quantity}</span>
-                                <span className="whitespace-nowrap">{money.format(item.total)}</span>
+                                <span className="whitespace-nowrap">{formatTHB(item.total)}</span>
                             </div>
                             {english && (
                                 <div className="text-[10px] text-slate-500 font-bold leading-snug">{english}</div>
@@ -232,18 +228,18 @@ export function BillReceipt({ data, settings }: { data: ReceiptData; settings: a
             <div className="border-t border-dashed border-slate-300 pt-4 space-y-2">
                 <div className="flex justify-between gap-4 opacity-70 text-[11px]">
                     <span>{t.subtotal_net}</span>
-                    <span>{money.format(data.total - data.tax)}</span>
+                    <span>{formatTHB(data.total - data.tax)}</span>
                 </div>
                 {(data.discount ?? 0) > 0 && (
                     <div className="flex justify-between gap-4 text-rose-600 font-bold text-[11px]">
                         <span>{t.discount}</span>
-                        <span>-{money.format(data.discount!)}</span>
+                        <span>-{formatTHB(data.discount!)}</span>
                     </div>
                 )}
                 {data.tax > 0 && (
                     <div className="flex justify-between gap-4 opacity-70 text-[11px]">
                         <span>VAT ({data.taxRate ?? settings?.taxRate ?? 0}%)</span>
-                        <span>{money.format(data.tax)}</span>
+                        <span>{formatTHB(data.tax)}</span>
                     </div>
                 )}
 
@@ -252,23 +248,9 @@ export function BillReceipt({ data, settings }: { data: ReceiptData; settings: a
                     no minimum space between two items that fill the width. */}
                 <div className="flex justify-between items-baseline gap-4 font-black text-xl mt-3 pt-3 border-t border-dashed border-slate-300">
                     <span>{t.total_caps}</span>
-                    <span className="whitespace-nowrap">{money.format(data.total)}</span>
+                    <span className="whitespace-nowrap">{formatTHB(data.total)}</span>
                 </div>
 
-                {/* Requirement #17: the other currency and the rate it was
-                    struck at. On a settled bill this is the rate stored on the
-                    row. A kip slip shows the baht it stands for; a baht slip
-                    shows the kip. */}
-                {data.fxRateLAK ? (
-                    <div className="flex justify-between gap-4 opacity-70 text-[11px]">
-                        <span>1 ฿ = {data.fxRateLAK.toLocaleString("en-US")} ₭</span>
-                        <span>
-                            {money.currency === "LAK"
-                                ? formatTHB(data.total)
-                                : formatLAK(thbToLak(data.total, data.fxRateLAK))}
-                        </span>
-                    </div>
-                ) : null}
                 {data.showUsd && data.fxRateUSD ? (
                     <div className="flex justify-end opacity-70 text-[11px]">
                         {formatUSD(thbToUsd(data.total, data.fxRateUSD))}
@@ -285,7 +267,7 @@ export function BillReceipt({ data, settings }: { data: ReceiptData; settings: a
                             return (
                                 <div key={tender.method} className="flex justify-between gap-4 text-[11px]">
                                     <span>{t.paid_by} · {key ? t[key] : tender.method}</span>
-                                    <span>-{money.format(tender.amount)}</span>
+                                    <span>-{formatTHB(tender.amount)}</span>
                                 </div>
                             )
                         })}
@@ -295,18 +277,18 @@ export function BillReceipt({ data, settings }: { data: ReceiptData; settings: a
                             <>
                                 <div className="flex justify-between gap-4 opacity-70 text-[11px]">
                                     <span>{t.cash_received}</span>
-                                    <span>{money.format(data.cashReceived)}</span>
+                                    <span>{formatTHB(data.cashReceived)}</span>
                                 </div>
                                 <div className="flex justify-between gap-4 font-black text-lg text-emerald-700">
                                     <span>{t.change}</span>
-                                    <span>{money.format(Math.max(0, data.cashReceived - data.total))}</span>
+                                    <span>{formatTHB(Math.max(0, data.cashReceived - data.total))}</span>
                                 </div>
                             </>
                         )}
                         {data.balance != null && (
                             <div className="flex justify-between gap-4 font-black text-lg">
                                 <span>{t.balance_due}</span>
-                                <span>{money.format(data.balance)}</span>
+                                <span>{formatTHB(data.balance)}</span>
                             </div>
                         )}
                     </div>
@@ -318,13 +300,13 @@ export function BillReceipt({ data, settings }: { data: ReceiptData; settings: a
                         <div className="inline-block mt-1">
                             <QRCodeSVG value={qr.payload} size={150} level="H" />
                         </div>
-                        <p className="font-black mt-1">{money.format(qr.thb)}</p>
+                        <p className="font-black mt-1">{formatTHB(qr.thb)}</p>
                     </div>
                 )}
 
                 {/* The bar's static LAO QR while a bill is owed - see lib/bank-qr.
                     It carries no amount, so the slip says exactly what to type,
-                    in kip whichever till prints it. Large and crisp: thermal heads
+                    in baht. Large and crisp: thermal heads
                     are one-bit and a small or smoothed QR stops scanning. */}
                 {bankQr && (
                     <div className="text-center mt-5 pt-4 border-t border-dashed border-slate-300">
@@ -347,10 +329,7 @@ export function BillReceipt({ data, settings }: { data: ReceiptData; settings: a
                             <img src={bankQr.src} alt="" className="block mx-auto mt-2 w-[44mm] max-w-full h-auto" />
                         )}
                         <p className="text-[10px] mt-2">{t.amount_to_transfer}</p>
-                        <p className="font-black text-lg leading-tight">
-                            {bankQr.lak != null ? formatLAK(bankQr.lak) : formatTHB(bankQr.thb)}
-                        </p>
-                        {bankQr.lak != null && <p className="text-[11px] opacity-70">({formatTHB(bankQr.thb)})</p>}
+                        <p className="font-black text-lg leading-tight">{formatTHB(bankQr.thb)}</p>
                     </div>
                 )}
 

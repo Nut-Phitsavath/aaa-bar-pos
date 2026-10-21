@@ -1,16 +1,16 @@
 // Run: node --experimental-strip-types --test lib/currency.test.ts
 //
-// THB is the till's currency; LAK and USD are display conversions. These cover
+// Baht is the only money; USD is an optional display conversion. These cover
 // the cases where the screen, the bill and the stored order would disagree.
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
-    formatTHB, formatLAK, formatUSD,
-    thbToLak, thbToUsd,
+    formatTHB, formatUSD,
+    thbToUsd,
     calculateChange, calculateInclusiveTax,
-    DEFAULT_RATE_LAK, DEFAULT_RATE_USD,
-    billRates, slipMoney, isReceiptCurrency,
+    DEFAULT_RATE_USD,
+    billRates,
 } from './currency.ts'
 
 test('formatTHB groups thousands and shows no decimals', () => {
@@ -24,10 +24,6 @@ test('formatTHB rounds rather than printing a fraction', () => {
     assert.equal(formatTHB(2499.5), '฿2,500')
 })
 
-test('formatLAK keeps the kip suffix the tills already show', () => {
-    assert.equal(formatLAK(2801600), '2,801,600 ₭')
-})
-
 test('formatUSD shows two decimals', () => {
     assert.equal(formatUSD(128.75), '$128.75')
     assert.equal(formatUSD(5), '$5.00')
@@ -35,18 +31,8 @@ test('formatUSD shows two decimals', () => {
 
 test('formatters never emit NaN onto a bill', () => {
     assert.equal(formatTHB(NaN), '฿0')
-    assert.equal(formatLAK(undefined as unknown as number), '0 ₭')
+    assert.equal(formatTHB(undefined as unknown as number), '฿0')
     assert.equal(formatUSD(NaN), '$0.00')
-})
-
-test('thbToLak multiplies by the configured rate', () => {
-    // Rate is configured the way a person says it: 1 THB = 680 LAK.
-    assert.equal(thbToLak(4120, 680), 2801600)
-})
-
-test('thbToLak rounds to whole kip', () => {
-    // There is no sub-kip note; a bill must never show a fraction of one.
-    assert.equal(thbToLak(1.5, 681), 1022)
 })
 
 test('thbToUsd divides by baht-per-dollar', () => {
@@ -60,17 +46,16 @@ test('thbToUsd keeps two decimals', () => {
 
 test('conversion at a zero or missing rate yields zero, never Infinity', () => {
     // A rate left unset in settings must not print "$Infinity" on a bill.
-    assert.equal(thbToLak(100, 0), 0)
     assert.equal(thbToUsd(100, 0), 0)
 })
 
 test('conversion is pure: the same rate always gives the same figure', () => {
     // This is what makes requirement #18 work. A closed bill stores its rate
     // and re-renders identically no matter what settings say later.
-    const atClose = thbToLak(4120, 680)
-    const rateChangedInSettings = 700
-    assert.equal(thbToLak(4120, 680), atClose)
-    assert.notEqual(thbToLak(4120, rateChangedInSettings), atClose)
+    const atClose = thbToUsd(4120, 32)
+    const rateChangedInSettings = 35
+    assert.equal(thbToUsd(4120, 32), atClose)
+    assert.notEqual(thbToUsd(4120, rateChangedInSettings), atClose)
 })
 
 test('change is broken into real baht denominations', () => {
@@ -94,9 +79,8 @@ test('inclusive tax is unchanged by the currency switch', () => {
 })
 
 test('shipped defaults are sane', () => {
-    // Market was ~680 LAK/THB and ~32 THB/USD when this was written; the owner
-    // sets the real counter rate in settings.
-    assert.ok(DEFAULT_RATE_LAK > 100 && DEFAULT_RATE_LAK < 2000)
+    // Market was ~32 THB/USD when this was written; the owner sets the real
+    // rate in settings.
     assert.ok(DEFAULT_RATE_USD > 10 && DEFAULT_RATE_USD < 100)
 })
 
@@ -105,74 +89,38 @@ test('shipped defaults are sane', () => {
 // between a settings edit and what last night's bills say they charged.
 
 test('a closed bill keeps the rates it was settled at', () => {
-    // Owner moves the counter rate and registers for VAT this morning. The bill
-    // closed last night was charged at 690 and 7%, and stays that way.
-    const bill = { status: 'CLOSED', fxRateLAK: 690, fxRateUSD: 33, taxRate: 7 }
+    // Owner moves the USD rate and registers for VAT this morning. The bill
+    // closed last night was charged at 33 and 7%, and stays that way.
+    const bill = { status: 'CLOSED', fxRateUSD: 33, taxRate: 7 }
     assert.deepEqual(
-        billRates(bill, { lak: 720, usd: 35, tax: 10 }),
-        { lak: 690, usd: 33, tax: 7 }
+        billRates(bill, { usd: 35, tax: 10 }),
+        { usd: 33, tax: 7 }
     )
 })
 
 test('an open bill quotes the current rates', () => {
     // Nothing stamped yet - a table still drinking is quoted at today's rates.
-    const bill = { status: 'OPEN', fxRateLAK: null, fxRateUSD: null, taxRate: null }
+    const bill = { status: 'OPEN', fxRateUSD: null, taxRate: null }
     assert.deepEqual(
-        billRates(bill, { lak: 720, usd: 35, tax: 10 }),
-        { lak: 720, usd: 35, tax: 10 }
+        billRates(bill, { usd: 35, tax: 10 }),
+        { usd: 35, tax: 10 }
     )
 })
 
 test('a bill closed before rates were stamped shows no conversion and no VAT', () => {
-    // Bills that predate the columns have no rate to show. Null prints no LAK
+    // Bills that predate the columns have no rate to show. Null prints no USD
     // line and no VAT line, which is honest; today's rates would be a lie about
     // what that customer was charged.
-    const bill = { status: 'CLOSED', fxRateLAK: null, fxRateUSD: null, taxRate: null }
+    const bill = { status: 'CLOSED', fxRateUSD: null, taxRate: null }
     assert.deepEqual(
-        billRates(bill, { lak: 720, usd: 35, tax: 10 }),
-        { lak: null, usd: null, tax: null }
+        billRates(bill, { usd: 35, tax: 10 }),
+        { usd: null, tax: null }
     )
 })
 
 test('a zero VAT rate stamped at close survives a later registration', () => {
     // 0 is a real answer, not a missing one: a bar not registered for VAT
     // charged no VAT, and `?? live` would quietly backfill today's 10%.
-    const bill = { status: 'CLOSED', fxRateLAK: 690, fxRateUSD: 33, taxRate: 0 }
-    assert.equal(billRates(bill, { lak: 720, usd: 35, tax: 10 }).tax, 0)
-})
-
-// --- The slip's currency, chosen per till -----------------------------------
-//
-// Two counters in one bar: the main bar's customers pay in kip, the VIP
-// counter's in baht. The slip follows the till it prints at; the money behind
-// it stays in baht.
-
-test('a kip till prints every amount in kip at the bill\'s rate, unrounded', () => {
-    const money = slipMoney('LAK', 690)
-    assert.equal(money.currency, 'LAK')
-    assert.equal(money.format(165), '113,850 ₭')
-    // Not rounded to a note: the owner wants the exact figure.
-    assert.equal(money.format(151.5), '104,535 ₭')
-    assert.equal(money.format(0), '0 ₭')
-})
-
-test('a baht till prints baht, as before', () => {
-    const money = slipMoney('THB', 690)
-    assert.equal(money.currency, 'THB')
-    assert.equal(money.format(165), '฿165')
-})
-
-test('a kip till with no saved rate prints baht rather than guess one', () => {
-    // An old counter sale, or a bill from before rates were stamped. Quoting
-    // today's rate would put a figure on the slip nobody was charged.
-    assert.equal(slipMoney('LAK', null).currency, 'THB')
-    assert.equal(slipMoney('LAK', null).format(165), '฿165')
-    assert.equal(slipMoney('LAK', 0).currency, 'THB')
-})
-
-test('only baht and kip are a till setting', () => {
-    assert.equal(isReceiptCurrency('THB'), true)
-    assert.equal(isReceiptCurrency('LAK'), true)
-    assert.equal(isReceiptCurrency('USD'), false)
-    assert.equal(isReceiptCurrency(null), false)
+    const bill = { status: 'CLOSED', fxRateUSD: 33, taxRate: 0 }
+    assert.equal(billRates(bill, { usd: 35, tax: 10 }).tax, 0)
 })
