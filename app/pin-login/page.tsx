@@ -8,7 +8,6 @@ import { Coffee, Delete, UserCircle } from "lucide-react"
 import { useTranslation } from "@/hooks/use-translation"
 
 interface User {
-    id: string;
     username: string;
     name: string;
     role: string;
@@ -148,7 +147,7 @@ export default function PinLoginPage() {
                     >
                         <option value="" disabled>{t.select_user}</option>
                         {users.map(u => (
-                            <option key={u.id} value={u.username}>{u.name} ({u.role})</option>
+                            <option key={u.username} value={u.username}>{u.name} ({u.role})</option>
                         ))}
                     </select>
                 </div>

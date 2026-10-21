@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { cookies } from 'next/headers'
+import { getSessionUser } from '@/lib/auth'
 import { requireOpenShift } from '@/lib/shift-guard'
 
 export const dynamic = 'force-dynamic'
@@ -26,17 +26,8 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Table not found' }, { status: 404 })
         }
 
-        // Who opened it. Same cookie shape POST /api/orders reads.
-        const cookieStore = await cookies()
-        const sessionCookie = cookieStore.get('pos_session')
-        let openedById: string | null = null
-        if (sessionCookie) {
-            try {
-                const sessionUser = JSON.parse(sessionCookie.value)
-                const dbUser = await prisma.user.findUnique({ where: { id: sessionUser.id } })
-                if (dbUser) openedById = dbUser.id
-            } catch { }
-        }
+        // Who opened it: the signed-in user as the database sees them (lib/auth).
+        const openedById = (await getSessionUser())?.id ?? null
 
         // Idempotent: tapping an already-open table returns its session rather
         // than opening a second bill on the same table. Two devices tapping T7

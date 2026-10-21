@@ -1,16 +1,13 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import bcrypt from 'bcryptjs'
-import { cookies } from 'next/headers'
+import { requireAdmin } from '@/lib/auth'
 
 export async function POST(request: Request) {
     try {
-        const cookieStore = await cookies()
-        const session = cookieStore.get('pos_session')
-        if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
-        const user = JSON.parse(session.value)
-        if (user.role !== 'ADMIN') return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+        // The owner, as the database sees them - not the role a cookie claims.
+        const gate = await requireAdmin()
+        if (gate instanceof Response) return gate
 
         const { role, newPin } = await request.json()
         if (!role || !newPin || newPin.length < 4) {

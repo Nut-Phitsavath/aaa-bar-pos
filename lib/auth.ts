@@ -1,19 +1,16 @@
 import { cookies } from "next/headers"
 import { prisma } from "@/lib/prisma"
 import { canManageStaff } from "@/lib/roles"
+import { SESSION_COOKIE, readSession, sessionSecret } from "@/lib/session"
 
 /**
  * Server-side session checks for API routes.
  *
- * middleware.ts gates *page* routes, but its matcher excludes /api, so every
- * route under app/api is open unless it checks for itself. That matters more
- * than it sounds: the Cloudflare tunnel publishes this host, so "internal
- * tool on the shop PC" is not the threat model.
- *
- * The role is re-read from the database rather than trusted from the cookie.
- * pos_session is plain JSON and is not signed, so anyone can edit role:"ADMIN"
- * into it in DevTools; the cookie is only good for saying *which* user is
- * claimed, never for what they are allowed to do.
+ * proxy.ts turns away any API call without a valid session (see lib/session),
+ * but that is the quick check; this is the one next to the data. The cookie is
+ * signed by this server, so it really does name the user who signed in - and
+ * the role is still re-read from the database, so a demoted or deactivated
+ * member of staff loses access at once rather than when the cookie expires.
  */
 
 export type SessionUser = { id: string; name: string; username: string; role: string }
@@ -21,10 +18,8 @@ export type SessionUser = { id: string; name: string; username: string; role: st
 /** The signed-in user as the database sees them, or null. */
 export async function getSessionUser(): Promise<SessionUser | null> {
     try {
-        const raw = (await cookies()).get("pos_session")?.value
-        if (!raw) return null
-        const claimed = JSON.parse(raw)
-        if (!claimed?.id) return null
+        const claimed = readSession((await cookies()).get(SESSION_COOKIE)?.value, sessionSecret())
+        if (!claimed) return null
 
         const user = await prisma.user.findUnique({
             where: { id: claimed.id },

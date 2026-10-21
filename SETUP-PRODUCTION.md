@@ -5,6 +5,7 @@ This guide explains how to set up the POS system for production on the bar's Win
 ## 1. Prerequisites
 - **Node.js**: Installed on the POS machine.
 - **Git**: (Optional) to pull updates.
+- **`SESSION_SECRET` in `.env`**: signs the staff login cookie. `build-deploy.ps1` writes a fresh random one into the package for you; if you set the till up by hand, generate one as shown in `.env.example`. Without it nobody can sign in, and the PIN screen says so.
 
 ## 2. Production Build
 Before running the server for the first time or after any code updates, run the build script:
