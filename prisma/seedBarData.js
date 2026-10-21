@@ -15,6 +15,7 @@
  *   - waiters as staff who are picked from a list and never log in (req #6)
  */
 const { PrismaClient } = require("@prisma/client")
+require("./notOnTill")("npm run db:seed")
 const bcrypt = require("bcryptjs")
 const crypto = require("node:crypto")
 

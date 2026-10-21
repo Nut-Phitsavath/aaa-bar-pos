@@ -16,7 +16,11 @@ $ErrorActionPreference = "Stop"
 
 # Project root = parent of this scripts\ folder
 $ProjectRoot = (Get-Item $PSScriptRoot).Parent.FullName
-$DbPath      = Join-Path $ProjectRoot "dev.db"
+# prisma\dev.db, not the root: DATABASE_URL="file:./dev.db" is relative to
+# schema.prisma, so the database lives next to it. This said <root>\dev.db and
+# so never backed anything up - every run printed "not found" and exited, and
+# run-pos.bat carried on regardless.
+$DbPath      = Join-Path $ProjectRoot "prisma\dev.db"
 $UploadsDir  = Join-Path $ProjectRoot "public\uploads"
 $BackupRoot  = Join-Path $ProjectRoot "backups"
 $KeepDays    = 14

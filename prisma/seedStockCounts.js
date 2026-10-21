@@ -28,6 +28,7 @@
  * rows and never a real one.
  */
 const { PrismaClient } = require("@prisma/client")
+require("./notOnTill")("npm run db:counts")
 
 const prisma = new PrismaClient()
 

@@ -22,6 +22,7 @@
 
 const net = require('node:net')
 const { PrismaClient } = require('@prisma/client')
+require('./notOnTill')('npm run check:flows')
 
 const prisma = new PrismaClient()
 const BASE = process.env.BASE || 'http://localhost:3000'

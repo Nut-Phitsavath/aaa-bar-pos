@@ -1,4 +1,6 @@
 @echo off
+:: From a Startup-folder shortcut the working folder is not always this one.
+cd /d "%~dp0"
 echo ==========================================
 echo   POS SYSTEM AUTO-START (PRODUCTION)
 echo ==========================================
@@ -8,6 +10,20 @@ echo ==========================================
 echo Backing up database...
 powershell -ExecutionPolicy Bypass -File scripts\backup.ps1
 
+:: Bring the database up to this version of the app. Most days there is
+:: nothing to do; after an update it applies the new migrations, right after
+:: the backup above. If it fails the till does not open: the new code on the
+:: old database would fail at the first order instead, in the middle of service.
+echo Updating database...
+node node_modules\prisma\build\index.js migrate deploy
+if errorlevel 1 (
+    echo.
+    echo The database update FAILED - the POS was not started.
+    echo New till? Run FIRST-TIME-SETUP.bat first.
+    echo Otherwise the database is backed up in the backups folder - call support.
+    pause
+    exit /b 1
+)
 
 :: Start POS Server in a new window
 echo Starting Server...

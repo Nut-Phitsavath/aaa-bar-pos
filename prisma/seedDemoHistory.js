@@ -17,6 +17,7 @@
  *   - stock movements, so COGS and shrinkage are not empty
  */
 const { PrismaClient } = require("@prisma/client")
+require("./notOnTill")("npm run db:demo")
 const crypto = require("node:crypto")
 
 const prisma = new PrismaClient()
