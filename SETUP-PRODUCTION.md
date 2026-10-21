@@ -5,7 +5,14 @@ This guide explains how to set up the POS system for production on the bar's Win
 ## 1. Prerequisites
 - **Node.js**: Installed on the POS machine.
 - **Git**: (Optional) to pull updates.
-- **`SESSION_SECRET` in `.env`**: signs the staff login cookie. `build-deploy.ps1` writes a fresh random one into the package for you; if you set the till up by hand, generate one as shown in `.env.example`. Without it nobody can sign in, and the PIN screen says so.
+- **`SESSION_SECRET` in `.env`**: signs the staff login cookie. `FIRST-TIME-SETUP.bat` in the package writes the till's `.env` with a fresh random one; if you set the till up by hand, generate one as shown in `.env.example`. Without it nobody can sign in, and the PIN screen says so.
+
+## 1b. Installing from the package (recommended)
+`build-deploy.ps1` on the developer's machine makes `..\deploy-bar-pos`, which holds the app and none of the till's data (no database, no photos, no `.env`).
+
+- **New till:** copy `deploy-bar-pos` to where the POS will live (e.g. `C:\pos`) and run `FIRST-TIME-SETUP.bat` there. It builds an empty database and asks for the Owner PIN (4-8 digits, typed twice). Sign in as Owner, then set up Settings, staff, the menu and the floor. On a till that already has sales it changes nothing.
+- **Daily:** `START-POS.bat` (or the `run-pos.bat` shortcut below) backs up the database, brings it up to date with `prisma migrate deploy`, and starts the server. If the database update fails, the till does not open.
+- **Update:** copy the new package onto the till anywhere except the POS folder, and drag the POS folder onto the package's `UPDATE-POS.bat`. It backs up, stops the server, copies the new version over without deleting anything, checks the database was not touched, and starts the POS, which applies any new migrations.
 
 ## 2. Production Build
 Before running the server for the first time or after any code updates, run the build script:

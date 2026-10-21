@@ -15,14 +15,23 @@ You build one from the seeds, which is also how you get the example data to work
 
 ```bash
 npm install
-cp .env.example .env
-npm run db:push     # create dev.db from prisma/schema.prisma
+cp .env.example .env           # then fill in SESSION_SECRET (the command is in the file)
+npx prisma migrate deploy      # create prisma/dev.db from prisma/migrations
 npm run db:seed     # a clean venue: 24 stock items, 24 menu items, 13 tables, 4 waiters
 npm run db:demo     # optional: 21 days of invented trading on top
 npm run dev
 ```
 
 Logins after seeding: `admin/1675`, `manager/2468`, `staff1/3978`, `staff2/2267`.
+
+**Migrations, not `db push`.** The till builds and updates its database with
+`migrate deploy` (run-pos.bat does it on every start), so a schema change needs a
+migration: `npx prisma migrate dev --name what_changed`. `db push` changes your
+database without one, which is how the schema and migrations drifted apart until
+`20261021120000_catch_up_with_db_push`. An older dev.db:
+
+- made with `db push` (no `_prisma_migrations` table): delete it and run the steps above — it is seed data.
+- made with migrations before that one: `npx prisma migrate resolve --applied 20261021120000_catch_up_with_db_push`, since it already has those columns.
 
 `db:seed` leaves a venue you could open with — no sales history, empty reports.
 `db:demo` bolts ~214 sessions, ~637 orders, voids, comps, pay-later tabs and shift

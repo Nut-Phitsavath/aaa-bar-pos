@@ -8,28 +8,27 @@ Run this in your source project folder:
 npm run build
 ```
 
-## 2. Prepare the `deploy-pos` folder
-Create a new empty folder named `deploy-pos`. This is what you will zip and move.
+## 2. Prepare the `deploy-bar-pos` folder
+Create a new empty folder named `deploy-bar-pos`. This is what you will zip and move.
 
 ## 3. Copy the Core Build (Standalone)
 Next.js creates a "standalone" server.
 - Go to: `.next/standalone/Documents/pos-system-for-cafes/` (or search for `server.js` inside `.next/standalone`)
-- Copy **everything** inside that folder into your `deploy-pos` folder.
+- Copy **everything** inside that folder into your `deploy-bar-pos` folder.
 - This includes: `server.js`, `.next`, `node_modules`, `package.json`, and `.env` (if it grabbed it).
 
 ## 4. Copy Assets (CRITICAL)
 Next.js *does not* include assets in the standalone folder by default. You must copy them manually:
-- Copy the `public/` folder from your project root to `deploy-pos/public/`.
-- Copy the `.next/static/` folder from your project root to `deploy-pos/.next/static/`.
+- Copy the `public/` folder from your project root to `deploy-bar-pos/public/`.
+- Copy the `.next/static/` folder from your project root to `deploy-bar-pos/.next/static/`.
 
 > [!IMPORTANT]
-> **Persistent Storage**: The `public/uploads/` folder is where menu images are stored at runtime. When updating the app, always make sure to back up or merge this folder so you don't lose the images uploaded by the user.
+> **Persistent Storage**: The `public/uploads/` folder is where menu images are stored at runtime. Leave it out of the package (step 5), so an update cannot overwrite the images uploaded on the till.
 
-## 5. Copy Database & Config
-- Copy `dev.db` to `deploy-pos/`.
-- Copy `.env` to `deploy-pos/` (if not already there).
-- Copy the `prisma/` folder to `deploy-pos/prisma/`.
-- Copy the `scripts/` folder to `deploy-pos/scripts/`.
+## 5. Copy Config - and no data
+- Copy `prisma/schema.prisma`, `prisma/migrations/` and `prisma/setupFirstInstall.js` to `deploy-bar-pos/prisma/`.
+- Copy the `scripts/` folder to `deploy-bar-pos/scripts/`.
+- Do **not** copy `dev.db`, `.env` or `public/uploads/` into the package, and delete them if the standalone output brought them. They belong to the till: on an update the package is copied over the till's folder, and anything in it would land on the bar's own sales, secrets and photos. On a new till they are created there: write `.env` from `.env.example`, then `node node_modules\prisma\build\index.js migrate deploy` and `node prisma\setupFirstInstall.js`.
 
 ## 6. Run on target machine
 - Use `node server.js` or the `START-POS.bat` to run.
