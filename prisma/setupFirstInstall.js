@@ -7,22 +7,65 @@
  * in, so this creates the Owner (username "admin") with a PIN typed here, on
  * the till, by the person who will use it.
  *
- * Run after `prisma migrate deploy` has built the database (FIRST-TIME-SETUP.bat
- * does both). It refuses to touch a database that already has sales: before
- * this, first-time setup wiped and re-seeded on "type YES", which on a live
- * till is the whole night's takings gone.
+ * On a clone of the repo (how the bar's till is set up) this is the whole of
+ * first-time setup, as `npm run setup`:
+ *   1. .env: writes it, or fills in what it lacks - DATABASE_URL, a
+ *      SESSION_SECRET of this till's own, and POS_TILL=1, which stops the
+ *      test-data scripts running here (notOnTill.js). Values already there,
+ *      such as OnePay keys, are kept.
+ *   2. builds the database, or brings it up to date (prisma migrate deploy)
+ *   3. the Owner and their PIN
  *
- * Run again on a till with no sales yet and it just resets the Owner's PIN.
+ * It refuses to touch a database that already has sales: before this,
+ * first-time setup wiped and re-seeded on "type YES", which on a live till is
+ * the whole night's takings gone. Run again on a till with no sales yet and it
+ * just resets the Owner's PIN.
  *
- *   node prisma/setupFirstInstall.js            asks for the PIN (twice, hidden)
+ *   npm run setup                                  asks for the PIN (twice, hidden)
  *   OWNER_PIN=4821 node prisma/setupFirstInstall.js   (for scripted installs/tests)
  */
 
+const fs = require('node:fs')
+const path = require('node:path')
+const crypto = require('node:crypto')
+const { spawnSync } = require('node:child_process')
 const readline = require('node:readline')
 const bcrypt = require('bcryptjs')
-const { PrismaClient } = require('@prisma/client')
 
-const prisma = new PrismaClient()
+const ROOT = path.join(__dirname, '..')
+
+/** Fill in what .env lacks; keep everything it has. */
+function ensureEnv() {
+    const file = path.join(ROOT, '.env')
+    let text = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : ''
+    const added = []
+    const need = (key, value, good) => {
+        const line = new RegExp(`^${key}=(.*)$`, 'm')
+        const found = text.match(line)
+        if (found && good(found[1].trim().replace(/^"(.*)"$/, '$1'))) return
+        const entry = `${key}="${value}"`
+        text = found ? text.replace(line, entry) : text + (text && !text.endsWith('\n') ? '\n' : '') + entry + '\n'
+        added.push(key)
+    }
+    need('DATABASE_URL', 'file:./dev.db', (v) => v !== '')
+    // .env.example ships SESSION_SECRET="", and without one nobody can sign in.
+    need('SESSION_SECRET', crypto.randomBytes(48).toString('base64url'), (v) => v.length >= 32)
+    need('POS_TILL', '1', (v) => v !== '')
+    if (added.length) {
+        fs.writeFileSync(file, text)
+        console.log(`.env: wrote ${added.join(', ')}.`)
+    }
+}
+
+/** The prisma CLI by path: in the deploy package there is no node_modules/.bin for npx. */
+function migrate() {
+    console.log('Building the database (prisma migrate deploy)...')
+    const cli = path.join(ROOT, 'node_modules', 'prisma', 'build', 'index.js')
+    const run = spawnSync(process.execPath, [cli, 'migrate', 'deploy'], { cwd: ROOT, stdio: 'inherit' })
+    if (run.status !== 0) throw new Error('Building the database failed - see above. Nothing else was done.')
+}
+
+let prisma
 
 // The seed's PINs are printed in README.md; an Owner using one of them has a
 // PIN anyone with the repo knows.
@@ -69,6 +112,14 @@ async function choosePin() {
 }
 
 async function main() {
+    ensureEnv()
+    migrate()
+    // Read .env ourselves: the client only does if .env existed when `npm ci`
+    // generated it, which on a fresh clone it did not.
+    process.loadEnvFile(path.join(ROOT, '.env'))
+    const { PrismaClient } = require('@prisma/client')
+    prisma = new PrismaClient()
+
     const sales = await prisma.order.count()
     if (sales > 0) {
         console.log(`This till already has ${sales} order(s). Setup only runs on a till with no sales,`)
@@ -96,4 +147,4 @@ async function main() {
 
 main()
     .catch((e) => { console.error(e.message || e); process.exitCode = 1 })
-    .finally(() => prisma.$disconnect())
+    .finally(() => prisma?.$disconnect())

@@ -37,7 +37,9 @@ database without one, which is how the schema and migrations drifted apart until
 `db:demo` bolts ~214 sessions, ~637 orders, voids, comps, pay-later tabs and shift
 cash counts onto it, so every report tab has something to show. It writes what the
 app itself would write, so reports exercise the same joins they will in service.
-Re-run `db:seed` to wipe back to clean.
+Re-run `db:seed` to wipe back to clean. On the bar's till these scripts refuse
+to run: `npm run setup` marks its `.env` with `POS_TILL=1` (see
+[SETUP-PRODUCTION.md](SETUP-PRODUCTION.md)).
 
 Everything in the seeds is **placeholder** — plausible bar items in Thai baht, not
 the owner's list. Prices and costs are chosen so pour cost lands in a defensible
