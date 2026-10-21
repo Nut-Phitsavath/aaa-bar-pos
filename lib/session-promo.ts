@@ -5,7 +5,7 @@ import { BILLABLE_ORDER_STATUSES, canRepricePromo } from './sessions'
 /**
  * Keeping a bill's promo discount true.
  *
- * `TableSession.promoDiscount` is a snapshot, for the same reason `fxRateUSD`
+ * `TableSession.promoDiscount` is a snapshot, for the same reason `fxRateLAK`
  * is: every screen that prices a bill would otherwise have to load its items to
  * find out what a deal took off, and there are eighteen of them. The cost of a
  * snapshot is that something has to keep it current, and that something is

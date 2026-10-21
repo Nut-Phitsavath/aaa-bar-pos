@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { startOfDay } from 'date-fns'
 import { getSessionUser } from '@/lib/auth'
-import { calculateInclusiveTax } from '@/lib/currency'
+import { calculateInclusiveTax, DEFAULT_RATE_LAK } from '@/lib/currency'
 import { promoBlocker, promoDiscountFor } from '@/lib/promotions'
 import { decrementStock } from '@/lib/stock'
 // A bill's promo is a snapshot; adding a round can change what it is worth.
@@ -151,6 +151,9 @@ export async function POST(request: Request) {
         settingsRows.forEach(s => { settingsMap[s.key] = s.value })
         const taxRate = Number(settingsMap.taxRate ?? settingsMap.tax_rate ?? 10) || 0
         const loyaltyRate = Number(settingsMap.loyaltyRate ?? settingsMap.loyalty_rate ?? 1000) || 1000
+        // The same fallback settle uses, so a counter sale and a table bill on
+        // the same night quote the same kip.
+        const counterRateLak = Number(settingsMap.rate_lak) > 0 ? Number(settingsMap.rate_lak) : DEFAULT_RATE_LAK
 
         // Built from the DB rows fetched above, never from the request body:
         // this map is what makes the reprice below server-authoritative.
@@ -359,6 +362,10 @@ export async function POST(request: Request) {
                     data: {
                         id: orderId,
                         ...orderData,
+                        // A walk-in sale's own kip rate, struck at the sale.
+                        // A table round needs none: its bill stamps the rate
+                        // at close (lib/settle.ts).
+                        ...(!sessionId && { fxRateLAK: counterRateLak }),
                         ...(customerId && { customer: { connect: { id: customerId } } }),
                         ...(effectivePromoId && { promotion: { connect: { id: effectivePromoId } } }),
                         ...(userId && { user: { connect: { id: userId } } }),

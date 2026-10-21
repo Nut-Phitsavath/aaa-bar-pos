@@ -2,12 +2,12 @@
  * Money.
  *
  * Thai baht only: every price, order total, slip and report figure is a number
- * of baht. USD is an optional display conversion computed from a rate, never
- * stored as a price. (Kip was once printed beside it, and a till could print
- * in kip; both were removed when the bar settled on baht only.)
+ * of baht. Kip and USD are *display conversions* - a line under the total on
+ * a bill - computed from a rate, never stored as prices. (A till used to be
+ * able to print its whole slip in kip; that was removed for baht only.)
  *
  * The rate is a per-transaction fact, not a global one. A closed bill carries
- * the rate it was settled at (TableSession.fxRateUSD), so changing
+ * the rate it was settled at (TableSession.fxRateLAK / fxRateUSD), so changing
  * the rate in settings tomorrow cannot rewrite what a customer was charged
  * last night. That is requirement #18, and it only works because the functions
  * below are pure: rate in, figure out, no reading of settings from in here.
@@ -17,6 +17,9 @@
  * server HTML and rebuilds on the client. See lib/date.ts for the full story.
  * Everything here formats through 'en-US' grouping with explicit symbols.
  */
+
+/** 1 THB = this many LAK. Market was ~680 when written; owner sets the real one. */
+export const DEFAULT_RATE_LAK = 680
 
 /** 1 USD = this many THB. Reads the way a rate board does. */
 export const DEFAULT_RATE_USD = 32
@@ -48,8 +51,19 @@ export function formatTHB(amount: number): string {
     return `฿${group(Math.round(safe(amount)))}`
 }
 
+export function formatLAK(amount: number): string {
+    return `${group(Math.round(safe(amount)))} ₭`
+}
+
 export function formatUSD(amount: number): string {
     return `$${group(safe(amount), 2)}`
+}
+
+/** Convert a baht figure to kip at the given rate. Whole kip: there is no smaller note. */
+export function thbToLak(thb: number, rateLak: number): number {
+    const rate = safe(rateLak)
+    if (rate <= 0) return 0
+    return Math.round(safe(thb) * rate)
 }
 
 /** Convert a baht figure to dollars. `rateUsd` is baht-per-dollar, e.g. 32. */
@@ -107,12 +121,12 @@ export function calculateInclusiveTax(total: number, rate: number = 10): number 
  * nobody was charged. Null is "unknown"; 0 is a real rate and is kept.
  */
 export function billRates(
-    bill: { status: string; fxRateUSD: number | null; taxRate: number | null },
-    live: { usd: number; tax: number }
-): { usd: number | null; tax: number | null } {
+    bill: { status: string; fxRateLAK: number | null; fxRateUSD: number | null; taxRate: number | null },
+    live: { lak: number; usd: number; tax: number }
+): { lak: number | null; usd: number | null; tax: number | null } {
     if (bill.status === 'CLOSED') {
-        return { usd: bill.fxRateUSD, tax: bill.taxRate }
+        return { lak: bill.fxRateLAK, usd: bill.fxRateUSD, tax: bill.taxRate }
     }
-    return { usd: live.usd, tax: live.tax }
+    return { lak: live.lak, usd: live.usd, tax: live.tax }
 }
 

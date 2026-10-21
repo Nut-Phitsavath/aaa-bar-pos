@@ -21,7 +21,7 @@ export const dynamic = 'force-dynamic'
  * an open drawer. The bill simply owes again once a new round is added, because
  * the balance is computed from total minus payments rather than stored.
  *
- * The FX rate stays. `closeSessionIfSettled` stamps the rates at close, and
+ * The FX rate stays. `closeSessionIfSettled` stamps the kip rate at close, and
  * re-closing would restamp it at today's - silently re-rating a bill that was
  * run up last night, which is exactly what requirement #18 forbids. So the
  * original stamp is preserved and only cleared if it was never set.

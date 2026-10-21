@@ -617,6 +617,8 @@ function POSPageInner() {
           // Kept with the sale: the toggle resets for the next customer, and
           // the slip still has to say this one was on the house.
           isReportable: !isComplimentary,
+          // The rate the server struck the sale at, so this slip and a reprint agree.
+          fxRateLAK: data.fxRateLAK ?? null,
           staffName: user?.name // Add staff name here
         })
         // handleNewOrder() // Removed: Don't clear cart immediately
@@ -1370,6 +1372,7 @@ function POSPageInner() {
     total: lastOrderInfo.total,
     paymentMethod: lastOrderInfo.paymentMethod,
     cashReceived: lastOrderInfo.cashReceived ?? null,
+    fxRateLAK: lastOrderInfo.fxRateLAK ?? null,
     tenders: counterTenders({ paymentMethod: lastOrderInfo.paymentMethod, total: lastOrderInfo.total, isReportable: lastOrderInfo.isReportable }),
   } : null
 

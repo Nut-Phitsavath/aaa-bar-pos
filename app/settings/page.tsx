@@ -48,6 +48,7 @@ export default function SettingsPage() {
           taxRate: data.taxRate || data.tax_rate || "",
           loyaltyRate: data.loyaltyRate || data.loyalty_rate || "",
           shopName: data.shopName || data.shop_name || "",
+          rate_lak: data.rate_lak || "",
           rate_usd: data.rate_usd || "",
           show_usd: data.show_usd || "false",
         })
@@ -397,6 +398,16 @@ export default function SettingsPage() {
             <p className="text-sm text-muted-foreground mt-0.5">{t.exchange_rates_desc}</p>
 
             <div className="grid grid-cols-2 gap-4 mt-4">
+              <div className="space-y-2">
+                <Label>{t.rate_lak_label}</Label>
+                <Input
+                  type="number"
+                  inputMode="decimal"
+                  placeholder="680"
+                  value={settings.rate_lak || ""}
+                  onChange={(e) => setSettings({ ...settings, rate_lak: e.target.value })}
+                />
+              </div>
               <div className="space-y-2">
                 <Label>{t.rate_usd_label}</Label>
                 <Input

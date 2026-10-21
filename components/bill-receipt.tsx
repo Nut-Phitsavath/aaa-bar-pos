@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { useTranslation } from "@/hooks/use-translation"
-import { formatTHB, formatUSD, thbToUsd } from "@/lib/currency"
+import { formatTHB, formatLAK, formatUSD, thbToLak, thbToUsd } from "@/lib/currency"
 import { billQrFor, billQrMode, decodeQrImage } from "@/lib/bank-qr"
 import { APP_NAME } from "@/lib/shop"
 import { QRCodeSVG } from "qrcode.react"
@@ -56,6 +56,7 @@ export type ReceiptData = {
     /** How it was paid, one line per method. Confirmed money only. */
     tenders?: Tender[]
 
+    fxRateLAK?: number | null
     fxRateUSD?: number | null
     showUsd?: boolean
     /** BCEL QR for an unpaid balance, when one has been minted. */
@@ -251,6 +252,15 @@ export function BillReceipt({ data, settings }: { data: ReceiptData; settings: a
                     <span className="whitespace-nowrap">{formatTHB(data.total)}</span>
                 </div>
 
+                {/* Requirement #17: the total in kip, and the rate it was struck
+                    at. On a settled bill this is the rate stored on the row, so
+                    a reprint next month says the same. */}
+                {data.fxRateLAK ? (
+                    <div className="flex justify-between gap-4 opacity-70 text-[11px]">
+                        <span>1 ฿ = {data.fxRateLAK.toLocaleString("en-US")} ₭</span>
+                        <span>{formatLAK(thbToLak(data.total, data.fxRateLAK))}</span>
+                    </div>
+                ) : null}
                 {data.showUsd && data.fxRateUSD ? (
                     <div className="flex justify-end opacity-70 text-[11px]">
                         {formatUSD(thbToUsd(data.total, data.fxRateUSD))}

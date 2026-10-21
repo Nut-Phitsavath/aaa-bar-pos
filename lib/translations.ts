@@ -839,6 +839,7 @@ export const translations = {
         session_already_closed: "This bill is already settled.",
         exchange_rates: "Exchange Rates",
         exchange_rates_desc: "Prices are in Thai Baht. These rates only convert the figures shown on a bill, and a settled bill keeps the rate it was closed at.",
+        rate_lak_label: "1 THB = ? LAK",
         rate_usd_label: "1 USD = ? THB",
         show_usd_label: "Also show the USD equivalent on bills",
         // --- Ingredient units (base-unit model) ---
@@ -1975,6 +1976,7 @@ export const translations = {
         session_already_closed: "ບິນນີ້ຊຳລະແລ້ວ",
         exchange_rates: "ອັດຕາແລກປ່ຽນ",
         exchange_rates_desc: "ລາຄາເປັນເງິນບາດ. ອັດຕານີ້ໃຊ້ແປງຕົວເລກທີ່ສະແດງໃນບິນເທົ່ານັ້ນ, ບິນທີ່ຈ່າຍແລ້ວຈະຮັກສາອັດຕາເດີມໄວ້.",
+        rate_lak_label: "1 ບາດ = ? ກີບ",
         rate_usd_label: "1 ໂດລາ = ? ບາດ",
         show_usd_label: "ສະແດງມູນຄ່າເປັນໂດລາໃນບິນ",
         // --- Ingredient units (base-unit model) ---
