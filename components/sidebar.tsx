@@ -26,12 +26,9 @@ import {
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import { useTranslation } from "@/hooks/use-translation"
-import { notify } from "@/components/ui/sonner"
 import { useShift } from "@/components/shift-provider"
 import { ShiftDialog } from "@/components/shift-dialog"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
+import { CloseShiftDialog } from "@/components/close-shift-dialog"
 import { formatTHB } from "@/lib/currency"
 import { cn } from "@/lib/utils"
 import { useSidebar } from "@/components/sidebar-provider"
@@ -65,17 +62,11 @@ export function Sidebar() {
     const pathname = usePathname()
     const router = useRouter()
     const { t } = useTranslation()
-    const {
-        status, startCash, cashPayments,
-        onePayPayments, onePayCount, transferPayments, transferCount,
-        activeShiftId, checkShiftStatus
-    } = useShift()
+    const { status, startCash, cashPayments } = useShift()
     const { isCollapsed, toggleSidebar } = useSidebar()
     const [user, setUser] = useState<any>(null)
     const [isShiftDialogOpen, setIsShiftDialogOpen] = useState(false)
     const [isEndShiftOpen, setIsEndShiftOpen] = useState(false)
-    const [actualCash, setActualCash] = useState("")
-    const [isProcessingShift, setIsProcessingShift] = useState(false)
 
     useEffect(() => {
         fetch('/api/auth/me')
@@ -90,35 +81,6 @@ export function Sidebar() {
     }
 
     const currentCash = (startCash || 0) + (cashPayments || 0)
-
-    const handleEndShift = async () => {
-        if (!actualCash) return
-        setIsProcessingShift(true)
-        try {
-            const res = await fetch(`/api/shifts`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    id: activeShiftId,
-                    actualCash: Number(actualCash)
-                })
-            })
-            if (res.ok) {
-                await checkShiftStatus()
-                setIsEndShiftOpen(false)
-                setActualCash("")
-                router.push('/dashboard')
-            } else {
-                const err = await res.json()
-                notify.error(err.error || t.close_shift_failed)
-            }
-        } catch (e) {
-            console.error(e)
-            notify.error(t.close_shift_error)
-        } finally {
-            setIsProcessingShift(false)
-        }
-    }
 
     // Navigation Items
     const mainNavItems = [
@@ -364,76 +326,8 @@ export function Sidebar() {
             {/* Shift Management Dialogs */}
             <ShiftDialog open={isShiftDialogOpen} onOpenChange={setIsShiftDialogOpen} />
 
-            <Dialog open={isEndShiftOpen} onOpenChange={setIsEndShiftOpen}>
-                <DialogContent className="!top-[15%] !translate-y-0">
-                    <DialogHeader>
-                        <DialogTitle>{t.end_current_shift || "End Current Shift"}</DialogTitle>
-                    </DialogHeader>
-                    <div className="space-y-4 py-4">
-                        <div className="p-4 bg-slate-50 rounded-lg space-y-2 border border-slate-100 font-mono text-sm leading-relaxed">
-                            <div className="flex justify-between text-sm">
-                                <span>{t.starting_cash_with_colon || "Starting Cash:"}</span>
-                                <span>{formatTHB(startCash || 0)}</span>
-                            </div>
-                            <div className="flex justify-between text-sm">
-                                <span>{t.cash_sales_with_colon || "Cash Sales:"}</span>
-                                <span>{formatTHB(cashPayments || 0)}</span>
-                            </div>
-                            <div className="flex justify-between font-bold border-t border-slate-200 pt-2 pb-1">
-                                <span>{t.expected_cash_with_colon || "Expected Cash:"}</span>
-                                <span className="text-amber-600">
-                                    {formatTHB((startCash || 0) + (cashPayments || 0))}
-                                </span>
-                            </div>
-                            <div className="flex justify-between text-sm border-t border-slate-100 pt-2 opacity-70">
-                                <span>{t.onepay_total || "OnePay Total"}: ({onePayCount || 0})</span>
-                                <span>{formatTHB(onePayPayments || 0)}</span>
-                            </div>
-                            <div className="flex justify-between text-sm opacity-70">
-                                <span>{t.transfer_total || "Transfer Total"}: ({transferCount || 0})</span>
-                                <span>{formatTHB(transferPayments || 0)}</span>
-                            </div>
-                        </div>
-
-                        <div className="space-y-2">
-                            <Label htmlFor="actualCash">{t.actual_cash_counted || "Actual Cash Counted"}</Label>
-                            <Input
-                                id="actualCash"
-                                type="text"
-                                placeholder={t.enter_cash_drawer || "Enter cash amount"}
-                                value={actualCash ? Number(actualCash).toLocaleString() : ""}
-                                onChange={e => {
-                                    const val = e.target.value.replace(/\D/g, "")
-                                    setActualCash(val)
-                                }}
-                                className="text-lg font-bold"
-                            />
-                        </div>
-
-                        {actualCash && (
-                            <div className={cn(
-                                "p-3 rounded-md text-sm font-medium",
-                                Number(actualCash) - ((startCash || 0) + (cashPayments || 0)) >= 0
-                                    ? 'bg-green-50 text-green-700'
-                                    : 'bg-red-50 text-red-700'
-                            )}>
-                                {t.difference_label || "Difference"}: {formatTHB(Number(actualCash) - ((startCash || 0) + (cashPayments || 0)))}
-                            </div>
-                        )}
-                    </div>
-                    <DialogFooter>
-                        <Button variant="outline" onClick={() => setIsEndShiftOpen(false)}>{t.cancel}</Button>
-                        <Button
-                            variant="destructive"
-                            className="font-bold"
-                            disabled={!actualCash || isProcessingShift}
-                            onClick={handleEndShift}
-                        >
-                            {isProcessingShift ? t.ending_shift_status || "Ending..." : t.confirm_close_shift || "Confirm & Close Shift"}
-                        </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
+            {/* Count the drawer, a manager signs, the Z prints. */}
+            <CloseShiftDialog open={isEndShiftOpen} onOpenChange={setIsEndShiftOpen} />
         </>
     )
 }

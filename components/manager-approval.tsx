@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { ShieldCheck, Eye, EyeOff } from "lucide-react"
+import { NumberPad } from "@/components/number-pad"
 
 type Manager = { id: string; name: string; username: string }
 
@@ -132,6 +133,9 @@ export function ManagerApproval({
                             </button>
                         </div>
                     </div>
+
+                    {/* No keyboard on the till: the same keypad as the PIN screen. */}
+                    <NumberPad value={pin} onChange={setPin} maxLength={8} disabled={busy} label={t.manager_pin} />
 
                     {error && <p className="text-sm text-rose-600">{error}</p>}
 

@@ -5,7 +5,6 @@ import { motion, useReducedMotion } from "motion/react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { ZReport } from "@/components/reports/z-report"
 import { ServerPerformance } from "@/components/reports/server-performance"
 import { VoidAudit } from "@/components/reports/void-audit"
 import { NotesReport } from "@/components/reports/notes-report"
@@ -403,7 +402,6 @@ export default function ReportsPage() {
             <TabsTrigger value="voids">{t.void_audit}</TabsTrigger>
             <TabsTrigger value="exchanges">{t.exchange_log}</TabsTrigger>
             <TabsTrigger value="variance">{t.variance}</TabsTrigger>
-            <TabsTrigger value="zreport">{t.z_report}</TabsTrigger>
             </TabsList>
           </div>
 
@@ -462,10 +460,6 @@ export default function ReportsPage() {
                 endDate={endOfDay(dateRange.to).toISOString()}
               />
             )}
-          </TabsContent>
-
-          <TabsContent value="zreport">
-            <ZReport />
           </TabsContent>
 
           <TabsContent value="overview" className="space-y-6">
