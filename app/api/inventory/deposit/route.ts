@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { cookies } from 'next/headers'
+import { getSessionUser } from '@/lib/auth'
 
 export async function POST(request: Request) {
     try {
@@ -21,15 +21,8 @@ export async function POST(request: Request) {
         }
 
         // Get current user
-        const cookieStore = await cookies()
-        const sessionCookie = cookieStore.get('pos_session')
-        let userId = null
-        if (sessionCookie) {
-            try {
-                const sessionUser = JSON.parse(sessionCookie.value)
-                userId = sessionUser.id
-            } catch (e) { }
-        }
+        // The signed-in user as the database sees them (lib/auth), not a cookie's say-so.
+        const userId = (await getSessionUser())?.id ?? null
 
         // Update ingredient stock and create transaction
         const [updatedIngredient, transaction] = await prisma.$transaction([

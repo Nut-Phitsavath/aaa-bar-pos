@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { startOfDay } from 'date-fns'
-import { cookies } from 'next/headers'
+import { getSessionUser } from '@/lib/auth'
 import { calculateInclusiveTax, DEFAULT_RATE_LAK } from '@/lib/currency'
 import { promoBlocker, promoDiscountFor } from '@/lib/promotions'
 import { decrementStock } from '@/lib/stock'
@@ -27,19 +27,8 @@ export async function POST(request: Request) {
 
         // --- VALIDATION PHASE (Fail Fast) ---
 
-        // 0. Get current user
-        const cookieStore = await cookies()
-        const sessionCookie = cookieStore.get('pos_session')
-        let userId = null
-        if (sessionCookie) {
-            try {
-                const sessionUser = JSON.parse(sessionCookie.value)
-                const dbUser = await prisma.user.findUnique({ where: { id: sessionUser.id } })
-                if (dbUser) {
-                    userId = sessionUser.id
-                }
-            } catch (e) { }
-        }
+        // 0. Get current user - as the database sees them (lib/auth), not a cookie's say-so.
+        const userId = (await getSessionUser())?.id ?? null
 
         // 0b. No shift, no sale.
         //

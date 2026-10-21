@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma'
 import bcrypt from 'bcryptjs'
 import { cookieSecure } from '@/lib/cookie-scope'
 import { cookies } from 'next/headers'
+import { SESSION_COOKIE, sessionSecret, signSession } from '@/lib/session'
 
 export async function POST(request: Request) {
     try {
@@ -32,16 +33,14 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Invalid PIN for this user' }, { status: 401 })
         }
 
-        // Create session
-        const cookieStore = await cookies()
-        const sessionData = {
-            id: user.id,
-            name: user.name,
-            username: user.username,
-            role: user.role
+        // A session only this server can write - see lib/session.
+        const secret = sessionSecret()
+        if (!secret) {
+            console.error('[pin-login] SESSION_SECRET is missing from .env; nobody can sign in until it is set')
+            return NextResponse.json({ error: 'This POS is not set up for sign-in yet (SESSION_SECRET is missing).' }, { status: 500 })
         }
-
-        cookieStore.set('pos_session', JSON.stringify(sessionData), {
+        const cookieStore = await cookies()
+        cookieStore.set(SESSION_COOKIE, signSession({ id: user.id, role: user.role }, secret), {
             httpOnly: true,
             secure: cookieSecure(request),
             sameSite: 'lax',

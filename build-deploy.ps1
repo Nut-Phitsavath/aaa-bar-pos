@@ -87,6 +87,21 @@ Copy-Item -Force (Join-Path $ProjectRoot "dev.db") $DeployDir
 Write-Host "Copying .env..." -ForegroundColor Cyan
 Copy-Item -Force (Join-Path $ProjectRoot ".env") $DeployDir
 
+# Step 8b: The till signs its login cookies with a secret of its own (lib/session.ts),
+# never the developer's: any SESSION_SECRET copied above is replaced with a fresh
+# random one. A new package therefore signs everyone out once; they sign back in
+# with their PIN.
+$DeployEnv = Join-Path $DeployDir ".env"
+$bytes = New-Object byte[] 48
+[System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($bytes)
+$secret = [Convert]::ToBase64String($bytes).TrimEnd('=').Replace('+', '-').Replace('/', '_')
+$envLines = @(Get-Content $DeployEnv | Where-Object { $_ -notmatch '^\s*SESSION_SECRET\s*=' })
+$envLines += "SESSION_SECRET=`"$secret`""
+# No byte-order mark: Windows PowerShell's "utf8" writes one, and a BOM in front of
+# DATABASE_URL on the first line is a name nothing would find.
+[System.IO.File]::WriteAllLines($DeployEnv, [string[]]$envLines, (New-Object System.Text.UTF8Encoding($false)))
+Write-Host "Gave the till its own SESSION_SECRET." -ForegroundColor Cyan
+
 # Step 9: Copy scripts folder + startup files
 Write-Host "Copying scripts and startup files..." -ForegroundColor Cyan
 Copy-Item -Recurse -Force (Join-Path $ProjectRoot "scripts") (Join-Path $DeployDir "scripts")
