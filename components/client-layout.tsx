@@ -13,7 +13,7 @@ export function ClientLayout({ children, isMonitor }: { children: React.ReactNod
     const { isCollapsed } = useSidebar()
 
     // Same exclusion logic as Sidebar
-    const excludedPaths = ['/login', '/role-select', '/pin-login', '/receipt', '/customer-view', '/kitchen']
+    const excludedPaths = ['/role-select', '/pin-login', '/receipt', '/customer-view', '/kitchen']
     const isSidebarVisible = !isMonitor && !excludedPaths.some(path => pathname.startsWith(path))
 
     return (

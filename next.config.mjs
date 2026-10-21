@@ -1,9 +1,8 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   output: 'standalone',
-  typescript: {
-    ignoreBuildErrors: true,
-  },
+  // Type errors fail the build. They were ignored while prisma.config.ts (a
+  // Prisma 6 file this Prisma 5 project never read) broke the check.
   images: {
     remotePatterns: [
       {

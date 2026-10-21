@@ -17,7 +17,9 @@ export function PriceInput({
   onChange,
   placeholder,
   className,
-  currency = "₭",
+  // Baht: every price in this app is stored in baht. The kip sign was the
+  // cafe's, and it labelled a ฿900 set as "₭ 900" on the menu screen.
+  currency = "฿",
 }: PriceInputProps) {
   const [display, setDisplay] = React.useState("")
 

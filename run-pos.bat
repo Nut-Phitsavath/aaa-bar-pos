@@ -16,9 +16,8 @@ start "POS Server" cmd /c "scripts\start-pos.bat"
 :: Wait 10 seconds for server to initialize
 timeout /t 10 /nobreak > nul
 
-:: Start Cloudflare Tunnel in a new window
-echo Starting Tunnel...
-start "Cloudflare Tunnel" cmd /c "scripts\start-tunnel.bat"
+:: No Cloudflare tunnel: that was the cafe's remote view, and this bar runs on
+:: its own LAN only. Starting one would publish the till to the internet.
 
 :: Run Browser and Monitor Automation
 echo.
@@ -26,7 +25,6 @@ echo Running Startup Automation (Browsers and Monitors)...
 python scripts\startup_automation.py
 
 echo.
-echo Both services are starting in background windows.
-echo monitor.sattavath.store should be live shortly.
+echo The POS server is starting in a background window.
 echo.
 pause

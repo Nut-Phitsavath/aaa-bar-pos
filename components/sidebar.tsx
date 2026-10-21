@@ -162,7 +162,7 @@ export function Sidebar() {
     })
 
     // Sidebar is hidden on certain pages
-    const excludedPaths = ['/login', '/role-select', '/pin-login', '/receipt', '/customer-view', '/kitchen']
+    const excludedPaths = ['/role-select', '/pin-login', '/receipt', '/customer-view', '/kitchen']
     if (excludedPaths.some(path => pathname.startsWith(path))) {
         return null
     }

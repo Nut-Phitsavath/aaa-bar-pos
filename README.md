@@ -1,11 +1,12 @@
 # AAA Bar POS
 
 Next.js 16 + Prisma/SQLite. Single server on the till machine, other devices reach
-it over the LAN, owner reaches it over a Cloudflare tunnel.
+it over the LAN. Nothing is published to the internet (the Cloudflare tunnel was the
+cafe's, not the bar's).
 
 - [AAA-store-requriment.md](AAA-store-requriment.md) — the 26 requirements from the owner
 - [AAA-BAR-PLAN.md](AAA-BAR-PLAN.md) — what exists, what is missing, in what order
-- [SETUP-PRODUCTION.md](SETUP-PRODUCTION.md) — tunnel, build, start-on-boot
+- [SETUP-PRODUCTION.md](SETUP-PRODUCTION.md) — build, start-on-boot
 
 ## Getting a database
 
