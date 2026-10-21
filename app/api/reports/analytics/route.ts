@@ -5,7 +5,7 @@ import { recipeCost, pourCost, verdictFor, bandFor } from '@/lib/pour-cost'
 import { sessionTotal, sessionBillTotal } from '@/lib/sessions'
 // One definition of a countable sale, shared with the export and the Z-report
 // rather than re-decided here. See lib/reporting.ts for what drifted.
-import { COUNTED_ORDER, COUNTED_LINE, periodDiscounts } from '@/lib/reporting'
+import { COUNTED_ORDER, COUNTED_LINE, periodDiscounts, areaStats } from '@/lib/reporting'
 import { startOfDay, endOfDay } from 'date-fns'
 
 /** Movement types whose `reason` column holds a reason a person chose. */
@@ -136,31 +136,13 @@ export async function GET(request: Request) {
                 discountType: true,
                 discountValue: true,
                 promoDiscount: true,
-                table: { select: { area: true } },
+                table: { select: { id: true, name: true, area: true, seats: true } },
                 orders: { select: { status: true, total: true } },
             }
         })
 
-        const areaMap = new Map()
-        areaSessions.forEach(s => {
-            const area = s.table?.area || 'Unknown'
-            if (!areaMap.has(area)) areaMap.set(area, { area, revenue: 0, bills: 0, minutes: 0 })
-            const entry = areaMap.get(area)
-            entry.revenue += sessionBillTotal(s)
-            entry.bills += 1
-            // Clamped at zero: two tills on a bar's wifi do not agree to the
-            // second, and a negative length would drag an average sideways.
-            entry.minutes += Math.max(0, ((s.closedAt?.getTime() ?? 0) - s.openedAt.getTime()) / 60000)
-        })
-
-        const areaStats = Array.from(areaMap.values()).map(a => ({
-            area: a.area,
-            revenue: Math.round(a.revenue),
-            bills: a.bills,
-            avgBill: a.bills > 0 ? Math.round(a.revenue / a.bills) : 0,
-            avgMinutes: a.bills > 0 ? Math.round(a.minutes / a.bills) : 0,
-            revenuePerHour: a.minutes > 0 ? Math.round(a.revenue / (a.minutes / 60)) : 0,
-        })).sort((a, b) => b.revenue - a.revenue)
+        // Each area, and inside it each table (lib/reporting areaStats).
+        const areaRows = areaStats(areaSessions)
 
         // 2. Category Share
         //
@@ -779,7 +761,7 @@ export async function GET(request: Request) {
             worstProducts,
             zeroSales: trashItems,
             serviceStats,
-            areaStats,
+            areaStats: areaRows,
             promoImpact,
             serverSales,
             complimentaryDetails,
