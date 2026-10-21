@@ -87,3 +87,59 @@ export function periodDiscounts(sessions: DiscountedSession[]): number {
 export function netRevenue(grossRevenue: number, discounts: number): number {
     return grossRevenue - discounts
 }
+
+export type AreaSession = DiscountedSession & {
+    openedAt: Date
+    closedAt: Date | null
+    table: { id: string; name: string; area: string; seats: number } | null
+}
+
+type Tally = { revenue: number; bills: number; minutes: number }
+
+const figures = (t: Tally) => ({
+    revenue: Math.round(t.revenue),
+    bills: t.bills,
+    avgBill: t.bills > 0 ? Math.round(t.revenue / t.bills) : 0,
+    avgMinutes: t.bills > 0 ? Math.round(t.minutes / t.bills) : 0,
+    revenuePerHour: t.minutes > 0 ? Math.round(t.revenue / (t.minutes / 60)) : 0,
+})
+
+/**
+ * Where in the room the money came from: each area, and the tables inside it.
+ *
+ * Priced off the closed bill (sessionBillTotal), so a discounted VIP table is
+ * compared on what it actually paid; callers pass sessions closed in the
+ * period, since only a settled bill has a length.
+ *
+ * Per hour is the area's column to read - takings alone reward a table for
+ * sitting there all night. Per seat-hour is the table's: it divides by the
+ * seats as well, so a two-top and an eight-seat VIP room can be compared on
+ * the same footing (Table.seats).
+ */
+export function areaStats(sessions: AreaSession[]) {
+    const areas = new Map<string, Tally & { tables: Map<string, Tally & { name: string; seats: number }> }>()
+    for (const s of sessions) {
+        const areaName = s.table?.area || 'Unknown'
+        if (!areas.has(areaName)) areas.set(areaName, { revenue: 0, bills: 0, minutes: 0, tables: new Map() })
+        const area = areas.get(areaName)!
+        const key = s.table?.id ?? '-'
+        if (!area.tables.has(key)) area.tables.set(key, { name: s.table?.name ?? '-', seats: s.table?.seats ?? 0, revenue: 0, bills: 0, minutes: 0 })
+        const table = area.tables.get(key)!
+        const revenue = sessionBillTotal(s)
+        // Clamped at zero: two tills on a bar's wifi do not agree to the
+        // second, and a negative length would drag an average sideways.
+        const minutes = Math.max(0, ((s.closedAt?.getTime() ?? 0) - s.openedAt.getTime()) / 60000)
+        for (const t of [area, table]) { t.revenue += revenue; t.bills += 1; t.minutes += minutes }
+    }
+    return [...areas.entries()].map(([area, a]) => ({
+        area,
+        ...figures(a),
+        tables: [...a.tables.entries()].map(([id, t]) => ({
+            id,
+            name: t.name,
+            seats: t.seats,
+            ...figures(t),
+            revenuePerSeatHour: t.minutes > 0 && t.seats > 0 ? Math.round(t.revenue / (t.minutes / 60) / t.seats) : 0,
+        })).sort((x, y) => y.revenue - x.revenue),
+    })).sort((x, y) => y.revenue - x.revenue)
+}

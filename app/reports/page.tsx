@@ -1,6 +1,7 @@
 'use client'
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, Fragment } from "react"
+import { motion, useReducedMotion } from "motion/react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -16,7 +17,7 @@ import {
 } from "recharts"
 import {
   Calendar as CalendarIcon, Download, TrendingUp, DollarSign, ShoppingBag,
-  CreditCard, TrendingDown, Clock, Tag, Package, AlertTriangle, Search, Filter, Target, ArrowRightLeft, ShoppingCart, History
+  CreditCard, TrendingDown, Clock, Tag, Package, AlertTriangle, Search, Filter, Target, ArrowRightLeft, ShoppingCart, History, ChevronRight
 } from "lucide-react"
 import Link from "next/link"
 import { formatTHB } from "@/lib/currency"
@@ -35,6 +36,10 @@ const COLORS = ['#d97706', '#2563eb', '#16a34a', '#7c3aed', '#db2777', '#4b5563'
 export default function ReportsPage() {
   const { t } = useTranslation()
   const [productSearch, setProductSearch] = useState("")
+  // By area: which areas are opened out to their tables. Opening one keeps
+  // the others as they were and never moves the page.
+  const [openAreas, setOpenAreas] = useState<Set<string>>(new Set())
+  const reduceMotion = useReducedMotion()
   const [data, setData] = useState<any>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [dateRange, setDateRange] = useState<DateRange | undefined>({
@@ -542,18 +547,71 @@ export default function ReportsPage() {
                         </tr>
                       </thead>
                       <tbody>
-                        {(data?.areaStats || []).map((a: any) => (
-                          <tr key={a.area} className="border-b last:border-0">
-                            <td className="py-2 px-3 font-bold text-slate-800">{a.area}</td>
-                            <td className="py-2 px-3 text-right tabular-nums font-semibold">{formatTHB(a.revenue)}</td>
-                            <td className="py-2 px-3 text-right tabular-nums text-muted-foreground">{a.bills}</td>
-                            <td className="py-2 px-3 text-right tabular-nums">{formatTHB(a.avgBill)}</td>
-                            <td className="py-2 px-3 text-right tabular-nums text-muted-foreground">
-                              {Math.floor(a.avgMinutes / 60)}h {String(a.avgMinutes % 60).padStart(2, '0')}m
-                            </td>
-                            <td className="py-2 px-3 text-right tabular-nums font-black text-amber-600">{formatTHB(a.revenuePerHour)}</td>
-                          </tr>
-                        ))}
+                        {(data?.areaStats || []).map((a: any) => {
+                          const open = openAreas.has(a.area)
+                          const hm = (m: number) => `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, '0')}m`
+                          return (
+                            <Fragment key={a.area}>
+                              <tr className="border-b last:border-0">
+                                <td className="py-2 px-3 font-bold text-slate-800">
+                                  {/* Each area opens to its tables. Per seat-hour is the
+                                      table's column: it divides by the seats too, so a
+                                      two-top and an eight-seat room compare fairly. */}
+                                  <button
+                                    type="button"
+                                    aria-expanded={open}
+                                    aria-label={`${t.show_area_tables} ${a.area}`}
+                                    onClick={() => setOpenAreas(prev => {
+                                      const next = new Set(prev)
+                                      if (next.has(a.area)) next.delete(a.area); else next.add(a.area)
+                                      return next
+                                    })}
+                                    className="-mx-1 flex items-center gap-1 rounded px-1 py-0.5 text-left hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500"
+                                  >
+                                    <ChevronRight className={`h-4 w-4 shrink-0 text-slate-500 transition-transform duration-200 ease-out motion-reduce:transition-none ${open ? 'rotate-90' : ''}`} />
+                                    {a.area}
+                                  </button>
+                                </td>
+                                <td className="py-2 px-3 text-right tabular-nums font-semibold">{formatTHB(a.revenue)}</td>
+                                <td className="py-2 px-3 text-right tabular-nums text-muted-foreground">{a.bills}</td>
+                                <td className="py-2 px-3 text-right tabular-nums">{formatTHB(a.avgBill)}</td>
+                                <td className="py-2 px-3 text-right tabular-nums text-muted-foreground">{hm(a.avgMinutes)}</td>
+                                <td className="py-2 px-3 text-right tabular-nums font-black text-amber-600">{formatTHB(a.revenuePerHour)}</td>
+                              </tr>
+                              {open && (
+                                <>
+                                  <tr className="bg-slate-50 text-[11px] uppercase text-slate-600">
+                                    <th scope="col" className="py-1.5 pl-9 pr-3 text-left font-medium">{t.table}</th>
+                                    <th scope="col" className="py-1.5 px-3 text-right font-medium">{t.revenue}</th>
+                                    <th scope="col" className="py-1.5 px-3 text-right font-medium">{t.bills}</th>
+                                    <th scope="col" className="py-1.5 px-3 text-right font-medium">{t.avg_bill}</th>
+                                    <th scope="col" className="py-1.5 px-3 text-right font-medium">{t.avg_time}</th>
+                                    <th scope="col" className="py-1.5 px-3 text-right font-medium">{t.per_seat_hour}</th>
+                                  </tr>
+                                  {(a.tables || []).map((tb: any, i: number) => (
+                                    <motion.tr
+                                      key={tb.id}
+                                      initial={reduceMotion ? false : { opacity: 0 }}
+                                      animate={{ opacity: 1 }}
+                                      transition={{ duration: 0.18, delay: Math.min(i, 8) * 0.025, ease: [0.25, 1, 0.5, 1] }}
+                                      className="border-b bg-slate-50 last:border-0"
+                                    >
+                                      <td className="py-1.5 pl-9 pr-3 text-slate-800">
+                                        <span className="font-semibold">{tb.name}</span>
+                                        {tb.seats > 0 && <span className="ml-1.5 whitespace-nowrap text-xs text-slate-600">{tb.seats} {t.seats}</span>}
+                                      </td>
+                                      <td className="py-1.5 px-3 text-right tabular-nums">{formatTHB(tb.revenue)}</td>
+                                      <td className="py-1.5 px-3 text-right tabular-nums text-slate-600">{tb.bills}</td>
+                                      <td className="py-1.5 px-3 text-right tabular-nums">{formatTHB(tb.avgBill)}</td>
+                                      <td className="py-1.5 px-3 text-right tabular-nums text-slate-600">{hm(tb.avgMinutes)}</td>
+                                      <td className="py-1.5 px-3 text-right tabular-nums font-bold text-amber-700">{formatTHB(tb.revenuePerSeatHour)}</td>
+                                    </motion.tr>
+                                  ))}
+                                </>
+                              )}
+                            </Fragment>
+                          )
+                        })}
                         {(!data?.areaStats || data.areaStats.length === 0) && (
                           <tr><td colSpan={6} className="py-10 text-center italic text-muted-foreground">{t.no_data_for_period}</td></tr>
                         )}
