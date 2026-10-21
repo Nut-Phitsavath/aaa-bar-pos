@@ -732,7 +732,7 @@ export default function InventoryPage() {
                         </div>
                       </div>
                       <div className="space-y-2">
-                        <Label>{t.cost_per_unit} (LAK)</Label>
+                        <Label>{t.cost_per_unit} (฿)</Label>
                         <FormattedNumberInput allowDecimals={true} value={formData.cost} onChange={val => setFormData({ ...formData, cost: val })} />
                       </div>
                     </div>

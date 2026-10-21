@@ -12,7 +12,7 @@ import { ReceiptDialog } from "@/components/receipt-dialog"
 import { ReturnsDialog } from "@/components/pos/returns-dialog"
 import { QRCodeSVG } from "qrcode.react"
 import { Banknote, QrCode, Gift, Clock3, Printer, Percent, Tag, ArrowLeft, Check, PackageOpen, AlertTriangle } from "lucide-react"
-import { formatTHB, formatLAK, thbToLak } from "@/lib/currency"
+import { formatTHB } from "@/lib/currency"
 import { minSpendShortfall } from "@/lib/min-spend"
 import { toast } from "sonner"
 
@@ -41,7 +41,6 @@ type SettleBill = {
     discount: number
     total: number
     balance: number
-    fxRateLAK: number
 }
 
 /** The notes a customer actually hands over. */
@@ -581,9 +580,6 @@ function SettleScreen() {
                                 {selected.size} {t.round_no}
                             </span>
                         )}
-                        <span className="text-slate-400 tabular-nums">
-                            {formatLAK(thbToLak(shown, bill.fxRateLAK))}
-                        </span>
                     </div>
                 </div>
 

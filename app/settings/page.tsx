@@ -15,8 +15,6 @@ import { notify } from "@/components/ui/sonner"
 import { useConfirm } from "@/components/confirm-provider"
 import { useLanguage } from "@/components/language-provider"
 import { Header } from "@/components/header"
-import { useTillCurrency, saveTillCurrency } from "@/lib/till"
-import type { ReceiptCurrency } from "@/lib/currency"
 
 export default function SettingsPage() {
   const [user, setUser] = useState<any>(null)
@@ -25,15 +23,6 @@ export default function SettingsPage() {
   const [isSaving, setIsSaving] = useState(false)
   // Whether the server holds a OnePay account; OnePay for bills is offered only then.
   const [onepayReady, setOnepayReady] = useState(false)
-  // This device's own choice, not a shop setting: it never goes through Save.
-  const tillCurrency = useTillCurrency()
-  const chooseTillCurrency = (currency: ReceiptCurrency) => {
-    if (saveTillCurrency(currency)) {
-      notify.success(currency === "LAK" ? t.till_prints_kip : t.till_prints_baht)
-    } else {
-      notify.error(t.till_currency_not_saved)
-    }
-  }
   const { t } = useTranslation()
   const confirm = useConfirm()
   const { setLang } = useLanguage()
@@ -289,35 +278,6 @@ export default function SettingsPage() {
                 checked={settings.boldReceipt === 'true'}
                 onCheckedChange={(checked) => setSettings({ ...settings, boldReceipt: checked ? 'true' : 'false' })}
               />
-            </div>
-
-            {/* This till's slips: kip at the main bar, baht at the VIP counter.
-                Saved on the device the moment it is picked - see lib/till.ts. */}
-            <div className="flex flex-col gap-3 p-4 bg-slate-50 rounded-xl border border-slate-100 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex items-center gap-3">
-                <div className="bg-slate-200 p-2 rounded-lg">
-                  <Banknote className="w-5 h-5 text-slate-700" />
-                </div>
-                <div>
-                  <p className="font-bold">{t.till_receipt_currency}</p>
-                  <p className="text-xs text-muted-foreground">{t.till_receipt_currency_desc}</p>
-                </div>
-              </div>
-              <div role="radiogroup" aria-label={t.till_receipt_currency} className="flex gap-2 shrink-0">
-                {(["THB", "LAK"] as const).map((currency) => (
-                  <Button
-                    key={currency}
-                    type="button"
-                    role="radio"
-                    aria-checked={tillCurrency === currency}
-                    variant={tillCurrency === currency ? "default" : "outline"}
-                    className="h-11 min-w-24"
-                    onClick={() => chooseTillCurrency(currency)}
-                  >
-                    {currency === "LAK" ? t.currency_kip : t.currency_baht}
-                  </Button>
-                ))}
-              </div>
             </div>
 
             {/* Which QR a bill carries - see lib/bank-qr. A shop setting, saved
