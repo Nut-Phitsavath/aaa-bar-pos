@@ -6,7 +6,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { ShieldCheck, Eye, EyeOff } from "lucide-react"
+import { ShieldCheck, Eye, EyeOff, Delete } from "lucide-react"
 
 type Manager = { id: string; name: string; username: string }
 
@@ -131,6 +131,52 @@ export function ManagerApproval({
                                 {reveal ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                             </button>
                         </div>
+                    </div>
+
+                    {/* The till is a touch screen with no keyboard, so the PIN
+                        field alone could not be filled in: the same keypad as
+                        the PIN screen. The field still takes a keyboard. */}
+                    <div className="grid grid-cols-3 gap-2" role="group" aria-label={t.manager_pin}>
+                        {["1", "2", "3", "4", "5", "6", "7", "8", "9"].map((d) => (
+                            <Button
+                                key={d}
+                                type="button"
+                                variant="outline"
+                                className="h-14 text-2xl font-semibold hover:bg-amber-100"
+                                onClick={() => setPin((p) => (p + d).slice(0, 8))}
+                                disabled={busy}
+                            >
+                                {d}
+                            </Button>
+                        ))}
+                        <Button
+                            type="button"
+                            variant="outline"
+                            className="h-14 text-sm font-semibold text-slate-600"
+                            onClick={() => setPin("")}
+                            disabled={busy || pin.length === 0}
+                        >
+                            {t.clear}
+                        </Button>
+                        <Button
+                            type="button"
+                            variant="outline"
+                            className="h-14 text-2xl font-semibold hover:bg-amber-100"
+                            onClick={() => setPin((p) => (p + "0").slice(0, 8))}
+                            disabled={busy}
+                        >
+                            0
+                        </Button>
+                        <Button
+                            type="button"
+                            variant="outline"
+                            className="h-14 text-slate-600"
+                            onClick={() => setPin((p) => p.slice(0, -1))}
+                            disabled={busy || pin.length === 0}
+                            aria-label={t.delete}
+                        >
+                            <Delete className="w-6 h-6" />
+                        </Button>
                     </div>
 
                     {error && <p className="text-sm text-rose-600">{error}</p>}
