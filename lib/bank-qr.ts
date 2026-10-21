@@ -3,14 +3,10 @@
  *
  * Settings -> "QR on bills" picks one of three. Off. The bar's static bank QR
  * (Settings -> Store Transfer QR), used until the bank's dynamic QR is set up:
- * it carries no amount, so the customer types one, and a bill that only says
- * ฿165 leaves them converting baht to kip in their head - the slip states the
- * kip to transfer, at the bill's own rate, whichever currency the till prints
- * in, because a LAO QR pays into a kip account. Or OnePay's dynamic QR, which
- * carries its own amount and is confirmed by the bank.
+ * it carries no amount, so the customer types one and the slip states the
+ * baht to transfer. Or OnePay's dynamic QR, which carries its own amount and
+ * is confirmed by the bank.
  */
-
-import { thbToLak } from './currency.ts'
 
 /**
  * What the uploaded QR picture says, so the slip can redraw it as vectors.
@@ -57,7 +53,7 @@ export function billQrMode(value: string | null | undefined, hasBankQr: boolean)
 
 export type BillQr =
     | { kind: 'ONEPAY'; payload: string; thb: number }
-    | { kind: 'BANK'; src: string; thb: number; lak: number | null }
+    | { kind: 'BANK'; src: string; thb: number }
 
 /**
  * Which QR, if any, this bill carries.
@@ -72,7 +68,7 @@ export type BillQr =
  * owner allowed it, and staff confirm that transfer by hand as usual.
  */
 export function billQrFor(
-    bill: { balance?: number | null; fxRateLAK?: number | null; qrCodeData?: string | null; closedAt?: string | null },
+    bill: { balance?: number | null; qrCodeData?: string | null; closedAt?: string | null },
     settings: { mode: BillQrMode; fallback: boolean; bankQrUrl: string | null | undefined },
 ): BillQr | null {
     const owed = bill.balance ?? 0
@@ -84,6 +80,5 @@ export function billQrFor(
     }
 
     if (!settings.bankQrUrl) return null
-    const rate = bill.fxRateLAK && bill.fxRateLAK > 0 ? bill.fxRateLAK : null
-    return { kind: 'BANK', src: settings.bankQrUrl, thb: owed, lak: rate ? thbToLak(owed, rate) : null }
+    return { kind: 'BANK', src: settings.bankQrUrl, thb: owed }
 }

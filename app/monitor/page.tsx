@@ -171,7 +171,7 @@ export default function MonitorPage() {
                                             tickFormatter={(val) => val > 0 ? `${(val / 1000).toFixed(0)}k` : ''}
                                         />
                                         <Tooltip
-                                            formatter={(value: number, name: string) => [numFormat.format(value) + ' LAK', name === 'revenue' ? 'Revenue' : 'Orders']}
+                                            formatter={(value: number, name: string) => ['฿' + numFormat.format(value), name === 'revenue' ? 'Revenue' : 'Orders']}
                                             contentStyle={{ backgroundColor: '#451a03', border: 'none', borderRadius: '12px' }}
                                             itemStyle={{ color: '#fbbf24', fontSize: '11px', fontWeight: 'black' }}
                                             labelStyle={{ color: '#fff', fontSize: '10px' }}
@@ -199,7 +199,7 @@ export default function MonitorPage() {
                                                             <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                                                         ))}
                                                     </Pie>
-                                                    <Tooltip formatter={(value: number) => numFormat.format(value) + ' LAK'} />
+                                                    <Tooltip formatter={(value: number) => '฿' + numFormat.format(value)} />
                                                 </PieChart>
                                             </ResponsiveContainer>
                                         </div>
@@ -232,7 +232,7 @@ export default function MonitorPage() {
                                                             <Cell key={`cell-pm-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
                                                         ))}
                                                     </Pie>
-                                                    <Tooltip formatter={(value: number) => numFormat.format(value) + ' LAK'} />
+                                                    <Tooltip formatter={(value: number) => '฿' + numFormat.format(value)} />
                                                 </PieChart>
                                             </ResponsiveContainer>
                                         </div>
@@ -282,7 +282,7 @@ export default function MonitorPage() {
                                         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                                         <XAxis dataKey="hour" tick={{ fontSize: 9 }} tickFormatter={(h) => `${h}h`} />
                                         <YAxis tick={{ fontSize: 8 }} tickFormatter={(v) => v > 0 ? `${(v / 1000).toFixed(0)}k` : ''} />
-                                        <Tooltip formatter={(value: number) => numFormat.format(value) + ' LAK'} />
+                                        <Tooltip formatter={(value: number) => '฿' + numFormat.format(value)} />
                                         <Bar dataKey="revenue" radius={[2, 2, 0, 0]} fill="#fbbf24" barSize={8}>
                                             {data?.hourlySales?.map((entry: any, index: number) => (
                                                 <Cell key={`cell-${index}`} fill={entry.hour === peakHour?.hour ? '#92400e' : '#fbbf24'} />

@@ -1,6 +1,6 @@
 // Run: node --experimental-strip-types --test lib/currency.test.ts
 //
-// THB is the till's currency; LAK and USD are display conversions. These cover
+// Baht is the only money; LAK and USD are display conversions. These cover
 // the cases where the screen, the bill and the stored order would disagree.
 
 import { test } from 'node:test'
@@ -10,7 +10,7 @@ import {
     thbToLak, thbToUsd,
     calculateChange, calculateInclusiveTax,
     DEFAULT_RATE_LAK, DEFAULT_RATE_USD,
-    billRates, slipMoney, isReceiptCurrency,
+    billRates,
 } from './currency.ts'
 
 test('formatTHB groups thousands and shows no decimals', () => {
@@ -139,40 +139,4 @@ test('a zero VAT rate stamped at close survives a later registration', () => {
     // charged no VAT, and `?? live` would quietly backfill today's 10%.
     const bill = { status: 'CLOSED', fxRateLAK: 690, fxRateUSD: 33, taxRate: 0 }
     assert.equal(billRates(bill, { lak: 720, usd: 35, tax: 10 }).tax, 0)
-})
-
-// --- The slip's currency, chosen per till -----------------------------------
-//
-// Two counters in one bar: the main bar's customers pay in kip, the VIP
-// counter's in baht. The slip follows the till it prints at; the money behind
-// it stays in baht.
-
-test('a kip till prints every amount in kip at the bill\'s rate, unrounded', () => {
-    const money = slipMoney('LAK', 690)
-    assert.equal(money.currency, 'LAK')
-    assert.equal(money.format(165), '113,850 ₭')
-    // Not rounded to a note: the owner wants the exact figure.
-    assert.equal(money.format(151.5), '104,535 ₭')
-    assert.equal(money.format(0), '0 ₭')
-})
-
-test('a baht till prints baht, as before', () => {
-    const money = slipMoney('THB', 690)
-    assert.equal(money.currency, 'THB')
-    assert.equal(money.format(165), '฿165')
-})
-
-test('a kip till with no saved rate prints baht rather than guess one', () => {
-    // An old counter sale, or a bill from before rates were stamped. Quoting
-    // today's rate would put a figure on the slip nobody was charged.
-    assert.equal(slipMoney('LAK', null).currency, 'THB')
-    assert.equal(slipMoney('LAK', null).format(165), '฿165')
-    assert.equal(slipMoney('LAK', 0).currency, 'THB')
-})
-
-test('only baht and kip are a till setting', () => {
-    assert.equal(isReceiptCurrency('THB'), true)
-    assert.equal(isReceiptCurrency('LAK'), true)
-    assert.equal(isReceiptCurrency('USD'), false)
-    assert.equal(isReceiptCurrency(null), false)
 })

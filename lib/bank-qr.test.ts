@@ -2,15 +2,14 @@
 //
 // Which QR, if any, a bill carries. Settings -> "QR on bills" picks Off, the
 // bar's static bank QR, or OnePay's dynamic one; the slip follows it. A static
-// QR carries no amount, so the slip says exactly what to type - in kip,
-// because a LAO QR pays into a kip account.
+// QR carries no amount, so the slip says exactly what to type, in baht.
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { billQrFor, billQrMode } from './bank-qr.ts'
 
 const QR = 'data:image/jpeg;base64,AAAA'
-const owed = { balance: 165, fxRateLAK: 690, qrCodeData: null, closedAt: null }
+const owed = { balance: 165, qrCodeData: null, closedAt: null }
 const bank = { mode: 'BANK', fallback: true, bankQrUrl: QR } as const
 const onepay = { mode: 'ONEPAY', fallback: true, bankQrUrl: QR } as const
 
@@ -31,16 +30,12 @@ test('a choice once made is kept', () => {
 
 // --- Bank QR -------------------------------------------------------------------
 
-test('an unpaid bill prints the bank QR with the kip to transfer', () => {
-    assert.deepEqual(billQrFor(owed, bank), { kind: 'BANK', src: QR, thb: 165, lak: 113850 })
+test('an unpaid bill prints the bank QR with the baht to transfer', () => {
+    assert.deepEqual(billQrFor(owed, bank), { kind: 'BANK', src: QR, thb: 165 })
 })
 
 test('a part-paid bill asks only for what is still owed', () => {
-    assert.deepEqual(billQrFor({ ...owed, balance: 40 }, bank), { kind: 'BANK', src: QR, thb: 40, lak: 27600 })
-})
-
-test('with no rate to hand the slip asks in baht rather than guess the kip', () => {
-    assert.deepEqual(billQrFor({ ...owed, fxRateLAK: null }, bank), { kind: 'BANK', src: QR, thb: 165, lak: null })
+    assert.deepEqual(billQrFor({ ...owed, balance: 40 }, bank), { kind: 'BANK', src: QR, thb: 40 })
 })
 
 test('nothing owed, nothing to scan', () => {
@@ -72,6 +67,6 @@ test('OnePay prints the QR it made, which carries its own amount', () => {
 })
 
 test('when OnePay could not make one, the bank QR stands in - if the owner allowed it', () => {
-    assert.deepEqual(billQrFor(owed, onepay), { kind: 'BANK', src: QR, thb: 165, lak: 113850 })
+    assert.deepEqual(billQrFor(owed, onepay), { kind: 'BANK', src: QR, thb: 165 })
     assert.equal(billQrFor(owed, { ...onepay, fallback: false }), null)
 })
