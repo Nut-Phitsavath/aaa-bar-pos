@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { ManagerApproval } from "@/components/manager-approval"
 import { ReceiptDialog } from "@/components/receipt-dialog"
+import { NumberPad } from "@/components/number-pad"
 import { formatTHB } from "@/lib/currency"
 import { cn } from "@/lib/utils"
 
@@ -86,79 +87,86 @@ export function CloseShiftDialog({ open, onOpenChange }: { open: boolean; onOpen
     return (
         <>
             <Dialog open={open} onOpenChange={onOpenChange}>
-                <DialogContent className="!top-[15%] !translate-y-0">
+                {/* Wide enough for the figures beside the keypad, so it fits a
+                    1024x768 till; it scrolls rather than run off a smaller one. */}
+                <DialogContent className="sm:max-w-2xl max-h-[95vh] overflow-y-auto">
                     <DialogHeader>
                         <DialogTitle>{t.end_current_shift}</DialogTitle>
                     </DialogHeader>
-                    <div className="space-y-4 py-4">
-                        <div className="p-4 bg-slate-50 rounded-lg space-y-2 border border-slate-100 font-mono text-sm leading-relaxed">
-                            <div className="flex justify-between">
-                                <span>{t.starting_cash_with_colon}</span>
-                                <span>{formatTHB(startCash || 0)}</span>
+                    <div className="grid gap-4 py-4 md:grid-cols-2">
+                        <div className="space-y-4">
+                            <div className="p-4 bg-slate-50 rounded-lg space-y-2 border border-slate-100 font-mono text-sm leading-relaxed">
+                                <div className="flex justify-between">
+                                    <span>{t.starting_cash_with_colon}</span>
+                                    <span>{formatTHB(startCash || 0)}</span>
+                                </div>
+                                <div className="flex justify-between">
+                                    <span>{t.cash_sales_with_colon}</span>
+                                    <span>{formatTHB(cashPayments || 0)}</span>
+                                </div>
+                                <div className="flex justify-between font-bold border-t border-slate-200 pt-2 pb-1">
+                                    <span>{t.expected_cash_with_colon}</span>
+                                    <span className="text-amber-700">{formatTHB(expected)}</span>
+                                </div>
+                                <div className="flex justify-between border-t border-slate-100 pt-2 text-slate-600">
+                                    <span>{t.onepay_total}: ({onePayCount || 0})</span>
+                                    <span>{formatTHB(onePayPayments || 0)}</span>
+                                </div>
+                                <div className="flex justify-between text-slate-600">
+                                    <span>{t.transfer_total}: ({transferCount || 0})</span>
+                                    <span>{formatTHB(transferPayments || 0)}</span>
+                                </div>
                             </div>
-                            <div className="flex justify-between">
-                                <span>{t.cash_sales_with_colon}</span>
-                                <span>{formatTHB(cashPayments || 0)}</span>
-                            </div>
-                            <div className="flex justify-between font-bold border-t border-slate-200 pt-2 pb-1">
-                                <span>{t.expected_cash_with_colon}</span>
-                                <span className="text-amber-700">{formatTHB(expected)}</span>
-                            </div>
-                            <div className="flex justify-between border-t border-slate-100 pt-2 text-slate-600">
-                                <span>{t.onepay_total}: ({onePayCount || 0})</span>
-                                <span>{formatTHB(onePayPayments || 0)}</span>
-                            </div>
-                            <div className="flex justify-between text-slate-600">
-                                <span>{t.transfer_total}: ({transferCount || 0})</span>
-                                <span>{formatTHB(transferPayments || 0)}</span>
-                            </div>
+
+                            {/* What is holding the close, each one a way in to go and
+                                deal with it - not a refusal that leaves staff hunting
+                                the floor at 3am. */}
+                            {blocking.length > 0 && (
+                                <div className="rounded-xl border-2 border-amber-300 bg-amber-50 p-3 space-y-2">
+                                    <p className="text-sm font-bold text-amber-900">{t.tables_still_open}</p>
+                                    {blocking.map((b) => (
+                                        <div key={b.id} className="flex items-center gap-3 text-sm">
+                                            <span className="font-bold text-slate-900">{b.table}</span>
+                                            <span className="tabular-nums text-slate-700">{formatTHB(b.balance)}</span>
+                                            <Button
+                                                size="sm"
+                                                className="ms-auto h-9 bg-amber-600 hover:bg-amber-700 text-white"
+                                                onClick={() => { onOpenChange(false); router.push(`/pos/settle?session=${b.id}`) }}
+                                            >
+                                                {t.settle_bill}
+                                            </Button>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+
+                            <p className="text-xs text-slate-600">{t.z_prints_at_close}</p>
                         </div>
 
-                        <div className="space-y-2">
-                            <Label htmlFor="actualCash">{t.actual_cash_counted}</Label>
-                            <Input
-                                id="actualCash"
-                                type="text"
-                                inputMode="numeric"
-                                placeholder={t.enter_cash_drawer}
-                                value={actualCash ? Number(actualCash).toLocaleString() : ""}
-                                onChange={(e) => setActualCash(e.target.value.replace(/\D/g, ""))}
-                                className="text-lg font-bold"
-                            />
+                        <div className="space-y-3">
+                            <div className="space-y-2">
+                                <Label htmlFor="actualCash">{t.actual_cash_counted}</Label>
+                                <Input
+                                    id="actualCash"
+                                    type="text"
+                                    inputMode="numeric"
+                                    placeholder={t.enter_cash_drawer}
+                                    value={actualCash ? Number(actualCash).toLocaleString() : ""}
+                                    onChange={(e) => setActualCash(e.target.value.replace(/\D/g, ""))}
+                                    className="text-lg font-bold"
+                                />
+                            </div>
+                            {actualCash && (
+                                <div className={cn(
+                                    "p-3 rounded-md text-sm font-medium",
+                                    Number(actualCash) - expected >= 0 ? "bg-green-50 text-green-700" : "bg-red-50 text-red-700",
+                                )}>
+                                    {t.difference_label}: {formatTHB(Number(actualCash) - expected)}
+                                </div>
+                            )}
+                            {/* No keyboard on the till: the drawer count is tapped in. */}
+                            <NumberPad value={actualCash} onChange={setActualCash} maxLength={9} label={t.actual_cash_counted} />
                         </div>
-
-                        {actualCash && (
-                            <div className={cn(
-                                "p-3 rounded-md text-sm font-medium",
-                                Number(actualCash) - expected >= 0 ? "bg-green-50 text-green-700" : "bg-red-50 text-red-700",
-                            )}>
-                                {t.difference_label}: {formatTHB(Number(actualCash) - expected)}
-                            </div>
-                        )}
-
-                        {/* What is holding the close, each one a way in to go and
-                            deal with it - not a refusal that leaves staff hunting
-                            the floor at 3am. */}
-                        {blocking.length > 0 && (
-                            <div className="rounded-xl border-2 border-amber-300 bg-amber-50 p-3 space-y-2">
-                                <p className="text-sm font-bold text-amber-900">{t.tables_still_open}</p>
-                                {blocking.map((b) => (
-                                    <div key={b.id} className="flex items-center gap-3 text-sm">
-                                        <span className="font-bold text-slate-900">{b.table}</span>
-                                        <span className="tabular-nums text-slate-700">{formatTHB(b.balance)}</span>
-                                        <Button
-                                            size="sm"
-                                            className="ms-auto h-9 bg-amber-600 hover:bg-amber-700 text-white"
-                                            onClick={() => { onOpenChange(false); router.push(`/pos/settle?session=${b.id}`) }}
-                                        >
-                                            {t.settle_bill}
-                                        </Button>
-                                    </div>
-                                ))}
-                            </div>
-                        )}
-
-                        <p className="text-xs text-slate-600">{t.z_prints_at_close}</p>
                     </div>
                     <DialogFooter>
                         <Button variant="outline" onClick={() => onOpenChange(false)}>{t.cancel}</Button>

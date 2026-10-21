@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { ManagerApproval } from "@/components/manager-approval"
+import { NumberPad } from "@/components/number-pad"
 import { useShift } from "@/components/shift-provider"
 import { useTranslation } from "@/hooks/use-translation"
 import { notify } from "@/components/ui/sonner"
@@ -117,8 +118,9 @@ export function ShiftDialog({ open, onOpenChange }: ShiftDialogProps) {
                             }}
                             className="text-lg font-bold"
                         />
+                        <NumberPad value={startCash} onChange={setStartCash} maxLength={9} label={t.start_cash_label} />
                     </div>
-                    <Button className="w-full bg-amber-600 hover:bg-amber-700" onClick={handleOpenShift}>
+                    <Button className="w-full h-12 bg-amber-600 hover:bg-amber-700" onClick={handleOpenShift}>
                         {t.open_status} {t.shifts}
                     </Button>
                 </div>
