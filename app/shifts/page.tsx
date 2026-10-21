@@ -1,20 +1,16 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { useRouter } from "next/navigation"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { ArrowLeft, Calendar, ChevronRight, LogOut } from "lucide-react"
+import { ArrowLeft, Calendar, ChevronRight, LogOut, Printer } from "lucide-react"
 import Link from "next/link"
 import { format24Hour, formatDateTime24 } from "@/lib/utils"
 import { formatTHB } from "@/lib/currency"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
-import { Label } from "@/components/ui/label"
-import { Input } from "@/components/ui/input"
 import { Header } from "@/components/header"
 import { useTranslation } from "@/hooks/use-translation"
 import { ShiftDialog } from "@/components/shift-dialog"
-import { ManagerApproval } from "@/components/manager-approval"
+import { ReceiptDialog } from "@/components/receipt-dialog"
 
 interface Shift {
     id: string
@@ -35,15 +31,8 @@ export default function ShiftsPage() {
     const { t } = useTranslation()
     const [shifts, setShifts] = useState<Shift[]>([])
     const [loading, setLoading] = useState(true)
-    const [isEndShiftOpen, setIsEndShiftOpen] = useState(false)
-    const router = useRouter()
-    const [actualCash, setActualCash] = useState("")
-    // Which tables are holding the close open. Empty until the server says so.
-    const [blocking, setBlocking] = useState<{ id: string; table: string; balance: number }[]>([])
-    const [isProcessing, setIsProcessing] = useState(false)
-    // Counting the drawer out and declaring a variance is a manager's signature.
-    const [approving, setApproving] = useState(false)
-    const [approvalError, setApprovalError] = useState<string | null>(null)
+    // The Z slip in the receipt dialog: X for the open shift, a reprint for a closed one.
+    const [zSrc, setZSrc] = useState<string | null>(null)
     const [isShiftDialogOpen, setIsShiftDialogOpen] = useState(false)
 
     const activeShift = shifts.find(s => s.status === 'OPEN')
@@ -63,58 +52,6 @@ export default function ShiftsPage() {
             console.error('Failed to fetch shifts:', error)
         } finally {
             setLoading(false)
-        }
-    }
-
-    const handleEndShift = () => {
-        if (!activeShift || !actualCash) return
-        setApprovalError(null)
-        setApproving(true)
-    }
-
-    const endApproved = async (creds: { managerUsername: string; managerPin: string }) => {
-        if (!activeShift) return
-        setIsProcessing(true)
-        try {
-            const res = await fetch('/api/shifts', {
-                method: 'PUT',
-                body: JSON.stringify({
-                    id: activeShift.id,
-                    actualCash: parseFloat(actualCash),
-                    ...creds,
-                }),
-                headers: { 'Content-Type': 'application/json' }
-            })
-            if (res.status === 403 || res.status === 429) {
-                const err = await res.json().catch(() => ({}))
-                setApprovalError(err.error === 'TOO_MANY_ATTEMPTS' ? t.too_many_attempts : t.invalid_approval)
-                return
-            }
-            if (res.status === 409) {
-                // Live tables, not a bad PIN - close the approval so the list
-                // underneath is what the manager is looking at.
-                setApproving(false)
-                // Not "something went wrong": the shift is fine, there are just
-                // live tables. Name them so the manager can go and deal with
-                // each one instead of guessing what is holding the close.
-                const data = await res.json().catch(() => ({}))
-                setBlocking(Array.isArray(data.tables) ? data.tables : [])
-                return
-            }
-            if (res.ok) {
-                setApproving(false)
-                setBlocking([])
-                setIsEndShiftOpen(false)
-                setActualCash("")
-                const channel = new BroadcastChannel("payment_channel")
-                channel.postMessage({ type: "PAYMENT_COMPLETE" }) // Reuse this as it triggers checkShiftStatus
-                channel.close()
-                fetchShifts()
-            }
-        } catch (error) {
-            console.error('Failed to end shift:', error)
-        } finally {
-            setIsProcessing(false)
         }
     }
 
@@ -184,6 +121,7 @@ export default function ShiftsPage() {
                                         <th className="text-right p-3 font-semibold">{t.actual_label}</th>
                                         <th className="text-right p-3 font-semibold">{t.difference_label}</th>
                                         <th className="text-center p-3 font-semibold">{t.status}</th>
+                                        <th className="p-3"><span className="sr-only">{t.z_report}</span></th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -217,6 +155,19 @@ export default function ShiftsPage() {
                                                         {shift.status === 'OPEN' ? t.open_status : t.closed_status}
                                                     </span>
                                                 </td>
+                                                {/* The Z again for a closed shift, the way SambaPOS reports a
+                                                    past work period; for the open one, the X - live, not final. */}
+                                                <td className="p-3 text-right">
+                                                    <Button
+                                                        variant="outline"
+                                                        size="sm"
+                                                        className="h-9 whitespace-nowrap"
+                                                        onClick={() => setZSrc(`/receipt/z?shift=${encodeURIComponent(shift.id)}${shift.status === 'OPEN' ? '' : '&reprint=1'}`)}
+                                                    >
+                                                        <Printer className="w-4 h-4 me-1.5" />
+                                                        {shift.status === 'OPEN' ? t.z_view_x : t.z_print}
+                                                    </Button>
+                                                </td>
                                             </tr>
                                         )
                                     })}
@@ -227,100 +178,10 @@ export default function ShiftsPage() {
                 </Card>
             </div>
 
-            <Dialog open={isEndShiftOpen} onOpenChange={setIsEndShiftOpen}>
-                <DialogContent>
-                    <DialogHeader>
-                        <DialogTitle>{t.end_current_shift}</DialogTitle>
-                    </DialogHeader>
-                    <div className="space-y-4 py-4">
-                        <div className="p-4 bg-muted rounded-lg space-y-2">
-                            <div className="flex justify-between text-sm">
-                                <span>{t.starting_cash_with_colon}</span>
-                                <span>{activeShift ? formatCurrency(activeShift.startCash) : 0}</span>
-                            </div>
-                            <div className="flex justify-between text-sm">
-                                <span>{t.cash_sales_with_colon}</span>
-                                <span>{activeShift ? formatCurrency(activeShift.cashPayments) : 0}</span>
-                            </div>
-                            <div className="flex justify-between font-bold border-t pt-2">
-                                <span>{t.expected_cash_with_colon}</span>
-                                <span className="text-amber-600">
-                                    {activeShift ? formatCurrency(activeShift.startCash + activeShift.cashPayments) : 0}
-                                </span>
-                            </div>
-                        </div>
-
-                        <div className="space-y-2">
-                            <Label htmlFor="actualCash">{t.actual_cash_counted}</Label>
-                            <Input
-                                type="text"
-                                placeholder="0"
-                                value={actualCash ? Number(actualCash).toLocaleString() : ""}
-                                onChange={e => {
-                                    const val = e.target.value.replace(/\D/g, "")
-                                    setActualCash(val)
-                                }}
-                                className="text-lg font-bold"
-                            />
-                        </div>
-
-                        {actualCash && activeShift && (
-                            <div className={`p-3 rounded-md text-sm font-medium ${parseFloat(actualCash) - (activeShift.startCash + activeShift.cashPayments) >= 0
-                                ? 'bg-green-50 text-green-700'
-                                : 'bg-red-50 text-red-700'
-                                }`}>
-                                {t.difference_label}: {formatCurrency(parseFloat(actualCash) - (activeShift.startCash + activeShift.cashPayments))}
-                            </div>
-                        )}
-
-                        {/* What is actually holding the close, each one a way in
-                            to go and deal with it. A refusal that does not say
-                            which table is the reason staff hunt the floor at 3am
-                            for something the till can already see. */}
-                        {blocking.length > 0 && (
-                            <div className="rounded-xl border-2 border-amber-300 bg-amber-50 p-3 space-y-2">
-                                <p className="text-sm font-bold text-amber-900">{t.tables_still_open}</p>
-                                {blocking.map((b) => (
-                                    <div key={b.id} className="flex items-center gap-3 text-sm">
-                                        <span className="font-bold text-slate-900">{b.table}</span>
-                                        <span className="tabular-nums text-slate-700">{formatCurrency(b.balance)}</span>
-                                        <Button
-                                            size="sm"
-                                            className="ms-auto h-9 bg-amber-600 hover:bg-amber-700 text-white"
-                                            onClick={() => router.push(`/pos/settle?session=${b.id}`)}
-                                        >
-                                            {t.settle_bill}
-                                        </Button>
-                                    </div>
-                                ))}
-                            </div>
-                        )}
-                    </div>
-                    <DialogFooter>
-                        <Button variant="outline" onClick={() => setIsEndShiftOpen(false)}>{t.cancel}</Button>
-                        <Button
-                            variant="destructive"
-                            className="font-bold"
-                            disabled={!actualCash || isProcessing}
-                            onClick={handleEndShift}
-                        >
-                            {isProcessing ? t.ending_shift_status : t.confirm_close_shift}
-                        </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
 
             <ShiftDialog open={isShiftDialogOpen} onOpenChange={setIsShiftDialogOpen} />
 
-            <ManagerApproval
-                open={approving}
-                title={t.confirm_close_shift}
-                description={t.manager_closes_shift}
-                busy={isProcessing}
-                error={approvalError}
-                onCancel={() => { setApproving(false); setApprovalError(null) }}
-                onApprove={endApproved}
-            />
+            <ReceiptDialog src={zSrc} onClose={() => setZSrc(null)} />
         </div>
     )
 }
