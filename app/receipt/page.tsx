@@ -174,8 +174,6 @@ function ReceiptContent() {
                     balance: bill.balance,
                     tenders: tendersOf(bill.payments ?? []),
                     fxRateLAK: bill.fxRateLAK,
-                    fxRateUSD: bill.fxRateUSD,
-                    showUsd: bill.showUsd,
                     qrCodeData: qr?.qrCodeData ?? null,
                 })
             })
