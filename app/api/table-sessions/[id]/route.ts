@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { sessionTotal, sessionBillTotal } from '@/lib/sessions'
 import { balanceOf, changeDue, discountAmount } from '@/lib/payments'
-import { DEFAULT_RATE_LAK, DEFAULT_RATE_USD, billRates, taxRateOf } from '@/lib/currency'
+import { DEFAULT_RATE_LAK, billRates, taxRateOf } from '@/lib/currency'
 import { outstandingForCustomer } from '@/lib/customer-tabs'
 import { componentIndex, contentsOf } from '@/lib/packages'
 import { sellableMenus } from '@/lib/packages-db'
@@ -85,17 +85,15 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
         // was settled at, forever - FX and VAT alike. Resolving this server-side
         // means no screen can render a closed bill at live rates (req #18).
         const settings = await prisma.setting.findMany({
-            where: { key: { in: ['rate_lak', 'rate_usd', 'show_usd', 'taxRate', 'tax_rate'] } }
+            where: { key: { in: ['rate_lak', 'taxRate', 'tax_rate'] } }
         })
         const valueOf = (key: string) => settings.find((s) => s.key === key)?.value
-        const showUsd = valueOf('show_usd') === 'true'
         const live = (key: string, fallback: number) => {
             const parsed = Number(valueOf(key))
             return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback
         }
-        const { lak: fxRateLAK, usd: fxRateUSD, tax: taxRate } = billRates(session, {
+        const { lak: fxRateLAK, tax: taxRate } = billRates(session, {
             lak: live('rate_lak', DEFAULT_RATE_LAK),
-            usd: live('rate_usd', DEFAULT_RATE_USD),
             tax: taxRateOf(valueOf('taxRate') ?? valueOf('tax_rate')),
         })
 
@@ -161,9 +159,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
             balance: balanceOf(total, session.payments),
             changeDue: changeDue(total, session.payments),
             fxRateLAK,
-            fxRateUSD,
             taxRate,
-            showUsd,
             customerOwes
         })
     } catch (error) {

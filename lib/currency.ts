@@ -2,12 +2,12 @@
  * Money.
  *
  * Thai baht only: every price, order total, slip and report figure is a number
- * of baht. Kip and USD are *display conversions* - a line under the total on
- * a bill - computed from a rate, never stored as prices. (A till used to be
- * able to print its whole slip in kip; that was removed for baht only.)
+ * of baht. Kip is a *display conversion* - a line under the total on a bill -
+ * computed from a rate, never stored as a price. (A till used to be able to
+ * print its whole slip in kip, and bills could show USD; both were removed.)
  *
  * The rate is a per-transaction fact, not a global one. A closed bill carries
- * the rate it was settled at (TableSession.fxRateLAK / fxRateUSD), so changing
+ * the rate it was settled at (TableSession.fxRateLAK), so changing
  * the rate in settings tomorrow cannot rewrite what a customer was charged
  * last night. That is requirement #18, and it only works because the functions
  * below are pure: rate in, figure out, no reading of settings from in here.
@@ -20,9 +20,6 @@
 
 /** 1 THB = this many LAK. Market was ~680 when written; owner sets the real one. */
 export const DEFAULT_RATE_LAK = 680
-
-/** 1 USD = this many THB. Reads the way a rate board does. */
-export const DEFAULT_RATE_USD = 32
 
 /** Thai VAT, and what the order path already falls back to. Owner can set 0. */
 export const DEFAULT_TAX_RATE = 10
@@ -55,22 +52,11 @@ export function formatLAK(amount: number): string {
     return `${group(Math.round(safe(amount)))} ₭`
 }
 
-export function formatUSD(amount: number): string {
-    return `$${group(safe(amount), 2)}`
-}
-
 /** Convert a baht figure to kip at the given rate. Whole kip: there is no smaller note. */
 export function thbToLak(thb: number, rateLak: number): number {
     const rate = safe(rateLak)
     if (rate <= 0) return 0
     return Math.round(safe(thb) * rate)
-}
-
-/** Convert a baht figure to dollars. `rateUsd` is baht-per-dollar, e.g. 32. */
-export function thbToUsd(thb: number, rateUsd: number): number {
-    const rate = safe(rateUsd)
-    if (rate <= 0) return 0
-    return Math.round((safe(thb) / rate) * 100) / 100
 }
 
 /** Notes and coins actually in a Thai drawer, largest first when making change. */
@@ -121,12 +107,12 @@ export function calculateInclusiveTax(total: number, rate: number = 10): number 
  * nobody was charged. Null is "unknown"; 0 is a real rate and is kept.
  */
 export function billRates(
-    bill: { status: string; fxRateLAK: number | null; fxRateUSD: number | null; taxRate: number | null },
-    live: { lak: number; usd: number; tax: number }
-): { lak: number | null; usd: number | null; tax: number | null } {
+    bill: { status: string; fxRateLAK: number | null; taxRate: number | null },
+    live: { lak: number; tax: number }
+): { lak: number | null; tax: number | null } {
     if (bill.status === 'CLOSED') {
-        return { lak: bill.fxRateLAK, usd: bill.fxRateUSD, tax: bill.taxRate }
+        return { lak: bill.fxRateLAK, tax: bill.taxRate }
     }
-    return { lak: live.lak, usd: live.usd, tax: live.tax }
+    return { lak: live.lak, tax: live.tax }
 }
 

@@ -60,8 +60,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
             success: true,
             total,
             closedAt: closed?.closedAt?.toISOString() ?? null,
-            fxRateLAK: closed?.fxRateLAK,
-            fxRateUSD: closed?.fxRateUSD
+            fxRateLAK: closed?.fxRateLAK
         })
     } catch (error) {
         console.error('[table-sessions] close failed', error)

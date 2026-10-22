@@ -49,8 +49,6 @@ export default function SettingsPage() {
           loyaltyRate: data.loyaltyRate || data.loyalty_rate || "",
           shopName: data.shopName || data.shop_name || "",
           rate_lak: data.rate_lak || "",
-          rate_usd: data.rate_usd || "",
-          show_usd: data.show_usd || "false",
         })
       }
     } catch (e) {
@@ -408,25 +406,7 @@ export default function SettingsPage() {
                   onChange={(e) => setSettings({ ...settings, rate_lak: e.target.value })}
                 />
               </div>
-              <div className="space-y-2">
-                <Label>{t.rate_usd_label}</Label>
-                <Input
-                  type="number"
-                  inputMode="decimal"
-                  placeholder="32"
-                  value={settings.rate_usd || ""}
-                  onChange={(e) => setSettings({ ...settings, rate_usd: e.target.value })}
-                />
-              </div>
             </div>
-
-            <label className="flex items-center gap-3 mt-4 cursor-pointer">
-              <Switch
-                checked={settings.show_usd === "true"}
-                onCheckedChange={(v) => setSettings({ ...settings, show_usd: v ? "true" : "false" })}
-              />
-              <span className="text-sm text-slate-700">{t.show_usd_label}</span>
-            </label>
           </div>
         </Card>
 

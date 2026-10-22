@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { useTranslation } from "@/hooks/use-translation"
-import { formatTHB, formatLAK, formatUSD, thbToLak, thbToUsd } from "@/lib/currency"
+import { formatTHB, formatLAK, thbToLak } from "@/lib/currency"
 import { billQrFor, billQrMode, decodeQrImage } from "@/lib/bank-qr"
 import { APP_NAME } from "@/lib/shop"
 import { QRCodeSVG } from "qrcode.react"
@@ -57,8 +57,6 @@ export type ReceiptData = {
     tenders?: Tender[]
 
     fxRateLAK?: number | null
-    fxRateUSD?: number | null
-    showUsd?: boolean
     /** BCEL QR for an unpaid balance, when one has been minted. */
     qrCodeData?: string | null
 }
@@ -259,11 +257,6 @@ export function BillReceipt({ data, settings }: { data: ReceiptData; settings: a
                     <div className="flex justify-between gap-4 opacity-70 text-[11px]">
                         <span>1 ฿ = {data.fxRateLAK.toLocaleString("en-US")} ₭</span>
                         <span>{formatLAK(thbToLak(data.total, data.fxRateLAK))}</span>
-                    </div>
-                ) : null}
-                {data.showUsd && data.fxRateUSD ? (
-                    <div className="flex justify-end opacity-70 text-[11px]">
-                        {formatUSD(thbToUsd(data.total, data.fxRateUSD))}
                     </div>
                 ) : null}
 

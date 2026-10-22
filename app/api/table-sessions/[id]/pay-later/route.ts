@@ -5,7 +5,7 @@ import { getSessionUser } from '@/lib/auth'
 import { verifyManager } from '@/lib/manager-auth'
 import { sessionTotal, sessionBillTotal } from '@/lib/sessions'
 import { balanceOf } from '@/lib/payments'
-import { DEFAULT_RATE_LAK, DEFAULT_RATE_USD, taxRateOf } from '@/lib/currency'
+import { DEFAULT_RATE_LAK, taxRateOf } from '@/lib/currency'
 
 export const dynamic = 'force-dynamic'
 
@@ -73,7 +73,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         // Same rate snapshot a paid bill gets: the tab is settled at the rates it
         // was run up at, not whatever the board says the night it is collected.
         const rateRows = await prisma.setting.findMany({
-            where: { key: { in: ['rate_lak', 'rate_usd', 'taxRate', 'tax_rate'] } }
+            where: { key: { in: ['rate_lak', 'taxRate', 'tax_rate'] } }
         })
         const valueOf = (key: string) => rateRows.find((r) => r.key === key)?.value
         const rateOf = (key: string, fallback: number) => {
@@ -103,7 +103,6 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
                     status: 'CLOSED',
                     closedAt,
                     fxRateLAK: rateOf('rate_lak', DEFAULT_RATE_LAK),
-                    fxRateUSD: rateOf('rate_usd', DEFAULT_RATE_USD),
                     taxRate: taxRateOf(valueOf('taxRate') ?? valueOf('tax_rate')),
                     customerId: customerId,
                     payLaterApprovedById: approval.manager.id
