@@ -682,8 +682,9 @@ function SettleScreen() {
                 </button>
 
                 {/* Not a tender: no money arrives, the bill just stops being
-                    owed. The gap is the whole point. */}
-                <div className="h-2 bg-slate-300 shrink-0" />
+                    owed. The gap is the whole point - as white space, because a
+                    solid grey bar read as a gap in the layout. */}
+                <div className="h-4 bg-white shrink-0" aria-hidden />
 
                 <button
                     onClick={() => { setApprovalError(null); setApproving("COMP") }}
@@ -708,10 +709,14 @@ function SettleScreen() {
                     <Clock3 className="w-4 h-4" />
                     {t.pay_later}
                 </button>
+                {/* Leaving is the quietest action here, not the loudest. It was
+                    solid rose, which everywhere else in the app means money
+                    owed or a void. */}
                 <button
                     onClick={() => router.push(`/pos?session=${bill.id}`)}
-                    className="h-20 bg-rose-600 text-white hover:bg-rose-700 font-black text-lg transition-colors shrink-0"
+                    className="h-20 bg-slate-100 text-slate-700 hover:bg-slate-200 font-bold text-base flex items-center justify-center gap-2 transition-colors shrink-0"
                 >
+                    <ArrowLeft className="w-4 h-4" />
                     {t.back}
                 </button>
             </aside>
