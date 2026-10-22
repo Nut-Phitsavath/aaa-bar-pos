@@ -79,7 +79,7 @@ export function ExchangeAudit({ startDate, endDate }: { startDate: string; endDa
                 </Card>
                 {/* The number a manager is actually looking for. */}
                 <Card className="p-5 border-amber-200 bg-amber-50">
-                    <p className="text-xs font-bold uppercase tracking-widest text-amber-700">{t.value_returned_shelf}</p>
+                    <p className="text-xs font-bold uppercase tracking-widest text-amber-800">{t.value_returned_shelf}</p>
                     <p className="text-3xl font-black text-amber-900 tabular-nums mt-1">{formatTHB(data.totals.returnedValue)}</p>
                 </Card>
                 <Card className="p-5">
@@ -100,7 +100,7 @@ export function ExchangeAudit({ startDate, endDate }: { startDate: string; endDa
                     <div key={s.staff} className="flex items-center gap-3 px-4 py-2.5 border-b border-slate-100 last:border-0">
                         <span className="font-bold text-slate-900 min-w-0 flex-1 truncate">{s.staff}</span>
                         <span className="text-sm text-slate-500 tabular-nums">{s.count}</span>
-                        <span className="w-28 text-right font-black tabular-nums text-amber-700">
+                        <span className="w-28 text-right font-black tabular-nums text-amber-800">
                             {formatTHB(s.returnedValue)}
                         </span>
                     </div>
@@ -149,7 +149,7 @@ export function ExchangeAudit({ startDate, endDate }: { startDate: string; endDa
 
             {data.totals.returnedValue > 0 && (
                 <p className="flex items-start gap-2 text-xs text-slate-500">
-                    <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                    <AlertTriangle className="w-4 h-4 text-amber-800 shrink-0 mt-0.5" />
                     {t.exchange_audit_hint}
                 </p>
             )}

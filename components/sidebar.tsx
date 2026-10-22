@@ -135,14 +135,14 @@ export function Sidebar() {
         <>
             <aside
                 className={cn(
-                    "h-screen bg-stone-950 text-stone-200 border-r border-stone-800 flex flex-col fixed left-0 top-0 z-50 shadow-sm transition-all duration-300",
+                    "h-screen bg-stone-800 text-stone-100 border-r border-stone-700 flex flex-col fixed left-0 top-0 z-50 shadow-sm transition-all duration-300",
                     isCollapsed ? "w-[80px]" : "w-[260px]"
                 )}
             >
                 {/* Logo Section */}
                 <div
                     className={cn(
-                        "h-[72px] flex items-center border-b border-stone-800 cursor-pointer hover:bg-stone-900 transition-colors px-4",
+                        "h-[72px] flex items-center border-b border-stone-700 cursor-pointer hover:bg-stone-700 transition-colors px-4",
                         isCollapsed ? "justify-center" : "justify-between"
                     )}
                     onClick={() => !isCollapsed && router.push('/dashboard')}
@@ -159,7 +159,7 @@ export function Sidebar() {
                             variant="ghost"
                             size="icon"
                             onClick={(e) => { e.stopPropagation(); toggleSidebar(); }}
-                            className="h-11 w-11 text-stone-400 hover:bg-stone-800 hover:text-amber-400"
+                            className="h-11 w-11 text-stone-400 hover:bg-stone-700 hover:text-amber-300"
                         >
                             <ChevronLeft className="w-5 h-5" />
                         </Button>
@@ -168,12 +168,12 @@ export function Sidebar() {
 
                 {/* Mini Toggle for collapsed mode */}
                 {isCollapsed && (
-                    <div className="flex justify-center py-2 border-b border-stone-800">
+                    <div className="flex justify-center py-2 border-b border-stone-700">
                         <Button
                             variant="ghost"
                             size="icon"
                             onClick={toggleSidebar}
-                            className="h-10 w-10 text-stone-400 hover:bg-stone-800 hover:text-amber-400"
+                            className="h-10 w-10 text-stone-400 hover:bg-stone-700 hover:text-amber-300"
                         >
                             <Menu className="w-6 h-6" />
                         </Button>
@@ -182,7 +182,7 @@ export function Sidebar() {
 
                 {/* Cash in Drawer Section */}
                 {!isCollapsed && (
-                    <div className="p-3 border-b border-stone-800">
+                    <div className="p-3 border-b border-stone-700">
                         <div className="flex flex-col">
                             <span className="text-[10px] font-bold text-stone-400 uppercase tracking-widest leading-none mb-1">{t.cash_in_drawer || "Cash in Drawer"}</span>
                             <div className="flex items-center gap-1.5">
@@ -231,8 +231,8 @@ export function Sidebar() {
                                     "flex items-center gap-4 rounded-xl transition-all duration-200 group relative overflow-hidden",
                                     isCollapsed ? "justify-center h-12" : "px-4 h-15",
                                     isActive
-                                        ? "bg-amber-500 text-stone-950 shadow-md shadow-black/30"
-                                        : "text-stone-300 hover:bg-stone-900 hover:text-amber-300"
+                                        ? "bg-amber-500 text-amber-950 shadow-md shadow-black/20"
+                                        : "text-stone-100 hover:bg-stone-700 hover:text-amber-300"
                                 )}
                             >
                                 {/* Active state left bar */}
@@ -242,7 +242,7 @@ export function Sidebar() {
 
                                 <Icon className={cn(
                                     "w-7 h-7 transition-colors shrink-0",
-                                    isActive ? "text-stone-950" : "text-stone-500 group-hover:text-amber-400"
+                                    isActive ? "text-amber-950" : "text-stone-400 group-hover:text-amber-300"
                                 )} />
 
                                 {!isCollapsed && (
@@ -261,14 +261,14 @@ export function Sidebar() {
                     })}
                 </nav>
 
-                <Separator className="bg-stone-800" />
+                <Separator className="bg-stone-700" />
 
                 {/* System Actions Section */}
                 <div className={cn("p-2 space-y-0.5", isCollapsed && "px-2")}>
                     {/* User Info Snippet */}
                     {user && !isCollapsed && (
-                        <div className="px-4 py-2.5 mb-2 bg-stone-900 rounded-xl border border-stone-800 flex items-center gap-3">
-                            <div className="w-8 h-8 rounded-full bg-stone-800 flex items-center justify-center text-amber-400 border border-stone-700 shrink-0">
+                        <div className="px-4 py-2.5 mb-2 bg-stone-700 rounded-xl border border-stone-600 flex items-center gap-3">
+                            <div className="w-8 h-8 rounded-full bg-stone-800 flex items-center justify-center text-amber-300 border border-stone-600 shrink-0">
                                 {user.role === 'ADMIN' || user.role === 'MANAGER' ? <ShieldCheck className="w-5 h-5" /> : <UserCircle className="w-5 h-5" />}
                             </div>
                             <div className="min-w-0">
@@ -290,8 +290,8 @@ export function Sidebar() {
                                     "flex items-center gap-4 rounded-xl transition-all",
                                     isCollapsed ? "justify-center h-12" : "px-4 h-14",
                                     isActive
-                                        ? "bg-stone-800 text-stone-50"
-                                        : "text-stone-400 hover:bg-stone-900 hover:text-stone-100"
+                                        ? "bg-stone-700 text-stone-50"
+                                        : "text-stone-300 hover:bg-stone-700 hover:text-stone-50"
                                 )}
                             >
                                 <Icon className="w-6 h-6 shrink-0" />

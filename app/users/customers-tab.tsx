@@ -109,7 +109,7 @@ export function CustomersTab() {
                 </Card>
                 <Card className="p-6">
                     <p className="text-sm text-muted-foreground mb-1">{t.avg_loyalty_points}</p>
-                    <p className="text-3xl font-bold text-amber-600">
+                    <p className="text-3xl font-bold text-amber-800">
                         {customers.length > 0 ? Math.round(customers.reduce((sum, c) => sum + c.loyaltyPoints, 0) / customers.length) : 0}
                     </p>
                 </Card>
@@ -214,7 +214,7 @@ export function CustomersTab() {
                                 <div className="flex-1">
                                     <div className="flex items-center gap-3 mb-1">
                                         <h3 className="font-semibold">{customer.name}</h3>
-                                        <Badge variant="secondary" className="bg-amber-100 text-amber-700">
+                                        <Badge variant="secondary" className="bg-amber-100 text-amber-800">
                                             <Star className="w-3 h-3 mr-1" />
                                             {customer.loyaltyPoints} {t.pts}
                                         </Badge>

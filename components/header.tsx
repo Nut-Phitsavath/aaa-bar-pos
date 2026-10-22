@@ -33,7 +33,7 @@ export function Header({ title, children }: { title?: string, children?: React.R
         <header className="border-b bg-white sticky top-0 z-10">
             <div className="flex items-center justify-between p-4">
                 <div className="flex items-center gap-4">
-                    <h1 className="text-2xl font-bold text-amber-900 hover:text-amber-700">
+                    <h1 className="text-2xl font-bold text-amber-900 hover:text-amber-800">
                         {title || t.dashboard}
                     </h1>
                     <div className="flex items-center gap-2">

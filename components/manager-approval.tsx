@@ -74,7 +74,7 @@ export function ManagerApproval({
             <DialogContent className="max-w-sm">
                 <DialogHeader>
                     <DialogTitle className="flex items-center gap-2">
-                        <ShieldCheck className="w-5 h-5 text-amber-600" />
+                        <ShieldCheck className="w-5 h-5 text-amber-800" />
                         {title}
                     </DialogTitle>
                 </DialogHeader>
@@ -144,7 +144,7 @@ export function ManagerApproval({
                             {t.cancel_qr}
                         </Button>
                         <Button
-                            className="h-12 bg-amber-600 hover:bg-amber-700 text-white"
+                            className="h-12 bg-amber-600 hover:bg-amber-700 text-amber-950"
                             onClick={submit}
                             disabled={busy || !username || pin.length < 4}
                         >

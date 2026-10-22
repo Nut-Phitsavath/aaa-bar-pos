@@ -47,7 +47,7 @@ export function BrandMark({ brand, className }: { brand: Brand; className?: stri
 /** The name: CANISOFTWARE in its own two-tone, or the bar's in the logo's serif. */
 export function BrandName({ brand, tone = "dark" }: { brand: Brand; tone?: "dark" | "light" }) {
     const ink = tone === "dark" ? "text-stone-100" : "text-stone-900"
-    const sub = tone === "dark" ? "text-stone-400" : "text-stone-500"
+    const sub = tone === "dark" ? "text-stone-400" : "text-stone-600"
     if (!brand.custom || brand.title === VENDOR.name) {
         return (
             <div className="flex flex-col leading-none min-w-0">
@@ -74,7 +74,7 @@ export function PoweredBy({ brand, className }: { brand: Brand; className?: stri
     if (!brand.custom) return null
     return (
         <p className={cn("text-[10px] tracking-[0.08em] text-stone-400 text-center", className)}>
-            Powered by <b className="font-extrabold tracking-[0.04em] text-stone-300">{VENDOR.name}</b>
+            Powered by <b className="font-extrabold tracking-[0.04em] text-stone-200">{VENDOR.name}</b>
         </p>
     )
 }

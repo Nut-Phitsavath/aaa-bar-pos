@@ -222,7 +222,7 @@ export function CustomizationDialog({
                                                     <Coffee key={i} className="h-4 w-4" />
                                                 ))}
                                         </div>
-                                        <span className="text-sm">{(t as any)[key] || label}                                         {key === "double_shot" && <span className="text-[10px] font-bold text-amber-600">(+10,000)</span>}</span>
+                                        <span className="text-sm">{(t as any)[key] || label}                                         {key === "double_shot" && <span className="text-[10px] font-bold text-amber-800">(+10,000)</span>}</span>
                                     </Button>
                                 ))}
                             </div>
@@ -233,7 +233,7 @@ export function CustomizationDialog({
                     <div className="flex items-center justify-between px-4 py-2 bg-slate-50 rounded-xl border border-slate-100">
                         <div className="flex items-center gap-3">
                             <div className="bg-amber-100 p-2 rounded-lg">
-                                <ShoppingBag className="h-5 w-5 text-amber-600" />
+                                <ShoppingBag className="h-5 w-5 text-amber-800" />
                             </div>
                             <div>
                                 <p className="font-bold text-md">{t.takeaway || "Take Away"}</p>

@@ -73,7 +73,7 @@ export default function TabsPage() {
                         <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">
                             {t.outstanding}
                         </p>
-                        <p className="text-xl font-black text-amber-700 tabular-nums mt-1">
+                        <p className="text-xl font-black text-amber-800 tabular-nums mt-1">
                             {formatTHB(total)}
                         </p>
                     </div>
@@ -106,7 +106,7 @@ export default function TabsPage() {
                         <dl className="w-fit max-w-full flex flex-wrap divide-x divide-slate-200 rounded-xl border border-slate-200 bg-white mb-4">
                             <div className="px-5 py-4">
                                 <dt className="text-[10px] font-bold uppercase tracking-widest text-slate-400">{t.outstanding}</dt>
-                                <dd className="text-2xl font-black text-amber-700 tabular-nums leading-none mt-1.5">{formatTHB(total)}</dd>
+                                <dd className="text-2xl font-black text-amber-800 tabular-nums leading-none mt-1.5">{formatTHB(total)}</dd>
                             </div>
                             <div className="px-5 py-4">
                                 <dt className="text-[10px] font-bold uppercase tracking-widest text-slate-400">{t.customers}</dt>
@@ -114,7 +114,7 @@ export default function TabsPage() {
                             </div>
                             <div className="px-5 py-4">
                                 <dt className="text-[10px] font-bold uppercase tracking-widest text-slate-400">{t.oldest_debt}</dt>
-                                <dd className={`text-2xl font-black tabular-nums leading-none mt-1.5 ${worstAge >= 21 ? "text-rose-600" : worstAge >= 7 ? "text-amber-600" : "text-slate-900"}`}>
+                                <dd className={`text-2xl font-black tabular-nums leading-none mt-1.5 ${worstAge >= 21 ? "text-rose-600" : worstAge >= 7 ? "text-amber-800" : "text-slate-900"}`}>
                                     {worstAge}d
                                 </dd>
                             </div>
@@ -137,13 +137,13 @@ export default function TabsPage() {
                                                     )}
                                                     <span className="tabular-nums">{tab.bills.length} {t.bill}</span>
                                                     {oldest >= 7 && (
-                                                        <span className={`font-bold tabular-nums ${oldest >= 21 ? "text-rose-600" : "text-amber-600"}`}>
+                                                        <span className={`font-bold tabular-nums ${oldest >= 21 ? "text-rose-600" : "text-amber-800"}`}>
                                                             {oldest}d
                                                         </span>
                                                     )}
                                                 </p>
                                             </div>
-                                            <p className="text-xl font-black text-amber-700 tabular-nums leading-none shrink-0">
+                                            <p className="text-xl font-black text-amber-800 tabular-nums leading-none shrink-0">
                                                 {formatTHB(tab.outstanding)}
                                             </p>
                                         </div>
@@ -159,7 +159,7 @@ export default function TabsPage() {
                                                     <span className="font-semibold text-slate-700 shrink-0 w-14 truncate">{b.table}</span>
                                                     <span className="text-slate-400 tabular-nums text-xs shrink-0">{day(b.closedAt)}</span>
                                                     {ageDays(b.closedAt) >= 7 && (
-                                                        <span className={`text-xs font-bold tabular-nums shrink-0 ${ageDays(b.closedAt) >= 21 ? "text-rose-600" : "text-amber-600"}`}>
+                                                        <span className={`text-xs font-bold tabular-nums shrink-0 ${ageDays(b.closedAt) >= 21 ? "text-rose-600" : "text-amber-800"}`}>
                                                             {ageDays(b.closedAt)}d
                                                         </span>
                                                     )}
@@ -175,7 +175,7 @@ export default function TabsPage() {
                                                     <Button
                                                         size="sm"
                                                         variant="outline"
-                                                        className="h-9 w-10 p-0 shrink-0 text-slate-500 hover:text-amber-700 hover:border-amber-300 hover:bg-amber-50"
+                                                        className="h-9 w-10 p-0 shrink-0 text-slate-500 hover:text-amber-800 hover:border-amber-300 hover:bg-amber-50"
                                                         aria-label={`${t.settle_tab} · ${b.table}`}
                                                         title={`${t.settle_tab} · ${b.table}`}
                                                         onClick={() => router.push(`/pos/settle?session=${b.id}`)}
@@ -193,7 +193,7 @@ export default function TabsPage() {
                                             the card, because it is the one that takes money. */}
                                         <div className="px-4 py-3 border-t border-slate-100">
                                             <Button
-                                                className="w-full h-11 bg-amber-600 hover:bg-amber-700 text-white font-bold"
+                                                className="w-full h-11 bg-amber-600 hover:bg-amber-700 text-amber-950 font-bold"
                                                 onClick={() => { setPaying(tab); setAmount(String(tab.outstanding)) }}
                                             >
                                                 <Banknote className="w-4 h-4 mr-2" />
@@ -228,7 +228,7 @@ export default function TabsPage() {
                             />
                             <p className="text-xs text-slate-500">{t.applied_oldest_first}</p>
                             <Button
-                                className="w-full h-12 bg-amber-600 hover:bg-amber-700 text-white"
+                                className="w-full h-12 bg-amber-600 hover:bg-amber-700 text-amber-950"
                                 disabled={busy || !(Number(amount) > 0)}
                                 onClick={async () => {
                                     setBusy(true)

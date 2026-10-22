@@ -206,7 +206,7 @@ export function RecipeEditor({
                             className={`ms-auto font-bold tabular-nums px-2.5 py-1 rounded-lg ${
                                 verdict === "BELOW_COST" ? "bg-rose-50 text-rose-700"
                                     : verdict === "OK" ? "bg-emerald-50 text-emerald-700"
-                                        : "bg-amber-50 text-amber-700"
+                                        : "bg-amber-50 text-amber-800"
                             }`}
                         >
                             {t.pour_cost} {pct}%

@@ -535,7 +535,7 @@ export default function InventoryPage() {
                 }}
               >
                 <DialogTrigger asChild>
-                  <Button variant="outline" className="border-amber-200 text-amber-700 hover:bg-amber-50">
+                  <Button variant="outline" className="border-amber-200 text-amber-800 hover:bg-amber-50">
                     <Settings className="w-4 h-4 mr-2" />
                     {t.manage_categories || "Categories"}
                   </Button>
@@ -625,7 +625,7 @@ export default function InventoryPage() {
                                   className="group flex-1 flex items-center gap-2 text-left rounded-xl px-2 py-2 -mx-2 hover:bg-amber-50/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/40 transition-colors duration-150"
                                 >
                                   <span className="font-semibold text-slate-900">{cat.name}</span>
-                                  <Pencil className="w-3.5 h-3.5 text-slate-300 group-hover:text-amber-600 transition-colors duration-150" />
+                                  <Pencil className="w-3.5 h-3.5 text-slate-300 group-hover:text-amber-800 transition-colors duration-150" />
                                 </button>
                                 <span className="text-xs text-slate-400 tabular-nums shrink-0">
                                   {cat._count?.ingredients || 0} {t.items || "items"}
@@ -867,7 +867,7 @@ export default function InventoryPage() {
                                   <Button
                                     variant="outline"
                                     size="sm"
-                                    className="h-11 border-amber-200 text-amber-700 bg-amber-50 hover:bg-amber-100"
+                                    className="h-11 border-amber-200 text-amber-800 bg-amber-50 hover:bg-amber-100"
                                     onClick={() => { setTransferItem(item); setIsTransferOpen(true); }}
                                   >
                                     To Shop
@@ -884,7 +884,7 @@ export default function InventoryPage() {
                                   <Button
                                     variant="outline"
                                     size="sm"
-                                    className="h-11 border-amber-200 text-amber-700 bg-amber-50 hover:bg-amber-100"
+                                    className="h-11 border-amber-200 text-amber-800 bg-amber-50 hover:bg-amber-100"
                                     onClick={() => { setShopAdjustItem(item); setIsShopAdjustOpen(true); }}
                                   >
                                     <Settings className="w-4 h-4 mr-1" />

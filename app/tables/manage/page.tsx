@@ -503,7 +503,7 @@ function TableRow({
             {/* A table with money on it can be renamed but not removed, and
                 saying so here saves a failed tap. */}
             {table.sessions.length > 0 && (
-                <span className="text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5 shrink-0">
+                <span className="text-[10px] font-bold text-amber-800 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5 shrink-0">
                     {occupiedLabel}
                 </span>
             )}

@@ -128,7 +128,7 @@ export default function PinLoginPage() {
         // The logo's near-black behind the card, and the shop's own name on it
         // (CaniSoftware's until Settings has one) - this was the cafe's
         // orange gradient and a coffee cup.
-        <div className="min-h-screen bg-stone-950 flex flex-col items-center justify-center gap-6 p-4">
+        <div className="min-h-screen bg-stone-800 flex flex-col items-center justify-center gap-6 p-4">
             {/* One column on a tall screen; on a landscape till (till-wide, see
                 globals.css) the name and PIN on the left and the keypad on the
                 right, because stacked it ran 200px off a 768px-high screen and
@@ -141,11 +141,11 @@ export default function PinLoginPage() {
                     </div>
                     {brand.custom && brand.title !== VENDOR.name ? (
                         <h1 className="font-brand text-3xl font-bold tracking-[0.06em] text-stone-900 mb-2">
-                            {brand.title}{brand.subtitle && <span className="block text-xs font-bold tracking-[0.2em] uppercase text-stone-500 mt-1.5 font-sans">{brand.subtitle}</span>}
+                            {brand.title}{brand.subtitle && <span className="block text-xs font-bold tracking-[0.2em] uppercase text-stone-600 mt-1.5 font-sans">{brand.subtitle}</span>}
                         </h1>
                     ) : (
                         <h1 className="text-3xl font-black tracking-tight mb-2">
-                            <span className="text-amber-600">CANI</span><span className="text-stone-900">SOFTWARE</span>
+                            <span className="text-amber-800">CANI</span><span className="text-stone-900">SOFTWARE</span>
                         </h1>
                     )}
                     <p className="text-muted-foreground">{t.select_user_enter_pin}</p>
@@ -153,7 +153,7 @@ export default function PinLoginPage() {
 
                 {/* User Selection */}
                 <div className="mb-6 relative">
-                    <UserCircle className="absolute left-3 top-1/2 -translate-y-1/2 w-6 h-6 text-amber-600 pointer-events-none" />
+                    <UserCircle className="absolute left-3 top-1/2 -translate-y-1/2 w-6 h-6 text-amber-800 pointer-events-none" />
                     <select
                         className="w-full p-4 pl-12 rounded-xl border-2 border-amber-200 bg-white text-lg font-bold text-slate-800 focus:outline-none focus:border-amber-500 appearance-none shadow-sm cursor-pointer"
                         value={selectedUsername}
@@ -178,7 +178,7 @@ export default function PinLoginPage() {
                             <div
                                 key={i}
                                 className={`w-12 h-12 rounded-lg border-2 flex items-center justify-center text-2xl font-bold ${i < pin.length
-                                    ? 'bg-amber-600 border-amber-600 text-white'
+                                    ? 'bg-amber-600 border-amber-600 text-amber-950'
                                     : 'bg-white border-gray-300'
                                     }`}
                             >
@@ -230,7 +230,7 @@ export default function PinLoginPage() {
                 <div className="grid grid-cols-2 gap-3">
                     <Button
                         variant="outline"
-                        className="h-12 border-amber-200 text-amber-700 hover:bg-amber-50 hover:text-amber-800"
+                        className="h-12 border-amber-200 text-amber-800 hover:bg-amber-50 hover:text-amber-800"
                         onClick={handleDelete}
                         disabled={isLoading || isNavigating || pin.length === 0}
                     >
@@ -239,7 +239,7 @@ export default function PinLoginPage() {
                     </Button>
                     <Button
                         id="pin-submit-btn"
-                        className="h-12 bg-amber-600 hover:bg-amber-700 text-white shadow-md relative"
+                        className="h-12 bg-amber-600 hover:bg-amber-700 text-amber-950 shadow-md relative"
                         onClick={handleSubmit}
                         disabled={isLoading || isNavigating || pin.length < 4}
                     >

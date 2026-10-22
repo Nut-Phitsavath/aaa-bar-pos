@@ -30,7 +30,7 @@ import { APP_NAME } from "@/lib/shop"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 
-const COLORS = ['#d97706', '#2563eb', '#16a34a', '#7c3aed', '#db2777', '#4b5563']
+const COLORS = ['#d39d40', '#2563eb', '#16a34a', '#7c3aed', '#db2777', '#4b5563']
 
 export default function ReportsPage() {
   const { t } = useTranslation()
@@ -217,7 +217,7 @@ export default function ReportsPage() {
                 variant={dateRange?.from && isSameDay(dateRange.from, startOfDay(new Date())) && dateRange?.to && isSameDay(dateRange.to, endOfDay(new Date())) ? "default" : "outline"}
                 size="sm"
                 onClick={() => setDateRange({ from: startOfDay(new Date()), to: endOfDay(new Date()) })}
-                className={dateRange?.from && isSameDay(dateRange.from, startOfDay(new Date())) && dateRange?.to && isSameDay(dateRange.to, endOfDay(new Date())) ? "bg-amber-600 text-white hover:bg-amber-700" : ""}
+                className={dateRange?.from && isSameDay(dateRange.from, startOfDay(new Date())) && dateRange?.to && isSameDay(dateRange.to, endOfDay(new Date())) ? "bg-amber-600 text-amber-950 hover:bg-amber-700" : ""}
               >
                 {t.today_caps}
               </Button>
@@ -225,7 +225,7 @@ export default function ReportsPage() {
                 variant={dateRange?.from && isSameDay(dateRange.from, startOfDay(subDays(new Date(), 7))) ? "default" : "outline"}
                 size="sm"
                 onClick={() => setDateRange({ from: startOfDay(subDays(new Date(), 7)), to: new Date() })}
-                className={dateRange?.from && isSameDay(dateRange.from, startOfDay(subDays(new Date(), 7))) ? "bg-amber-600 text-white hover:bg-amber-700" : ""}
+                className={dateRange?.from && isSameDay(dateRange.from, startOfDay(subDays(new Date(), 7))) ? "bg-amber-600 text-amber-950 hover:bg-amber-700" : ""}
               >
                 7 {t.days}
               </Button>
@@ -233,7 +233,7 @@ export default function ReportsPage() {
                 variant={dateRange?.from && isSameDay(dateRange.from, startOfDay(subDays(new Date(), 30))) ? "default" : "outline"}
                 size="sm"
                 onClick={() => setDateRange({ from: startOfDay(subDays(new Date(), 30)), to: new Date() })}
-                className={dateRange?.from && isSameDay(dateRange.from, startOfDay(subDays(new Date(), 30))) ? "bg-amber-600 text-white hover:bg-amber-700" : ""}
+                className={dateRange?.from && isSameDay(dateRange.from, startOfDay(subDays(new Date(), 30))) ? "bg-amber-600 text-amber-950 hover:bg-amber-700" : ""}
               >
                 30 {t.days}
               </Button>
@@ -241,7 +241,7 @@ export default function ReportsPage() {
                 variant={dateRange?.from && isSameDay(dateRange.from, startOfDay(subDays(new Date(), 90))) ? "default" : "outline"}
                 size="sm"
                 onClick={() => setDateRange({ from: startOfDay(subDays(new Date(), 90)), to: new Date() })}
-                className={dateRange?.from && isSameDay(dateRange.from, startOfDay(subDays(new Date(), 90))) ? "bg-amber-600 text-white hover:bg-amber-700" : ""}
+                className={dateRange?.from && isSameDay(dateRange.from, startOfDay(subDays(new Date(), 90))) ? "bg-amber-600 text-amber-950 hover:bg-amber-700" : ""}
               >
                 90 {t.days}
               </Button>
@@ -277,7 +277,7 @@ export default function ReportsPage() {
               </PopoverContent>
             </Popover>
           </div>
-          <Button variant="outline" size="sm" onClick={handleExport} className="bg-amber-600 text-white hover:bg-amber-700 hover:text-white border-amber-600">
+          <Button variant="outline" size="sm" onClick={handleExport} className="bg-amber-600 text-amber-950 hover:bg-amber-700 hover:text-white border-amber-600">
             <Download className="w-4 h-4 mr-2" />
             {t.export_report}
           </Button>
@@ -287,10 +287,10 @@ export default function ReportsPage() {
         <div className="bg-white p-6 rounded-2xl border shadow-sm space-y-4">
           <div className="flex items-center justify-between border-b pb-4">
             <h3 className="text-xl font-bold text-slate-800 flex items-center gap-2">
-              <TrendingUp className="w-6 h-6 text-amber-600" />
+              <TrendingUp className="w-6 h-6 text-amber-800" />
               {getSalesTitle()}
             </h3>
-            <Badge variant="outline" className="text-amber-700 bg-amber-50 border-amber-200 uppercase font-black tracking-widest px-3 py-1">
+            <Badge variant="outline" className="text-amber-800 bg-amber-50 border-amber-200 uppercase font-black tracking-widest px-3 py-1">
               {t.summary_overview || "Summary Overview"}
             </Badge>
           </div>
@@ -472,11 +472,11 @@ export default function ReportsPage() {
                   <ResponsiveContainer width="100%" height="100%">
                     <LineChart data={data?.dailyTrend}>
                       <XAxis dataKey="date" fontSize={11} tickFormatter={(val) => val.split('-').slice(1).join('/')} />
-                      <YAxis yAxisId="left" orientation="left" stroke="#d97706" fontSize={11} tickFormatter={(v) => `${(v / 1000)}k`} />
+                      <YAxis yAxisId="left" orientation="left" stroke="#d39d40" fontSize={11} tickFormatter={(v) => `${(v / 1000)}k`} />
                       <YAxis yAxisId="right" orientation="right" stroke="#2563eb" fontSize={11} />
                       <Tooltip formatter={(v, name) => [name === 'revenue' ? formatTHB(v as number) : v, name]} />
                       <Legend />
-                      <Line yAxisId="left" type="monotone" dataKey="revenue" stroke="#d97706" strokeWidth={2} dot={false} />
+                      <Line yAxisId="left" type="monotone" dataKey="revenue" stroke="#d39d40" strokeWidth={2} dot={false} />
                       <Line yAxisId="right" type="monotone" dataKey="orders" stroke="#2563eb" strokeWidth={2} dot={false} />
                     </LineChart>
                   </ResponsiveContainer>
@@ -522,7 +522,7 @@ export default function ReportsPage() {
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
-                    <Target className="w-5 h-5 text-amber-600" />
+                    <Target className="w-5 h-5 text-amber-800" />
                     {t.by_area}
                   </CardTitle>
                   <CardDescription>{t.by_area_desc}</CardDescription>
@@ -570,7 +570,7 @@ export default function ReportsPage() {
                                 <td className="py-2 px-3 text-right tabular-nums text-muted-foreground">{a.bills}</td>
                                 <td className="py-2 px-3 text-right tabular-nums">{formatTHB(a.avgBill)}</td>
                                 <td className="py-2 px-3 text-right tabular-nums text-muted-foreground">{hm(a.avgMinutes)}</td>
-                                <td className="py-2 px-3 text-right tabular-nums font-black text-amber-600">{formatTHB(a.revenuePerHour)}</td>
+                                <td className="py-2 px-3 text-right tabular-nums font-black text-amber-800">{formatTHB(a.revenuePerHour)}</td>
                               </tr>
                               {open && (
                                 <>
@@ -598,7 +598,7 @@ export default function ReportsPage() {
                                       <td className="py-1.5 px-3 text-right tabular-nums text-slate-600">{tb.bills}</td>
                                       <td className="py-1.5 px-3 text-right tabular-nums">{formatTHB(tb.avgBill)}</td>
                                       <td className="py-1.5 px-3 text-right tabular-nums text-slate-600">{hm(tb.avgMinutes)}</td>
-                                      <td className="py-1.5 px-3 text-right tabular-nums font-bold text-amber-700">{formatTHB(tb.revenuePerSeatHour)}</td>
+                                      <td className="py-1.5 px-3 text-right tabular-nums font-bold text-amber-800">{formatTHB(tb.revenuePerSeatHour)}</td>
                                     </motion.tr>
                                   ))}
                                 </>
@@ -637,7 +637,7 @@ export default function ReportsPage() {
                         <div className="text-right">
                           <p className={`font-black tabular-nums ${c.verdict === "OK" ? "text-emerald-600"
                             : c.verdict === "BELOW_COST" ? "text-rose-600"
-                              : "text-amber-600"}`}>
+                              : "text-amber-800"}`}>
                             {typeof c.pourCostPct === "number" ? `${c.pourCostPct.toFixed(1)}%` : "—"}
                           </p>
                           {c.band && (
@@ -675,7 +675,7 @@ export default function ReportsPage() {
                         label={(e) => `${e.name}: ${formatTHB(e.revenue)}`}
                       >
                         {(data?.serviceStats || []).map((entry: any, index: number) => (
-                          <Cell key={`cell-${index}`} fill={index === 0 ? '#d97706' : '#2563eb'} />
+                          <Cell key={`cell-${index}`} fill={index === 0 ? '#d39d40' : '#2563eb'} />
                         ))}
                       </Pie>
                       <Tooltip formatter={(v) => formatTHB(v as number)} />
@@ -790,7 +790,7 @@ export default function ReportsPage() {
                           </div>
                         </div>
                         <div className="text-right">
-                          <p className="font-black text-amber-600">{p.sold}</p>
+                          <p className="font-black text-amber-800">{p.sold}</p>
                           <p className="text-[10px] font-bold text-slate-400">{formatTHB(p.revenue)}</p>
                         </div>
                       </div>
@@ -917,7 +917,7 @@ export default function ReportsPage() {
                       <XAxis dataKey="hour" tickFormatter={(h) => `${h}:00`} />
                       <YAxis fontSize={11} tickFormatter={(v) => `${(v / 1000)}k`} />
                       <Tooltip formatter={(v) => formatTHB(v as number)} />
-                      <Bar dataKey="revenue" fill="#d97706" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="revenue" fill="#d39d40" radius={[4, 4, 0, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
                 </CardContent>
@@ -961,7 +961,7 @@ export default function ReportsPage() {
               <CardHeader className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 space-y-0">
                 <div>
                   <CardTitle className="flex items-center gap-2">
-                    <Clock className="w-5 h-5 text-amber-600" />
+                    <Clock className="w-5 h-5 text-amber-800" />
                     {t.happy_hour_check}
                   </CardTitle>
                   <CardDescription>{t.happy_hour_desc}</CardDescription>
@@ -997,9 +997,9 @@ export default function ReportsPage() {
                 ) : (
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
-                      <p className="text-[11px] font-black uppercase tracking-widest text-amber-700">{t.in_window}</p>
+                      <p className="text-[11px] font-black uppercase tracking-widest text-amber-800">{t.in_window}</p>
                       <p className="mt-1 text-2xl font-black tabular-nums text-amber-900">{formatTHB(inside.perHour)}</p>
-                      <p className="text-[11px] uppercase text-amber-700/70">{t.per_hour}</p>
+                      <p className="text-[11px] uppercase text-amber-800/70">{t.per_hour}</p>
                       <div className="mt-3 space-y-0.5 text-xs text-slate-600 tabular-nums">
                         <p>{formatTHB(inside.revenue)} · {inside.rounds} {t.rounds_label}</p>
                         <p>{t.avg_round} {formatTHB(inside.avgRound)}</p>
@@ -1116,7 +1116,7 @@ export default function ReportsPage() {
               <Card className="p-4 border-l-4 border-l-amber-500">
                 <div className="flex items-center gap-3">
                   <div className="bg-amber-100 p-2 rounded-lg">
-                    <Package className="w-5 h-5 text-amber-600" />
+                    <Package className="w-5 h-5 text-amber-800" />
                   </div>
                   <div>
                     <p className="text-xs text-muted-foreground uppercase font-bold">{t.adjusted_caps}</p>
@@ -1158,7 +1158,7 @@ export default function ReportsPage() {
                           </div>
                         </div>
                         <div className="text-right">
-                          <p className="font-black text-amber-600">{item.quantity} {item.unit}</p>
+                          <p className="font-black text-amber-800">{item.quantity} {item.unit}</p>
                         </div>
                       </div>
                     ))}
@@ -1250,7 +1250,7 @@ export default function ReportsPage() {
                   <CardTitle>{t.recent_inventory_tx}</CardTitle>
                   <CardDescription>{t.latest_20_movements}</CardDescription>
                 </div>
-                <Button variant="outline" size="sm" onClick={handleExportInventory} className="text-amber-600 border-amber-200 hover:bg-amber-50">
+                <Button variant="outline" size="sm" onClick={handleExportInventory} className="text-amber-800 border-amber-200 hover:bg-amber-50">
                   <Download className="w-4 h-4 mr-2" />
                   {t.export_excel || "Export Excel"}
                 </Button>
@@ -1425,7 +1425,7 @@ export default function ReportsPage() {
                             <span className="flex items-baseline gap-1.5">
                               <span className={`font-black tabular-nums ${item.verdict === "OK" ? "text-emerald-600"
                                 : item.verdict === "BELOW_COST" ? "text-rose-600"
-                                  : "text-amber-600"
+                                  : "text-amber-800"
                                 }`}>
                                 {item.pourCostPct.toFixed(1)}%
                               </span>
@@ -1472,7 +1472,7 @@ export default function ReportsPage() {
                       <span className="text-sm font-bold text-amber-900">{t.est_inventory_shrinkage}</span>
                       <span className="text-xl font-black text-rose-600">{formatTHB(data?.summary.shrinkageCost || 0)}</span>
                     </div>
-                    <p className="text-[10px] text-amber-700 mt-1">{t.stock_loss_shift_discrepancies}</p>
+                    <p className="text-[10px] text-amber-800 mt-1">{t.stock_loss_shift_discrepancies}</p>
                   </div>
                 </CardContent>
               </Card>

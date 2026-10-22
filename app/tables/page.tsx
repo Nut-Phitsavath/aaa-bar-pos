@@ -304,7 +304,7 @@ export default function TablesPage() {
                 {occupiedCount} {t.occupied}
               </span>
               {billCount > 0 && (
-                <span className="inline-flex items-center gap-1.5 text-amber-700 font-semibold">
+                <span className="inline-flex items-center gap-1.5 text-amber-800 font-semibold">
                   <span className="w-2 h-2 rounded-full bg-amber-500" aria-hidden />
                   {billCount} {t.bill_requested}
                 </span>
@@ -373,10 +373,10 @@ export default function TablesPage() {
             night has not been started yet. */}
         {shiftStatus === "CLOSED" && (
           <div className="mx-4 md:mx-6 mb-3 flex flex-wrap items-center gap-3 rounded-xl border-2 border-amber-300 bg-amber-50 px-4 py-3">
-            <AlertTriangle className="w-5 h-5 text-amber-700 shrink-0" />
+            <AlertTriangle className="w-5 h-5 text-amber-800 shrink-0" />
             <p className="font-bold text-amber-900">{t.please_open_shift_first}</p>
             <Button
-              className="ms-auto h-11 bg-amber-600 hover:bg-amber-700 text-white font-bold"
+              className="ms-auto h-11 bg-amber-600 hover:bg-amber-700 text-amber-950 font-bold"
               onClick={() => setShiftDialogOpen(true)}
             >
               {t.open_shift}
@@ -390,7 +390,7 @@ export default function TablesPage() {
         <div className={`px-4 md:px-6 py-2.5 border-t transition-colors duration-200 ${waiterId ? "border-slate-100 bg-white" : "border-amber-200 bg-amber-50"
           }`}>
           <div className="flex items-center gap-2 flex-wrap">
-            <span className={`text-xs font-bold uppercase tracking-widest shrink-0 ${waiterId ? "text-slate-400" : "text-amber-700"
+            <span className={`text-xs font-bold uppercase tracking-widest shrink-0 ${waiterId ? "text-slate-400" : "text-amber-800"
               }`}>
               {waiterId ? t.server_staff : t.select_server_first}
             </span>
@@ -605,7 +605,7 @@ export default function TablesPage() {
                         {session.customer && (
                           <p className={`text-xs font-bold truncate mb-1 ${needsBill
                             ? "text-amber-900"
-                            : session.customer.owes > 0 ? "text-amber-700" : "text-slate-500"
+                            : session.customer.owes > 0 ? "text-amber-800" : "text-slate-500"
                             }`}>
                             {session.customer.name}
                             {session.customer.owes > 0 && (

@@ -71,7 +71,7 @@ export default function ShiftsPage() {
             <header className="border-b bg-white sticky top-0 z-10">
                 <div className="flex items-center justify-between p-4">
                     <div className="flex items-center gap-4">
-                        <Link href="/dashboard" className="text-amber-900 hover:text-amber-700">
+                        <Link href="/dashboard" className="text-amber-900 hover:text-amber-800">
                             <h1 className="text-2xl font-bold">{t.dashboard}</h1>
                         </Link>
                         <ChevronRight className="w-5 h-4 text-muted-foreground" />
@@ -79,7 +79,7 @@ export default function ShiftsPage() {
                     </div>
                     <div className="flex items-center gap-4">
                         <Button
-                            className="bg-amber-600 hover:bg-amber-700 text-white font-bold"
+                            className="bg-amber-600 hover:bg-amber-700 text-amber-950 font-bold"
                             onClick={() => setIsShiftDialogOpen(true)}
                             disabled={!!activeShift}
                         >

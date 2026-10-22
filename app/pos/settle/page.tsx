@@ -413,7 +413,7 @@ function SettleScreen() {
                                     }`}
                             >
                                 <div className={`flex items-center gap-2 px-3 py-2 ${on ? "text-amber-900" : "text-slate-600"}`}>
-                                    <span className={`w-6 h-6 rounded-md border-2 grid place-items-center shrink-0 ${on ? "bg-amber-500 border-amber-500 text-white" : "border-slate-300"
+                                    <span className={`w-6 h-6 rounded-md border-2 grid place-items-center shrink-0 ${on ? "bg-amber-500 border-amber-500 text-amber-950" : "border-slate-300"
                                         }`}>
                                         {on && <Check className="w-4 h-4" />}
                                     </span>
@@ -571,12 +571,12 @@ function SettleScreen() {
                             something. Without a line saying why, a disabled
                             Cash button is just a till that appears broken. */}
                         {untouched && (
-                            <span className="me-auto font-bold text-amber-700">{t.enter_amount_received}</span>
+                            <span className="me-auto font-bold text-amber-800">{t.enter_amount_received}</span>
                         )}
                         {/* Say "orders" outright: a bare count next to an amount
                             reads as a quantity of something. */}
                         {selected.size > 0 && entry === "" && (
-                            <span className="font-bold text-amber-700">
+                            <span className="font-bold text-amber-800">
                                 {selected.size} {t.round_no}
                             </span>
                         )}
@@ -720,7 +720,7 @@ function SettleScreen() {
                                 <QRCodeSVG value={pendingQr.qr} size={240} level="H" />
                             </div>
                             <p className="text-2xl font-black tabular-nums">{formatTHB(pendingQr.amount)}</p>
-                            <p className="text-sm text-amber-700">{t.waiting_for_payment}</p>
+                            <p className="text-sm text-amber-800">{t.waiting_for_payment}</p>
                         </div>
                     )}
                 </DialogContent>
@@ -848,7 +848,7 @@ function SettleScreen() {
                             </span>
                         </p>
                         <Button
-                            className="w-full h-12 rounded-xl bg-amber-600 hover:bg-amber-700 text-white"
+                            className="w-full h-12 rounded-xl bg-amber-600 hover:bg-amber-700 text-amber-950"
                             disabled={!(Number(discountInput) > 0)}
                             onClick={() => { setApprovalError(null); setApproving("DISCOUNT") }}
                         >

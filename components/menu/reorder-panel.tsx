@@ -167,7 +167,7 @@ export function ReorderPanel({
     return (
         <div className="space-y-6">
             <div className="flex items-center gap-3 flex-wrap rounded-xl border-2 border-amber-200 bg-amber-50 px-4 py-3">
-                <GripVertical className="w-5 h-5 text-amber-700 shrink-0" />
+                <GripVertical className="w-5 h-5 text-amber-800 shrink-0" />
                 <p className="font-bold text-amber-900">{t.reorder_mode}</p>
                 <p className="text-sm text-amber-800 min-w-0">{t.reorder_hint}</p>
                 <Button

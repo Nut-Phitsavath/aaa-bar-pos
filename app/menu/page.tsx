@@ -368,13 +368,13 @@ export default function MenuPage() {
             <Button
               variant="outline"
               className={missingRecipes > 0
-                ? "border-amber-500 text-amber-700 bg-amber-50/60 hover:bg-amber-100 font-bold"
+                ? "border-amber-500 text-amber-800 bg-amber-50/60 hover:bg-amber-100 font-bold"
                 : "text-slate-600 hover:bg-slate-50"}
             >
               <ClipboardList className="w-4 h-4 mr-2" />
               {t.recipes}
               {missingRecipes > 0 && (
-                <span className="ms-2 min-w-5 h-5 px-1.5 grid place-items-center rounded-full bg-amber-600 text-white text-[11px] font-black tabular-nums">
+                <span className="ms-2 min-w-5 h-5 px-1.5 grid place-items-center rounded-full bg-amber-600 text-amber-950 text-[11px] font-black tabular-nums">
                   {missingRecipes}
                 </span>
               )}
@@ -383,7 +383,7 @@ export default function MenuPage() {
 
           <Dialog open={isCategoryDialogOpen} onOpenChange={setIsCategoryDialogOpen}>
             <DialogTrigger asChild>
-              <Button variant="outline" className="border-amber-600 text-amber-600 hover:bg-amber-50">
+              <Button variant="outline" className="border-amber-600 text-amber-800 hover:bg-amber-50">
                 <Plus className="w-4 h-4 mr-2" />
                 {t.new_category}
               </Button>
@@ -764,7 +764,7 @@ export default function MenuPage() {
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="h-11 w-11 text-amber-600 hover:bg-amber-50"
+                    className="h-11 w-11 text-amber-800 hover:bg-amber-50"
                     aria-label={`${t.edit} ${item.localName || item.name}`}
                     onPointerDown={(e) => e.stopPropagation()}
                     onClick={() => handleEdit(item)}
@@ -803,7 +803,7 @@ export default function MenuPage() {
                   href={`/menu/recipes?product=${item.id}`}
                   title={t.no_recipe_help}
                   onPointerDown={(e) => e.stopPropagation()}
-                  className="text-[9px] font-bold bg-amber-50 border border-amber-200 text-amber-700 uppercase rounded-md px-1.5 py-0.5 shrink-0 hover:bg-amber-100 hover:border-amber-400 transition-colors duration-150"
+                  className="text-[9px] font-bold bg-amber-50 border border-amber-200 text-amber-800 uppercase rounded-md px-1.5 py-0.5 shrink-0 hover:bg-amber-100 hover:border-amber-400 transition-colors duration-150"
                 >
                   {t.no_recipe}
                 </Link>

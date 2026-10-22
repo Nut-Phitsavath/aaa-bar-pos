@@ -298,7 +298,7 @@ export default function RecipesPage() {
                 <Button
                     variant="outline"
                     size="sm"
-                    className="border-amber-200 text-amber-700 hover:bg-amber-50"
+                    className="border-amber-200 text-amber-800 hover:bg-amber-50"
                     onClick={() => openAddModal()}
                 >
                     <Plus className="w-4 h-4 mr-1" />
@@ -310,7 +310,7 @@ export default function RecipesPage() {
                     {items.map((item) => (
                         <Card key={item.id} className="p-4 flex items-center justify-between border-slate-100 shadow-sm">
                             <div className="flex items-center gap-4">
-                                <div className="w-10 h-10 rounded-lg bg-amber-50 flex items-center justify-center font-bold text-amber-600 border border-amber-100">
+                                <div className="w-10 h-10 rounded-lg bg-amber-50 flex items-center justify-center font-bold text-amber-800 border border-amber-100">
                                     {item.ingredientName[0]}
                                 </div>
                                 <div>
@@ -374,7 +374,7 @@ export default function RecipesPage() {
                                 if (!price) return null
                                 const gap = contentsValue(items) - price
                                 return (
-                                    <span className={`ms-auto font-bold tabular-nums ${gap > 0 ? "text-emerald-700" : "text-amber-700"}`}>
+                                    <span className={`ms-auto font-bold tabular-nums ${gap > 0 ? "text-emerald-700" : "text-amber-800"}`}>
                                         {t.package_price} {formatTHB(price)}
                                         {gap > 0 ? ` · −${formatTHB(gap)}` : gap < 0 ? ` · +${formatTHB(-gap)}` : ""}
                                     </span>
@@ -411,7 +411,7 @@ export default function RecipesPage() {
                                         ? "bg-rose-50 text-rose-700"
                                         : costInfo.verdict === "OK"
                                             ? "bg-emerald-50 text-emerald-700"
-                                            : "bg-amber-50 text-amber-700"
+                                            : "bg-amber-50 text-amber-800"
                                 }`}
                             >
                                 {t.pour_cost} {costInfo.pourCostPct}%
@@ -432,7 +432,7 @@ export default function RecipesPage() {
                     <p className="text-sm text-slate-400">{t.no_ingredients_linked}</p>
                     <Button
                         variant="link"
-                        className="text-amber-600 mt-1"
+                        className="text-amber-800 mt-1"
                         onClick={() => openAddModal()}
                     >
                         {t.add_ingredient}
@@ -485,7 +485,7 @@ export default function RecipesPage() {
                                     : 'hover:bg-amber-50/50 border border-transparent'}`}
                             >
                                 <div className="flex items-center gap-3">
-                                    <div className={`w-10 h-10 rounded-lg flex items-center justify-center transition-colors ${selectedProduct?.id === product.id ? 'bg-amber-600 text-white' : 'bg-white border border-slate-200 text-slate-400 group-hover:bg-amber-100 group-hover:text-amber-600'}`}>
+                                    <div className={`w-10 h-10 rounded-lg flex items-center justify-center transition-colors ${selectedProduct?.id === product.id ? 'bg-amber-600 text-amber-950' : 'bg-white border border-slate-200 text-slate-400 group-hover:bg-amber-100 group-hover:text-amber-800'}`}>
                                         <Coffee className="w-5 h-5" />
                                     </div>
                                     <div className="overflow-hidden">
@@ -498,7 +498,7 @@ export default function RecipesPage() {
                                             {product._count?.recipes === 0 && (
                                                 <span
                                                     title={t.no_recipe_help}
-                                                    className="text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200"
+                                                    className="text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200"
                                                 >
                                                     {t.no_recipe}
                                                 </span>
@@ -516,7 +516,7 @@ export default function RecipesPage() {
                     {selectedProduct ? (
                         <div className="max-w-4xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500">
                             <div className="mb-10 space-y-2">
-                                <Badge variant="secondary" className="bg-amber-100 text-amber-700 hover:bg-amber-100 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-widest border-amber-200">
+                                <Badge variant="secondary" className="bg-amber-100 text-amber-800 hover:bg-amber-100 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-widest border-amber-200">
                                     {selectedProduct.categoryName}
                                 </Badge>
                                 <h2 className="text-5xl font-black text-slate-900 tracking-tight">{selectedProduct.name}</h2>
@@ -537,7 +537,7 @@ export default function RecipesPage() {
                                                     {t.add_ingredient}
                                                 </DialogTitle>
                                                 <div className="flex items-center gap-2 mt-1">
-                                                    <Badge variant="outline" className="bg-amber-100/50 text-amber-700 border-amber-200 font-bold uppercase text-[10px] tracking-wider">
+                                                    <Badge variant="outline" className="bg-amber-100/50 text-amber-800 border-amber-200 font-bold uppercase text-[10px] tracking-wider">
                                                         {t.base_recipe || "Base Recipe"}
                                                     </Badge>
                                                     <span className="text-slate-400 font-medium text-sm">for {selectedProduct.name}</span>
@@ -610,7 +610,7 @@ export default function RecipesPage() {
                                         </div>
 
                                         <Button
-                                            className="w-full h-16 rounded-2xl bg-amber-600 hover:bg-amber-700 text-white font-black text-lg shadow-xl shadow-amber-600/20 transition-all active:scale-95"
+                                            className="w-full h-16 rounded-2xl bg-amber-600 hover:bg-amber-700 text-amber-950 font-black text-lg shadow-xl shadow-amber-600/20 transition-all active:scale-95"
                                             disabled={!draft.name || !draft.purchaseUnit || savingIngredient}
                                             onClick={handleCreateAndAdd}
                                         >
@@ -640,7 +640,7 @@ export default function RecipesPage() {
                                                         <option value="ALL">📦 {t.all_categories || "All Items"}</option>
                                                         {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                                                     </select>
-                                                    <ChevronRight className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 rotate-90 pointer-events-none group-focus-within:text-amber-600" />
+                                                    <ChevronRight className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 rotate-90 pointer-events-none group-focus-within:text-amber-800" />
                                                 </div>
                                             </div>
                                         </div>
@@ -656,11 +656,11 @@ export default function RecipesPage() {
                                                             onClick={() => setNewRecipeItem(prev => ({ ...prev, ingredientId: ing.id }))}
                                                             className={`p-4 rounded-2xl border-2 text-left transition-all flex items-center gap-4 group/item ${
                                                                 newRecipeItem.ingredientId === ing.id 
-                                                                ? 'bg-amber-600 border-amber-600 text-white shadow-xl shadow-amber-200 scale-[1.02]' 
+                                                                ? 'bg-amber-600 border-amber-600 text-amber-950 shadow-xl shadow-amber-200 scale-[1.02]' 
                                                                 : 'bg-white border-slate-100 hover:border-amber-400 hover:bg-amber-50/50 hover:shadow-lg'
                                                             }`}
                                                         >
-                                                            <div className={`w-12 h-12 rounded-xl flex items-center justify-center font-black text-lg transition-transform group-hover/item:scale-110 ${newRecipeItem.ingredientId === ing.id ? 'bg-white/20 text-white' : 'bg-amber-50 text-amber-600'}`}>
+                                                            <div className={`w-12 h-12 rounded-xl flex items-center justify-center font-black text-lg transition-transform group-hover/item:scale-110 ${newRecipeItem.ingredientId === ing.id ? 'bg-white/20 text-white' : 'bg-amber-50 text-amber-800'}`}>
                                                                 {ing.name[0]}
                                                             </div>
                                                             <div className="overflow-hidden flex-1">
@@ -682,7 +682,7 @@ export default function RecipesPage() {
                                                 <button
                                                     type="button"
                                                     onClick={() => { setDraft(emptyDraft(ingredientSearch)); setCreatingIngredient(true) }}
-                                                    className="col-span-2 h-14 rounded-2xl border-2 border-dashed border-slate-200 text-slate-500 font-bold hover:border-amber-500 hover:text-amber-700 hover:bg-amber-50/50 transition-colors flex items-center justify-center gap-2"
+                                                    className="col-span-2 h-14 rounded-2xl border-2 border-dashed border-slate-200 text-slate-500 font-bold hover:border-amber-500 hover:text-amber-800 hover:bg-amber-50/50 transition-colors flex items-center justify-center gap-2"
                                                 >
                                                     <Plus className="w-4 h-4" /> {t.new_ingredient}
                                                 </button>
@@ -709,7 +709,7 @@ export default function RecipesPage() {
                                                         {/* A recipe quantity is in BASE units. Labelling
                                                             it with the purchase unit invited someone to
                                                             type 1 meaning a bottle and get 1 millilitre. */}
-                                                        <span className="absolute right-6 top-1/2 -translate-y-1/2 font-black text-slate-300 pointer-events-none group-focus-within:text-amber-600 uppercase text-sm tracking-widest">
+                                                        <span className="absolute right-6 top-1/2 -translate-y-1/2 font-black text-slate-300 pointer-events-none group-focus-within:text-amber-800 uppercase text-sm tracking-widest">
                                                             {ingredients.find(i => i.id === newRecipeItem.ingredientId)?.baseUnit || '-'}
                                                         </span>
                                                     </div>
@@ -725,7 +725,7 @@ export default function RecipesPage() {
                                                     {t.cancel}
                                                 </Button>
                                                 <Button 
-                                                    className="bg-amber-600 hover:bg-amber-700 text-white rounded-2xl shadow-2xl shadow-amber-600/30 flex-[1.5] h-16 font-black text-xl transition-all active:scale-95" 
+                                                    className="bg-amber-600 hover:bg-amber-700 text-amber-950 rounded-2xl shadow-2xl shadow-amber-600/30 flex-[1.5] h-16 font-black text-xl transition-all active:scale-95" 
                                                     onClick={handleAddIngredient} 
                                                     disabled={isLoading || !newRecipeItem.ingredientId || newRecipeItem.quantity <= 0}
                                                 >
@@ -742,7 +742,7 @@ export default function RecipesPage() {
                         <div className="flex-1 flex flex-col items-center justify-center text-center h-full space-y-8 animate-in fade-in zoom-in duration-700">
                             <div className="w-32 h-32 rounded-[2.5rem] bg-amber-50 flex items-center justify-center shadow-inner group relative">
                                 <div className="absolute inset-0 bg-amber-200/20 rounded-[2.5rem] animate-pulse" />
-                                <Coffee className="w-16 h-16 text-amber-600 group-hover:scale-110 transition-transform relative z-10" />
+                                <Coffee className="w-16 h-16 text-amber-800 group-hover:scale-110 transition-transform relative z-10" />
                             </div>
                             <div className="space-y-3">
                                 <h3 className="text-3xl font-black text-slate-900 tracking-tight">{t.select_product}</h3>

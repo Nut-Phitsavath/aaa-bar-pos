@@ -62,7 +62,7 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
                 <AlertDialogContent className="sm:max-w-md rounded-2xl">
                     <AlertDialogHeader>
                         <div className="flex items-start gap-3">
-                            <div className={`mt-0.5 rounded-full p-2 ${options?.destructive ? "bg-rose-100 text-rose-600" : "bg-amber-100 text-amber-700"}`}>
+                            <div className={`mt-0.5 rounded-full p-2 ${options?.destructive ? "bg-rose-100 text-rose-600" : "bg-amber-100 text-amber-800"}`}>
                                 <AlertTriangle className="h-5 w-5" />
                             </div>
                             <div className="flex-1 min-w-0">
@@ -88,7 +88,7 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
                             {options?.cancelLabel || t.cancel}
                         </Button>
                         <Button
-                            className={`h-12 flex-1 text-base font-bold text-white ${options?.destructive
+                            className={`h-12 flex-1 text-base font-bold text-amber-950 ${options?.destructive
                                 ? "bg-rose-600 hover:bg-rose-700"
                                 : "bg-amber-600 hover:bg-amber-700"}`}
                             onClick={() => settle(true)}
