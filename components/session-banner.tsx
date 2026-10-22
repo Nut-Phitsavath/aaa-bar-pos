@@ -365,7 +365,7 @@ export function SessionBanner({
             <button
               onClick={() => setCustomer({ name: newName, phone: newPhone })}
               disabled={saving || !newName.trim()}
-              className="w-full h-12 rounded-xl bg-amber-600 text-white font-bold hover:bg-amber-700 disabled:opacity-40 disabled:hover:bg-amber-600 transition-colors duration-150"
+              className="w-full h-12 rounded-xl bg-amber-600 text-amber-950 font-bold hover:bg-amber-700 disabled:opacity-40 disabled:hover:bg-amber-600 transition-colors duration-150"
             >
               {t.add_customer}
             </button>

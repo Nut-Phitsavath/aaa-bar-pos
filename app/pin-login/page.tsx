@@ -4,8 +4,10 @@ import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Coffee, Delete, UserCircle } from "lucide-react"
+import { Delete, UserCircle } from "lucide-react"
 import { useTranslation } from "@/hooks/use-translation"
+import { useBrand, BrandMark, PoweredBy } from "@/components/brand"
+import { VENDOR } from "@/lib/brand"
 
 interface User {
     username: string;
@@ -14,6 +16,7 @@ interface User {
 }
 
 export default function PinLoginPage() {
+    const brand = useBrand()
     const [pin, setPin] = useState("")
     const [error, setError] = useState("")
     const [isLoading, setIsLoading] = useState(false)
@@ -122,19 +125,35 @@ export default function PinLoginPage() {
     ]
 
     return (
-        <div className="min-h-screen bg-gradient-to-br from-amber-50 to-orange-100 flex items-center justify-center p-4">
-            <Card className="w-full max-w-md p-8">
+        // The logo's near-black behind the card, and the shop's own name on it
+        // (CaniSoftware's until Settings has one) - this was the cafe's
+        // orange gradient and a coffee cup.
+        <div className="min-h-screen bg-stone-800 flex flex-col items-center justify-center gap-6 p-4">
+            {/* One column on a tall screen; on a landscape till (till-wide, see
+                globals.css) the name and PIN on the left and the keypad on the
+                right, because stacked it ran 200px off a 768px-high screen and
+                hid the Enter button. */}
+            <Card className="w-full max-w-md p-8 till-wide:max-w-3xl till-wide:grid till-wide:grid-cols-2 till-wide:gap-10 till-wide:items-center">
+                <div>
                 <div className="text-center mb-8">
-                    <div className="inline-flex items-center justify-center w-16 h-16 bg-amber-600 rounded-full mb-4">
-                        <Coffee className="w-8 h-8 text-white" />
+                    <div className="flex justify-center mb-4">
+                        <BrandMark brand={brand} className="w-16 h-16 text-[18px]" />
                     </div>
-                    <h1 className="text-3xl font-bold text-amber-900 mb-2">{t.cafe_pos}</h1>
+                    {brand.custom && brand.title !== VENDOR.name ? (
+                        <h1 className="font-brand text-3xl font-bold tracking-[0.06em] text-stone-900 mb-2">
+                            {brand.title}{brand.subtitle && <span className="block text-xs font-bold tracking-[0.2em] uppercase text-stone-600 mt-1.5 font-sans">{brand.subtitle}</span>}
+                        </h1>
+                    ) : (
+                        <h1 className="text-3xl font-black tracking-tight mb-2">
+                            <span className="text-amber-800">CANI</span><span className="text-stone-900">SOFTWARE</span>
+                        </h1>
+                    )}
                     <p className="text-muted-foreground">{t.select_user_enter_pin}</p>
                 </div>
 
                 {/* User Selection */}
                 <div className="mb-6 relative">
-                    <UserCircle className="absolute left-3 top-1/2 -translate-y-1/2 w-6 h-6 text-amber-600 pointer-events-none" />
+                    <UserCircle className="absolute left-3 top-1/2 -translate-y-1/2 w-6 h-6 text-amber-800 pointer-events-none" />
                     <select
                         className="w-full p-4 pl-12 rounded-xl border-2 border-amber-200 bg-white text-lg font-bold text-slate-800 focus:outline-none focus:border-amber-500 appearance-none shadow-sm cursor-pointer"
                         value={selectedUsername}
@@ -159,7 +178,7 @@ export default function PinLoginPage() {
                             <div
                                 key={i}
                                 className={`w-12 h-12 rounded-lg border-2 flex items-center justify-center text-2xl font-bold ${i < pin.length
-                                    ? 'bg-amber-600 border-amber-600 text-white'
+                                    ? 'bg-amber-600 border-amber-600 text-amber-950'
                                     : 'bg-white border-gray-300'
                                     }`}
                             >
@@ -172,6 +191,9 @@ export default function PinLoginPage() {
                     )}
                 </div>
 
+                </div>
+
+                <div>
                 {/* Number Pad */}
                 <div className="space-y-3 mb-4">
                     {numbers.map((row, rowIndex) => (
@@ -208,7 +230,7 @@ export default function PinLoginPage() {
                 <div className="grid grid-cols-2 gap-3">
                     <Button
                         variant="outline"
-                        className="h-12 border-amber-200 text-amber-700 hover:bg-amber-50 hover:text-amber-800"
+                        className="h-12 border-amber-200 text-amber-800 hover:bg-amber-50 hover:text-amber-800"
                         onClick={handleDelete}
                         disabled={isLoading || isNavigating || pin.length === 0}
                     >
@@ -217,14 +239,16 @@ export default function PinLoginPage() {
                     </Button>
                     <Button
                         id="pin-submit-btn"
-                        className="h-12 bg-amber-600 hover:bg-amber-700 text-white shadow-md relative"
+                        className="h-12 bg-amber-600 hover:bg-amber-700 text-amber-950 shadow-md relative"
                         onClick={handleSubmit}
                         disabled={isLoading || isNavigating || pin.length < 4}
                     >
                         {isLoading || isNavigating ? t.logging_in : t.enter_login}
                     </Button>
                 </div>
+                </div>
             </Card>
+            <PoweredBy brand={brand} className="text-[11px]" />
         </div>
     )
 }

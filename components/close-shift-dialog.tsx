@@ -106,7 +106,7 @@ export function CloseShiftDialog({ open, onOpenChange }: { open: boolean; onOpen
                                 </div>
                                 <div className="flex justify-between font-bold border-t border-slate-200 pt-2 pb-1">
                                     <span>{t.expected_cash_with_colon}</span>
-                                    <span className="text-amber-700">{formatTHB(expected)}</span>
+                                    <span className="text-amber-800">{formatTHB(expected)}</span>
                                 </div>
                                 <div className="flex justify-between border-t border-slate-100 pt-2 text-slate-600">
                                     <span>{t.onepay_total}: ({onePayCount || 0})</span>
@@ -122,15 +122,15 @@ export function CloseShiftDialog({ open, onOpenChange }: { open: boolean; onOpen
                                 deal with it - not a refusal that leaves staff hunting
                                 the floor at 3am. */}
                             {blocking.length > 0 && (
-                                <div className="rounded-xl border-2 border-amber-300 bg-amber-50 p-3 space-y-2">
-                                    <p className="text-sm font-bold text-amber-900">{t.tables_still_open}</p>
+                                <div className="rounded-xl border-2 border-orange-300 bg-orange-50 p-3 space-y-2">
+                                    <p className="text-sm font-bold text-slate-900">{t.tables_still_open}</p>
                                     {blocking.map((b) => (
                                         <div key={b.id} className="flex items-center gap-3 text-sm">
                                             <span className="font-bold text-slate-900">{b.table}</span>
                                             <span className="tabular-nums text-slate-700">{formatTHB(b.balance)}</span>
                                             <Button
                                                 size="sm"
-                                                className="ms-auto h-9 bg-amber-600 hover:bg-amber-700 text-white"
+                                                className="ms-auto h-9 bg-amber-600 hover:bg-amber-700 text-amber-950"
                                                 onClick={() => { onOpenChange(false); router.push(`/pos/settle?session=${b.id}`) }}
                                             >
                                                 {t.settle_bill}

@@ -20,6 +20,16 @@ const notoLaos = localFont({
   display: 'swap',
 });
 
+// The bar's name in the sidebar and on the PIN screen - a classical capital
+// serif, close to the lettering in AAA's logo. Kept in the repo like Noto
+// (app/fonts, OFL), so the till needs no internet for it.
+const cinzel = localFont({
+  src: './fonts/Cinzel-Variable.ttf',
+  weight: '400 900',
+  variable: '--font-cinzel',
+  display: 'swap',
+});
+
 export const metadata: Metadata = {
   title: 'AAA',
   description: 'AAA bar POS',
@@ -51,7 +61,7 @@ export default async function RootLayout({
 
   return (
     <html lang="lo">
-      <body className={notoLaos.className}>
+      <body className={`${notoLaos.className} ${cinzel.variable}`}>
         <LanguageProvider>
           <ShiftProvider>
             <SidebarProvider>

@@ -197,8 +197,8 @@ export default function StockCountPage() {
 
             <main className="mx-auto max-w-5xl px-4 pt-5">
                 {!loading && !shift && (
-                    <p className="mb-5 flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-                        <AlertTriangle className="h-4 w-4 shrink-0" />
+                    <p className="mb-5 flex items-center gap-2 rounded-lg border border-orange-200 bg-orange-50 px-3 py-2 text-sm text-slate-900">
+                        <AlertTriangle className="h-4 w-4 shrink-0 text-orange-600" />
                         {t.no_shift_warning}
                     </p>
                 )}

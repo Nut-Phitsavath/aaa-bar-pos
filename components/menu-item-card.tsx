@@ -17,7 +17,7 @@ import { formatTHB } from "@/lib/currency"
 // same grey box was what made the list scan as a spreadsheet. A real photo,
 // when the owner supplies one, replaces the glyph and keeps the tint.
 const CATEGORY_STYLE: Record<string, { bg: string; fg: string; Icon: LucideIcon }> = {
-  Beer: { bg: "bg-amber-100", fg: "text-amber-700", Icon: Beer },
+  Beer: { bg: "bg-amber-100", fg: "text-amber-800", Icon: Beer },
   Sets: { bg: "bg-violet-100", fg: "text-violet-700", Icon: Package },
   Spirits: { bg: "bg-rose-100", fg: "text-rose-700", Icon: Wine },
   Cocktails: { bg: "bg-sky-100", fg: "text-sky-700", Icon: Martini },

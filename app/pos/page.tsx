@@ -1588,7 +1588,7 @@ function POSPageInner() {
                       <Button variant="outline" size="icon" className="h-6 w-6" onClick={() => updateQuantity(item.id, 1)}>
                         <Plus className="w-3 h-3" />
                       </Button>
-                      <span className="text-sm font-bold text-amber-700 w-20 text-right">{formatTHB(item.price * item.quantity)}</span>
+                      <span className="text-sm font-bold text-amber-800 w-20 text-right">{formatTHB(item.price * item.quantity)}</span>
                       <Button variant="ghost" size="icon" className="h-11 w-11 text-red-400 hover:text-red-600 hover:bg-red-50 ml-1" onClick={() => removeItem(item.id)}>
                         <X className="w-6 h-6" />
                       </Button>
@@ -1603,7 +1603,7 @@ function POSPageInner() {
         {/* Totals */}
         <div className="px-6 py-2 border-t bg-slate-50/50 space-y-2 shadow-[0_-4px_10px_rgba(0,0,0,0.03)]">
           {selectedCustomer && (
-            <div className="flex justify-between text-sm text-amber-600 font-medium">
+            <div className="flex justify-between text-sm text-amber-800 font-medium">
               <span>{t.loyalty_points_earning}</span>
               <span>+{Math.floor(total / 1000)} {t.pts}</span>
             </div>
@@ -1616,7 +1616,7 @@ function POSPageInner() {
             // Inert promo: show why, not "-0" beside a name that looks applied.
             const blocker = promoBlocker(appliedPromo, cartItemCount)
             return (
-              <div className={`flex justify-between text-sm font-medium ${blocker ? 'text-amber-700' : 'text-rose-600'}`}>
+              <div className={`flex justify-between text-sm font-medium ${blocker ? 'text-amber-800' : 'text-rose-600'}`}>
                 <span className="flex items-center gap-1 min-w-0">
                   <Tag className="w-3 h-3 shrink-0" /> <span className="truncate">{appliedPromo.name}</span>
                 </span>
@@ -1625,7 +1625,7 @@ function POSPageInner() {
             )
           })()}
           {loyaltyDiscount > 0 && (
-            <div className="flex justify-between text-sm text-amber-600 font-medium">
+            <div className="flex justify-between text-sm text-amber-800 font-medium">
               <span className="flex items-center gap-1">
                 <Star className="w-3 h-3" /> {t.loyalty_points_redeemed || "Points Redeemed"}
               </span>
@@ -1635,7 +1635,7 @@ function POSPageInner() {
 
           <div className="flex justify-between text-sm font-bold pt-2 border-t">
             <span>{t.total}</span>
-            <span className="text-amber-600">{formatTHB(total)}</span>
+            <span className="text-amber-800">{formatTHB(total)}</span>
           </div>
         </div>
 
@@ -1800,7 +1800,7 @@ function POSPageInner() {
                     <User className="w-4 h-4" />
                     <span className="font-bold">{selectedCustomer.name}</span>
                   </div>
-                  <span className="text-amber-600 font-bold bg-amber-50 px-2 py-0.5 rounded-full border border-amber-100">
+                  <span className="text-amber-800 font-bold bg-amber-50 px-2 py-0.5 rounded-full border border-amber-100">
                     {(selectedCustomer as any).loyaltyPoints || 0} {t.pts}
                   </span>
                 </Badge>
@@ -1827,7 +1827,7 @@ function POSPageInner() {
                   />
                   <Button
                     variant="outline"
-                    className="bg-amber-50 border-amber-200 text-amber-700 hover:bg-amber-100 h-9"
+                    className="bg-amber-50 border-amber-200 text-amber-800 hover:bg-amber-100 h-9"
                     onClick={handleManualRedeem}
                     disabled={!manualPoints}
                   >
@@ -1868,7 +1868,7 @@ function POSPageInner() {
                 <Button
                   variant="outline"
                   className={`w-full h-auto py-2 flex-col gap-0.5 ${blocker
-                    ? "text-amber-700 border-amber-400 bg-amber-50 hover:bg-amber-100 hover:text-amber-800"
+                    ? "text-amber-800 border-amber-400 bg-amber-50 hover:bg-amber-100 hover:text-amber-800"
                     : "text-rose-600 border-rose-400 hover:text-rose-700 hover:bg-rose-50"}`}
                   onClick={() => setAppliedPromo(null)}
                 >
@@ -1910,7 +1910,7 @@ function POSPageInner() {
           // Table mode: one action. No payment, no complimentary toggle - the
           // bill is settled from the bill screen once, at the end.
           <Button
-            className="w-full h-14 text-lg bg-amber-600 hover:bg-amber-700 text-white"
+            className="w-full h-14 text-lg bg-amber-600 hover:bg-amber-700 text-amber-950"
             size="lg"
             disabled={cart.length === 0 || isProcessing}
             onClick={sendToTable}
@@ -1952,7 +1952,7 @@ function POSPageInner() {
               <span className="text-sm font-bold text-amber-900">
                 {t.complimentary_mode}
               </span>
-              <span className="text-[8px] text-amber-700/70 uppercase">
+              <span className="text-[8px] text-amber-800/70 uppercase">
                 {t.complimentary_mode_desc}
 
 
@@ -2017,7 +2017,7 @@ function POSPageInner() {
                   <h2 className="text-xl font-bold text-slate-800 mb-6">{t.checkout}</h2>
                   <div className="space-y-4">
                     <div className="p-4 bg-amber-50 rounded-xl border border-amber-100">
-                      <p className="text-sm text-amber-700 font-medium mb-1">{t.total_to_pay}</p>
+                      <p className="text-sm text-amber-800 font-medium mb-1">{t.total_to_pay}</p>
                       <p className="text-3xl font-black text-amber-900">{formatTHB(total)}</p>
                     </div>
 
@@ -2080,7 +2080,7 @@ function POSPageInner() {
                       className={`p-3 rounded-xl border-2 transition-all cursor-pointer ${focusedInput === 'beeper' ? 'border-amber-600 bg-white ring-4 ring-amber-100 shadow-lg' : 'border-slate-200 bg-slate-50'}`}
                       onClick={() => setFocusedInput('beeper')}
                     >
-                      <Label className={`text-xs font-bold uppercase mb-1 block ${focusedInput === 'beeper' ? 'text-amber-600' : 'text-slate-400'}`}>
+                      <Label className={`text-xs font-bold uppercase mb-1 block ${focusedInput === 'beeper' ? 'text-amber-800' : 'text-slate-400'}`}>
                         {t.beeper} {showBeeperError && !beeperNumber && <span className="text-rose-500">*</span>}
                       </Label>
                       <div className="text-2xl font-black text-slate-800 h-8 flex items-center">
@@ -2092,7 +2092,7 @@ function POSPageInner() {
                       className={`p-3 rounded-xl border-2 transition-all cursor-pointer ${paymentMethod !== 'CASH' ? 'opacity-50 grayscale' : focusedInput === 'cash' ? 'border-amber-600 bg-white ring-4 ring-amber-100 shadow-lg' : 'border-slate-200 bg-slate-50'}`}
                       onClick={() => paymentMethod === 'CASH' && !isComplimentary && setFocusedInput('cash')}
                     >
-                      <Label className={`text-xs font-bold uppercase mb-1 block ${focusedInput === 'cash' && paymentMethod === 'CASH' ? 'text-amber-600' : 'text-slate-400'}`}>
+                      <Label className={`text-xs font-bold uppercase mb-1 block ${focusedInput === 'cash' && paymentMethod === 'CASH' ? 'text-amber-800' : 'text-slate-400'}`}>
                         {t.cash_received}
                       </Label>
                       <div className="text-2xl font-black text-slate-800 h-8 flex items-center">
@@ -2273,7 +2273,7 @@ function POSPageInner() {
                           {blocker ? promoBlockerLabel(blocker, promo) : promo.code}
                         </span>
                       </span>
-                      <span className={`shrink-0 font-semibold tabular-nums ${blocker ? 'text-muted-foreground' : 'text-amber-700'}`}>
+                      <span className={`shrink-0 font-semibold tabular-nums ${blocker ? 'text-muted-foreground' : 'text-amber-800'}`}>
                         −{amount}
                       </span>
                     </button>

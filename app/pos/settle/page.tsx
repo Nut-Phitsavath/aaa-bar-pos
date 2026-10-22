@@ -413,7 +413,7 @@ function SettleScreen() {
                                     }`}
                             >
                                 <div className={`flex items-center gap-2 px-3 py-2 ${on ? "text-amber-900" : "text-slate-600"}`}>
-                                    <span className={`w-6 h-6 rounded-md border-2 grid place-items-center shrink-0 ${on ? "bg-amber-500 border-amber-500 text-white" : "border-slate-300"
+                                    <span className={`w-6 h-6 rounded-md border-2 grid place-items-center shrink-0 ${on ? "bg-amber-500 border-amber-500 text-amber-950" : "border-slate-300"
                                         }`}>
                                         {on && <Check className="w-4 h-4" />}
                                     </span>
@@ -459,7 +459,7 @@ function SettleScreen() {
                     well decide the room is not owed it tonight. Nothing is
                     charged until somebody taps. */}
                 {shortfall > 0 && (
-                    <div className="shrink-0 bg-amber-400 text-slate-900">
+                    <div className="shrink-0 bg-orange-300 text-slate-900">
                         <div className="px-3 pt-2.5 pb-2 flex items-start gap-2.5">
                             <AlertTriangle className="w-5 h-5 shrink-0 mt-px" aria-hidden />
                             <div className="min-w-0">
@@ -571,12 +571,12 @@ function SettleScreen() {
                             something. Without a line saying why, a disabled
                             Cash button is just a till that appears broken. */}
                         {untouched && (
-                            <span className="me-auto font-bold text-amber-700">{t.enter_amount_received}</span>
+                            <span className="me-auto font-bold text-amber-800">{t.enter_amount_received}</span>
                         )}
                         {/* Say "orders" outright: a bare count next to an amount
                             reads as a quantity of something. */}
                         {selected.size > 0 && entry === "" && (
-                            <span className="font-bold text-amber-700">
+                            <span className="font-bold text-amber-800">
                                 {selected.size} {t.round_no}
                             </span>
                         )}
@@ -720,7 +720,7 @@ function SettleScreen() {
                                 <QRCodeSVG value={pendingQr.qr} size={240} level="H" />
                             </div>
                             <p className="text-2xl font-black tabular-nums">{formatTHB(pendingQr.amount)}</p>
-                            <p className="text-sm text-amber-700">{t.waiting_for_payment}</p>
+                            <p className="text-sm text-amber-800">{t.waiting_for_payment}</p>
                         </div>
                     )}
                 </DialogContent>
@@ -745,7 +745,7 @@ function SettleScreen() {
                                 <img src={transferQrUrl} alt={t.store_transfer_qr} className="w-60 h-60 object-contain" />
                             </div>
                         ) : (
-                            <p className="rounded-xl border-2 border-dashed border-amber-300 bg-amber-50 px-4 py-8 text-sm font-bold text-amber-800">
+                            <p className="rounded-xl border-2 border-dashed border-orange-300 bg-orange-50 px-4 py-8 text-sm font-bold text-slate-800">
                                 {t.no_transfer_qr}
                             </p>
                         )}
@@ -848,7 +848,7 @@ function SettleScreen() {
                             </span>
                         </p>
                         <Button
-                            className="w-full h-12 rounded-xl bg-amber-600 hover:bg-amber-700 text-white"
+                            className="w-full h-12 rounded-xl bg-amber-600 hover:bg-amber-700 text-amber-950"
                             disabled={!(Number(discountInput) > 0)}
                             onClick={() => { setApprovalError(null); setApproving("DISCOUNT") }}
                         >

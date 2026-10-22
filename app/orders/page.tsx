@@ -257,7 +257,7 @@ export default function BillsPage() {
                     </Popover>
                     <Button
                         variant="outline"
-                        className="h-11 text-amber-700 hover:text-amber-800"
+                        className="h-11 text-amber-800 hover:text-amber-800"
                         onClick={() => setRange({ from: new Date(), to: new Date() })}
                     >
                         {t.today}
@@ -322,7 +322,7 @@ export default function BillsPage() {
                             { label: t.still_owed, value: formatTHB(exceptions.owedTotal), sub: `${exceptions.tabCount} ${t.status_tab}` },
                         ].map((x) => (
                             <div key={x.label}>
-                                <p className="text-[10px] font-bold uppercase tracking-widest text-amber-700/80">{x.label}</p>
+                                <p className="text-[10px] font-bold uppercase tracking-widest text-amber-800/80">{x.label}</p>
                                 <p className="text-xl font-black text-slate-900 tabular-nums mt-1 leading-none">{x.value}</p>
                                 <p className="text-[11px] text-slate-500 mt-1">{x.sub}</p>
                             </div>
@@ -574,7 +574,7 @@ export default function BillsPage() {
                                                     </span>
                                                 )}
                                                 {b.reopenedAt && (
-                                                    <span className="text-xs font-bold text-amber-700">
+                                                    <span className="text-xs font-bold text-amber-800">
                                                         {t.reopen_bill} · {time(b.reopenedAt)}
                                                     </span>
                                                 )}

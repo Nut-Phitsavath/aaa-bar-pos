@@ -15,6 +15,7 @@ import { notify } from "@/components/ui/sonner"
 import { useConfirm } from "@/components/confirm-provider"
 import { useLanguage } from "@/components/language-provider"
 import { Header } from "@/components/header"
+import { SETTINGS_SAVED } from "@/components/brand"
 
 export default function SettingsPage() {
   const [user, setUser] = useState<any>(null)
@@ -85,6 +86,8 @@ export default function SettingsPage() {
           setLang(settings.language)
         }
         notify.success(t.settings_saved)
+        // The sidebar shows the shop's name and logo; tell it they may have changed.
+        window.dispatchEvent(new Event(SETTINGS_SAVED))
       } else {
         notify.error(t.settings_save_failed)
       }
@@ -155,7 +158,7 @@ export default function SettingsPage() {
         <Card className="p-6 border-amber-100 shadow-sm">
           <div className="flex items-center gap-3 mb-6">
             <div className="bg-amber-100 p-3 rounded-lg">
-              <Store className="w-6 h-6 text-amber-600" />
+              <Store className="w-6 h-6 text-amber-800" />
             </div>
             <div>
               <h2 className="text-xl font-bold">{t.shop_info}</h2>
@@ -311,7 +314,7 @@ export default function SettingsPage() {
                     ))}
                   </div>
                   {mode === "BANK" && !settings.transfer_qr_url && (
-                    <p className="text-xs text-amber-700">{t.bill_qr_needs_upload}</p>
+                    <p className="text-xs text-amber-800">{t.bill_qr_needs_upload}</p>
                   )}
                   {!onepayReady && <p className="text-xs text-muted-foreground">{t.bill_qr_onepay_not_set_up}</p>}
                   {mode === "ONEPAY" && (

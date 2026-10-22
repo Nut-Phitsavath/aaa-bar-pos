@@ -98,7 +98,7 @@ export function UnitFields({
                                 }
                                 className={`h-14 rounded-xl px-2 font-bold transition-all duration-150 disabled:opacity-40 disabled:cursor-not-allowed ${
                                     active
-                                        ? "bg-white shadow-sm text-amber-700"
+                                        ? "bg-white shadow-sm text-amber-800"
                                         : "text-slate-500 hover:text-slate-900 hover:bg-white/60"
                                 }`}
                             >
@@ -111,7 +111,7 @@ export function UnitFields({
                     })}
                 </div>
                 {locked ? (
-                    <p className="text-xs font-semibold text-amber-700">{t.units_locked}</p>
+                    <p className="text-xs font-semibold text-amber-800">{t.units_locked}</p>
                 ) : (
                     // What KIND of thing this is, in things from this bar's own
                     // shelves. "Decides how stock is counted" is true and tells

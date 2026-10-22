@@ -342,9 +342,9 @@ export function ExchangeDialog({
                         {t.exchange_in} <strong className="text-slate-900">{formatTHB(inValue)}</strong>
                     </span>
                     {touched && !ready && (
-                        <span className="ms-auto text-sm font-bold text-amber-700">{t.replacement_required}</span>
+                        <span className="ms-auto text-sm font-bold text-amber-800">{t.replacement_required}</span>
                     )}
-                    <span className={`${touched && !ready ? "" : "ms-auto "}font-black tabular-nums ${charge > 0 ? "text-amber-700" : "text-emerald-700"}`}>
+                    <span className={`${touched && !ready ? "" : "ms-auto "}font-black tabular-nums ${charge > 0 ? "text-amber-800" : "text-emerald-700"}`}>
                         {charge > 0 ? `${t.exchange_charge} ${formatTHB(charge)}` : t.exchange_no_charge}
                     </span>
                 </div>

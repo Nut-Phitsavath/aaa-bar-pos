@@ -229,10 +229,10 @@ export default function DashboardPage() {
           <div className="flex items-center justify-between mb-8">
             <div>
               <h2 className="text-xl font-bold text-slate-900">{t.hourly_sales || "Hourly Sales (Peak Hours)"}</h2>
-              <p className="text-sm text-slate-500 font-medium">{t.busiest_hours_today} <span className="text-amber-600 font-bold">{peakHour?.hour}:00</span></p>
+              <p className="text-sm text-slate-500 font-medium">{t.busiest_hours_today} <span className="text-amber-800 font-bold">{peakHour?.hour}:00</span></p>
             </div>
             <div className="p-3 bg-amber-50 rounded-xl text-center min-w-[100px]">
-              <p className="text-[10px] text-amber-700 font-bold uppercase tracking-wider">{t.peak_revenue}</p>
+              <p className="text-[10px] text-amber-800 font-bold uppercase tracking-wider">{t.peak_revenue}</p>
               <p className="text-lg font-black text-amber-900 leading-tight">{formatTHB(peakHour?.revenue)}</p>
             </div>
           </div>
@@ -277,7 +277,7 @@ export default function DashboardPage() {
                   {(analytics?.hourlySales || []).map((entry: any, index: number) => (
                     <Cell
                       key={`cell-${index}`}
-                      fill={entry.hour === peakHour?.hour ? '#92400e' : '#d97706'}
+                      fill={entry.hour === peakHour?.hour ? '#36322d' : '#d39d40'}
                       opacity={entry.revenue > 0 ? 1 : 0.1}
                     />
                   ))}
@@ -335,21 +335,21 @@ export default function DashboardPage() {
 
           {/* Low Stock Highlight */}
           {data?.lowStockAlerts.length > 0 && (
-            <Card className="p-6 border-none shadow-sm bg-orange-50 border-l-4 border-orange-500">
+            <Card className="p-6 shadow-sm bg-orange-50 border border-orange-200">
               <div className="flex items-center gap-2 mb-3">
                 <AlertTriangle className="w-5 h-5 text-orange-600" />
-                <h3 className="font-bold text-orange-950">{t.low_stock_alerts}</h3>
+                <h3 className="font-bold text-slate-900">{t.low_stock_alerts}</h3>
               </div>
               <div className="space-y-2">
                 {data?.lowStockAlerts.slice(0, 2).map((item: any) => (
                   <div key={item.name} className="flex justify-between items-center text-xs">
-                    <span className="font-medium text-orange-800">{item.name}</span>
-                    <span className="font-bold text-orange-600">{item.current} {item.unit}</span>
+                    <span className="font-medium text-slate-800">{item.name}</span>
+                    <span className="font-bold text-orange-700">{item.current} {item.unit}</span>
                   </div>
                 ))}
                 <Button
                   variant="link"
-                  className="px-0 h-auto text-[11px] text-orange-700 font-bold hover:text-orange-900"
+                  className="px-0 h-auto text-[11px] text-orange-700 font-bold hover:underline"
                   onClick={() => router.push('/inventory')}
                 >
                   {t.manage_inventory || "Manage Inventory"} →
@@ -379,7 +379,7 @@ export default function DashboardPage() {
               </div>
               <div className="flex justify-between font-bold border-t pt-2">
                 <span>{t.expected_cash_with_colon || "Expected Cash:"}</span>
-                <span className="text-amber-600">
+                <span className="text-amber-800">
                   {formatTHB((startCash || 0) + (cashPayments || 0))}
                 </span>
               </div>

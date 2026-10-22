@@ -169,7 +169,7 @@ export function TicketPanel({
                                                 ticket for the bar: louder than the
                                                 status line, not a footnote to it. */}
                                             {item.note && (
-                                                <p className={`text-sm font-bold mt-0.5 ${struck ? "text-slate-400 line-through" : "text-amber-700"}`}>
+                                                <p className={`text-sm font-bold mt-0.5 ${struck ? "text-slate-400 line-through" : "text-amber-800"}`}>
                                                     {item.note}
                                                 </p>
                                             )}
@@ -201,7 +201,7 @@ export function TicketPanel({
                                             <button
                                                 onClick={() => setExchanging(item.id)}
                                                 aria-label={t.exchange_items}
-                                                className="h-8 w-8 grid place-items-center rounded-md text-slate-300 hover:text-amber-700 hover:bg-amber-50 shrink-0 transition-colors duration-150"
+                                                className="h-8 w-8 grid place-items-center rounded-md text-slate-300 hover:text-amber-800 hover:bg-amber-50 shrink-0 transition-colors duration-150"
                                             >
                                                 <Repeat className="w-4 h-4" />
                                             </button>
@@ -257,7 +257,7 @@ export function TicketPanel({
                                         {line.localName || line.name}
                                     </p>
                                     <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                                        <span className="text-[11px] font-bold tracking-wide text-amber-700">{t.state_new}</span>
+                                        <span className="text-[11px] font-bold tracking-wide text-amber-800">{t.state_new}</span>
                                         {line.isTakeaway && (
                                             <span className="flex items-center gap-1 text-[11px] font-bold text-blue-700">
                                                 <ShoppingBag className="w-3.5 h-3.5 shrink-0" /> {t.takeaway}
@@ -322,7 +322,7 @@ export function TicketPanel({
                     </div>
                 )}
                 {hasPending && (
-                    <div className="flex justify-between text-sm text-amber-700">
+                    <div className="flex justify-between text-sm text-amber-800">
                         <span>{t.state_new}</span>
                         <span className="tabular-nums">+ {formatTHB(pendingTotal)}</span>
                     </div>
@@ -364,7 +364,7 @@ export function TicketPanel({
                     </Button>
                     {hasPending ? (
                         <Button
-                            className="h-12 bg-amber-600 hover:bg-amber-700 text-white"
+                            className="h-12 bg-amber-600 hover:bg-amber-700 text-amber-950"
                             disabled={busy}
                             onClick={onSend}
                         >

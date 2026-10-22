@@ -130,7 +130,7 @@ export function ServerPerformance({ startDate, endDate }: { startDate: string; e
                         <Trophy className="w-6 h-6 text-white" />
                     </div>
                     <div className="min-w-0">
-                        <p className="text-xs font-bold uppercase tracking-widest text-amber-700">
+                        <p className="text-xs font-bold uppercase tracking-widest text-amber-800">
                             {t.top_server}
                         </p>
                         <p className="text-2xl font-black text-slate-900 leading-none mt-1 truncate">
@@ -185,7 +185,7 @@ export function ServerPerformance({ startDate, endDate }: { startDate: string; e
                                     </span>
                                 )}
                                 {r.voids > 0 && (
-                                    <span className="text-amber-700 font-semibold inline-flex items-center gap-1">
+                                    <span className="text-orange-700 font-semibold inline-flex items-center gap-1">
                                         <AlertTriangle className="w-3 h-3" />
                                         {r.voids} {t.state_void} ({formatTHB(r.voidValue)})
                                     </span>

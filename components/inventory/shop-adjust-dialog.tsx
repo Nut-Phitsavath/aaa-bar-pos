@@ -89,7 +89,7 @@ export function ShopAdjustDialog({ open, onOpenChange, ingredient, onSuccess }: 
             <DialogContent className="sm:max-w-md">
                 <DialogHeader>
                     <DialogTitle className="flex items-center gap-2">
-                        <AlertTriangle className="w-5 h-5 text-amber-600" />
+                        <AlertTriangle className="w-5 h-5 text-orange-600" />
                         {t.adjust_shop_stock}: {ingredient.name}
                     </DialogTitle>
                 </DialogHeader>
@@ -104,7 +104,7 @@ export function ShopAdjustDialog({ open, onOpenChange, ingredient, onSuccess }: 
                         </div>
                         <div className="p-3 bg-amber-50 rounded-lg border border-amber-100">
                             <p className="text-xs text-muted-foreground">{t.actual_stock}</p>
-                            <p className="text-xl font-bold text-amber-700 tabular-nums">
+                            <p className="text-xl font-bold text-amber-800 tabular-nums">
                                 {actualStock ? formatStockOf(actualBase, ingredient) : "—"}
                             </p>
                         </div>

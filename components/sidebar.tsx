@@ -29,6 +29,7 @@ import { useTranslation } from "@/hooks/use-translation"
 import { useShift } from "@/components/shift-provider"
 import { ShiftDialog } from "@/components/shift-dialog"
 import { CloseShiftDialog } from "@/components/close-shift-dialog"
+import { useBrand, BrandMark, BrandName, PoweredBy } from "@/components/brand"
 import { formatTHB } from "@/lib/currency"
 import { cn } from "@/lib/utils"
 import { useSidebar } from "@/components/sidebar-provider"
@@ -64,6 +65,7 @@ export function Sidebar() {
     const { t } = useTranslation()
     const { status, startCash, cashPayments } = useShift()
     const { isCollapsed, toggleSidebar } = useSidebar()
+    const brand = useBrand()
     const [user, setUser] = useState<any>(null)
     const [isShiftDialogOpen, setIsShiftDialogOpen] = useState(false)
     const [isEndShiftOpen, setIsEndShiftOpen] = useState(false)
@@ -133,31 +135,23 @@ export function Sidebar() {
         <>
             <aside
                 className={cn(
-                    "h-screen bg-white border-r flex flex-col fixed left-0 top-0 z-50 shadow-sm border-amber-100 transition-all duration-300",
+                    "h-screen bg-stone-800 text-stone-100 border-r border-stone-700 flex flex-col fixed left-0 top-0 z-50 shadow-sm transition-all duration-300",
                     isCollapsed ? "w-[80px]" : "w-[260px]"
                 )}
             >
                 {/* Logo Section */}
                 <div
                     className={cn(
-                        "h-[72px] flex items-center border-b border-amber-50 cursor-pointer hover:bg-amber-50/50 transition-colors px-4",
+                        "h-[72px] flex items-center border-b border-stone-700 cursor-pointer hover:bg-stone-700 transition-colors px-4",
                         isCollapsed ? "justify-center" : "justify-between"
                     )}
                     onClick={() => !isCollapsed && router.push('/dashboard')}
                 >
                     <div className="flex items-center gap-2 overflow-hidden">
-                        <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center border border-amber-100 shadow-sm shrink-0 overflow-hidden">
-                            <img src="/solution_logo.png" alt="Canisoftware" className="w-full h-full object-contain" />
-                        </div>
-                        {!isCollapsed && (
-                            <div className="flex flex-col leading-none">
-                                <div className="text-lg font-black tracking-tight whitespace-nowrap">
-                                    <span className="text-amber-600">CANI</span>
-                                    <span className="text-slate-900">SOFTWARE</span>
-                                </div>
-                                <span className="text-[10px] font-bold text-amber-600/60 uppercase tracking-widest mt-0.5">POS SOLUTION</span>
-                            </div>
-                        )}
+                        {/* The shop's own name and logo once set in Settings;
+                            CaniSoftware's until then (lib/brand.ts). */}
+                        <BrandMark brand={brand} className="w-10 h-10 text-[12px]" />
+                        {!isCollapsed && <BrandName brand={brand} />}
                     </div>
 
                     {!isCollapsed && (
@@ -165,7 +159,7 @@ export function Sidebar() {
                             variant="ghost"
                             size="icon"
                             onClick={(e) => { e.stopPropagation(); toggleSidebar(); }}
-                            className="h-11 w-11 text-amber-800 hover:bg-amber-100"
+                            className="h-11 w-11 text-stone-400 hover:bg-stone-700 hover:text-amber-300"
                         >
                             <ChevronLeft className="w-5 h-5" />
                         </Button>
@@ -174,12 +168,12 @@ export function Sidebar() {
 
                 {/* Mini Toggle for collapsed mode */}
                 {isCollapsed && (
-                    <div className="flex justify-center py-2 border-b border-amber-50">
+                    <div className="flex justify-center py-2 border-b border-stone-700">
                         <Button
                             variant="ghost"
                             size="icon"
                             onClick={toggleSidebar}
-                            className="h-10 w-10 text-amber-800 hover:bg-amber-100"
+                            className="h-10 w-10 text-stone-400 hover:bg-stone-700 hover:text-amber-300"
                         >
                             <Menu className="w-6 h-6" />
                         </Button>
@@ -188,30 +182,30 @@ export function Sidebar() {
 
                 {/* Cash in Drawer Section */}
                 {!isCollapsed && (
-                    <div className="p-3 bg-amber-50/30 border-b border-amber-100">
+                    <div className="p-3 border-b border-stone-700">
                         <div className="flex flex-col">
-                            <span className="text-[10px] font-bold text-amber-700/70 uppercase tracking-widest leading-none mb-1">{t.cash_in_drawer || "Cash in Drawer"}</span>
+                            <span className="text-[10px] font-bold text-stone-400 uppercase tracking-widest leading-none mb-1">{t.cash_in_drawer || "Cash in Drawer"}</span>
                             <div className="flex items-center gap-1.5">
-                                <Wallet className="w-3.5 h-3.5 text-amber-600" />
-                                <span className="text-[18px] font-black text-amber-950 leading-none">
+                                <Wallet className="w-3.5 h-3.5 text-amber-400" />
+                                <span className="text-[18px] font-black text-amber-300 leading-none">
                                     {formatTHB(currentCash)}
                                 </span>
                             </div>
                             {status === 'CLOSED' && (
                                 <button
                                     onClick={() => setIsShiftDialogOpen(true)}
-                                    className="text-[10px] hover:underline text-rose-500 font-bold mt-1 leading-none text-left focus:outline-none flex items-center gap-1"
+                                    className="text-[10px] hover:underline text-rose-400 font-bold mt-1 leading-none text-left focus:outline-none flex items-center gap-1"
                                 >
-                                    <div className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse" />
+                                    <div className="w-1.5 h-1.5 rounded-full bg-rose-400 animate-pulse" />
                                     {t.shift_closed || "Shift Closed"} ({t.open_status || "Open"})
                                 </button>
                             )}
                             {status === 'OPEN' && (
                                 <button
                                     onClick={() => setIsEndShiftOpen(true)}
-                                    className="text-[11px] hover:underline text-emerald-600 font-bold text-left focus:outline-none flex items-center gap-1.5 min-h-11 -my-1 py-2"
+                                    className="text-[11px] hover:underline text-emerald-400 font-bold text-left focus:outline-none flex items-center gap-1.5 min-h-11 -my-1 py-2"
                                 >
-                                    <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                                    <div className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
                                     {t.shift_open || "Shift Open"} ({t.end_shift || "End"})
                                 </button>
                             )}
@@ -237,18 +231,18 @@ export function Sidebar() {
                                     "flex items-center gap-4 rounded-xl transition-all duration-200 group relative overflow-hidden",
                                     isCollapsed ? "justify-center h-12" : "px-4 h-15",
                                     isActive
-                                        ? "bg-amber-800 text-white shadow-md shadow-amber-900/10"
-                                        : "text-slate-600 hover:bg-amber-50 hover:text-amber-900"
+                                        ? "bg-amber-500 text-amber-950 shadow-md shadow-black/20"
+                                        : "text-stone-100 hover:bg-stone-700 hover:text-amber-300"
                                 )}
                             >
                                 {/* Active state left bar */}
                                 {isActive && (
-                                    <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1.5 h-8 bg-amber-400 rounded-r-full" />
+                                    <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1.5 h-8 bg-amber-200 rounded-r-full" />
                                 )}
 
                                 <Icon className={cn(
                                     "w-7 h-7 transition-colors shrink-0",
-                                    isActive ? "text-amber-200" : "text-slate-400 group-hover:text-amber-700"
+                                    isActive ? "text-amber-950" : "text-stone-400 group-hover:text-amber-300"
                                 )} />
 
                                 {!isCollapsed && (
@@ -267,19 +261,19 @@ export function Sidebar() {
                     })}
                 </nav>
 
-                <Separator className="bg-amber-100" />
+                <Separator className="bg-stone-700" />
 
                 {/* System Actions Section */}
                 <div className={cn("p-2 space-y-0.5", isCollapsed && "px-2")}>
                     {/* User Info Snippet */}
                     {user && !isCollapsed && (
-                        <div className="px-4 py-2.5 mb-2 bg-slate-50 rounded-xl border border-slate-100 flex items-center gap-3">
-                            <div className="w-8 h-8 rounded-full bg-white flex items-center justify-center text-amber-900 border border-amber-100 shadow-sm shrink-0">
+                        <div className="px-4 py-2.5 mb-2 bg-stone-700 rounded-xl border border-stone-600 flex items-center gap-3">
+                            <div className="w-8 h-8 rounded-full bg-stone-800 flex items-center justify-center text-amber-300 border border-stone-600 shrink-0">
                                 {user.role === 'ADMIN' || user.role === 'MANAGER' ? <ShieldCheck className="w-5 h-5" /> : <UserCircle className="w-5 h-5" />}
                             </div>
                             <div className="min-w-0">
-                                <p className="text-sm font-bold text-slate-900 leading-none truncate">{user.name}</p>
-                                <p className="text-[10px] font-bold text-slate-500 uppercase mt-1 tracking-wider leading-none">{user.role}</p>
+                                <p className="text-sm font-bold text-stone-100 leading-none truncate">{user.name}</p>
+                                <p className="text-[10px] font-bold text-stone-400 uppercase mt-1 tracking-wider leading-none">{user.role}</p>
                             </div>
                         </div>
                     )}
@@ -296,8 +290,8 @@ export function Sidebar() {
                                     "flex items-center gap-4 rounded-xl transition-all",
                                     isCollapsed ? "justify-center h-12" : "px-4 h-14",
                                     isActive
-                                        ? "bg-slate-100 text-slate-900"
-                                        : "text-slate-500 hover:bg-slate-50 hover:text-slate-800"
+                                        ? "bg-stone-700 text-stone-50"
+                                        : "text-stone-300 hover:bg-stone-700 hover:text-stone-50"
                                 )}
                             >
                                 <Icon className="w-6 h-6 shrink-0" />
@@ -310,7 +304,7 @@ export function Sidebar() {
                         onClick={handleLogout}
                         title={isCollapsed ? t.logout : ""}
                         className={cn(
-                            "w-full flex items-center gap-4 rounded-xl text-rose-600 hover:bg-rose-50 transition-all font-semibold",
+                            "w-full flex items-center gap-4 rounded-xl text-rose-400 hover:bg-rose-500/10 transition-all font-semibold",
                             isCollapsed ? "justify-center h-12" : "px-4 h-14"
                         )}
                     >
@@ -319,8 +313,8 @@ export function Sidebar() {
                     </button>
                 </div>
 
-                {/* Wood texture accent at the very bottom */}
-                <div className="h-2 w-full bg-[#5D3A1A] shrink-0" />
+                {/* Our signature, once the bar's own name is up top. */}
+                {!isCollapsed && <PoweredBy brand={brand} className="pb-3 pt-1" />}
             </aside>
 
             {/* Shift Management Dialogs */}
