@@ -15,6 +15,7 @@ import { notify } from "@/components/ui/sonner"
 import { useConfirm } from "@/components/confirm-provider"
 import { useLanguage } from "@/components/language-provider"
 import { Header } from "@/components/header"
+import { SETTINGS_SAVED } from "@/components/brand"
 
 export default function SettingsPage() {
   const [user, setUser] = useState<any>(null)
@@ -85,6 +86,8 @@ export default function SettingsPage() {
           setLang(settings.language)
         }
         notify.success(t.settings_saved)
+        // The sidebar shows the shop's name and logo; tell it they may have changed.
+        window.dispatchEvent(new Event(SETTINGS_SAVED))
       } else {
         notify.error(t.settings_save_failed)
       }
