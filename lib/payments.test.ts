@@ -8,7 +8,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
     isConfirmed, paidTotal, balanceOf, changeDue, canAcceptPayment, isFullySettled,
-    discountAmount, billTotalOf, outstandingOf,
+    discountAmount, billTotalOf, outstandingOf, canDiscount,
 } from './payments.ts'
 
 const cash = (amount: number) => ({ method: 'CASH', amount, paymentStatus: 'PAID' })
@@ -226,4 +226,25 @@ test('a tab whose payment was refunded owes the full amount again', () => {
         payments: [{ method: 'CASH', amount: 400, paymentStatus: 'PAID', voidedAt: new Date() }],
     }]
     assert.equal(outstandingOf(sessions), 1000)
+})
+
+test('a fixed discount bigger than the bill is refused, not quietly made free', () => {
+    // 500 keyed instead of 50 on a 400 baht bill
+    assert.deepEqual(canDiscount(400, 'FIXED', 500), { ok: false, reason: 'DISCOUNT_EXCEEDS_BILL' })
+})
+
+test('a discount of exactly the bill is allowed - that is a comp', () => {
+    assert.deepEqual(canDiscount(400, 'FIXED', 400), { ok: true })
+    assert.deepEqual(canDiscount(400, 'PERCENT', 100), { ok: true })
+})
+
+test('a percentage over 100 is refused', () => {
+    assert.deepEqual(canDiscount(400, 'PERCENT', 150), { ok: false, reason: 'DISCOUNT_OVER_100_PERCENT' })
+})
+
+test('an ordinary discount, and clearing one, are allowed', () => {
+    assert.deepEqual(canDiscount(400, 'FIXED', 50), { ok: true })
+    assert.deepEqual(canDiscount(400, 'PERCENT', 10), { ok: true })
+    assert.deepEqual(canDiscount(400, null, 900), { ok: true })
+    assert.deepEqual(canDiscount(400, 'FIXED', 0), { ok: true })
 })

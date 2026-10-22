@@ -81,6 +81,8 @@ function ReceiptContent() {
                         isTakeaway: i.isTakeaway,
                         note: i.note ?? null,
                     })),
+                    // Before the promotion and loyalty came off, worked out by the server.
+                    gross: order.subtotal ?? undefined,
                     discount: order.discount ?? 0,
                     tax: order.taxAmount ?? order.tax ?? 0,
                     total: order.total,
@@ -166,7 +168,10 @@ function ReceiptContent() {
                     closedAt: bill.closedAt ? stamp(bill.closedAt) : null,
                     lines: Array.from(merged.values()),
                     gross: bill.gross,
-                    discount: bill.discount ?? 0,
+                    // The promotion and the manager's discount together, so gross
+                    // less this is the total. The manager's alone left a promo
+                    // bill's slip short by the promotion.
+                    discount: (bill.promoDiscount ?? 0) + (bill.discount ?? 0),
                     tax,
                     taxRate,
                     total: bill.total,

@@ -59,11 +59,35 @@ export function isFullySettled(billTotal: number, payments: PaymentLike[]): bool
 }
 
 /**
+ * May this discount be applied at all?
+ *
+ * Separate from `discountAmount`, which clamps. The clamp stops a bill going
+ * negative; on its own it made a typo silent - 500 keyed instead of 50 on a
+ * ฿400 bill gave the table a free night and told nobody. So a fixed discount
+ * over the bill, or a percentage over 100, is refused: the manager meant
+ * something else. A discount of exactly the bill stays allowed (that is a
+ * comp), and clearing one is always allowed.
+ *
+ * `base` is what the discount comes off: the bill after any promotion.
+ */
+export function canDiscount(
+    base: number,
+    type: string | null | undefined,
+    value: number | null | undefined
+): { ok: true } | { ok: false; reason: 'DISCOUNT_EXCEEDS_BILL' | 'DISCOUNT_OVER_100_PERCENT' } {
+    const v = value || 0
+    if (!type || v <= 0) return { ok: true }
+    if (type === 'PERCENT') return v > 100 ? { ok: false, reason: 'DISCOUNT_OVER_100_PERCENT' } : { ok: true }
+    return v > (base || 0) ? { ok: false, reason: 'DISCOUNT_EXCEEDS_BILL' } : { ok: true }
+}
+
+/**
  * What a per-table discount takes off the gross (requirement #15).
  *
  * Clamped to the bill in both directions: a discount bigger than the bill makes
  * it free rather than negative, and a negative one is ignored rather than
- * quietly inflating what the customer owes.
+ * quietly inflating what the customer owes. `canDiscount` refuses those before
+ * they get here; the clamp is the last resort.
  */
 export function discountAmount(
     gross: number,

@@ -1367,6 +1367,7 @@ function POSPageInner() {
       isTakeaway: i.isTakeaway,
       note: i.note ?? null,
     })),
+    gross: lastOrderInfo.subtotal ?? undefined,
     discount: lastOrderInfo.discount ?? 0,
     tax: lastOrderInfo.tax ?? 0,
     total: lastOrderInfo.total,
