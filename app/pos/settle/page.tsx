@@ -14,6 +14,7 @@ import { QRCodeSVG } from "qrcode.react"
 import { Banknote, QrCode, Gift, Clock3, Printer, Percent, Tag, ArrowLeft, Check, PackageOpen, AlertTriangle } from "lucide-react"
 import { formatTHB } from "@/lib/currency"
 import { minSpendShortfall } from "@/lib/min-spend"
+import { canDiscount, discountAmount } from "@/lib/payments"
 import { toast } from "sonner"
 
 type SettleOrder = {
@@ -216,6 +217,10 @@ function SettleScreen() {
     }, [pendingQr, load, router, t])
 
     if (!bill) return <div className="h-screen grid place-items-center text-slate-400">…</div>
+
+    // The manager's discount comes off what is left after the promotion.
+    const discountBase = Math.max(0, bill.gross - (bill.promoDiscount || 0))
+    const discountCheck = canDiscount(discountBase, discountKind, Number(discountInput))
 
     const rounds = bill.orders
         .filter((o) => o.status !== "HOLD" && o.status !== "CANCELLED")
@@ -839,17 +844,27 @@ function SettleScreen() {
                             onChange={(e) => setDiscountInput(e.target.value)}
                             className="h-12 text-lg tabular-nums border-2 rounded-xl"
                         />
-                        <p className="text-sm text-slate-500">
-                            {formatTHB(bill.gross)} →{" "}
-                            <span className="font-bold text-slate-900">
-                                {formatTHB(Math.max(0, Math.ceil(bill.gross - (discountKind === "PERCENT"
-                                    ? bill.gross * (Number(discountInput) || 0) / 100
-                                    : Number(discountInput) || 0))))}
-                            </span>
-                        </p>
+                        {/* Off the bill after its promotion, which is what the
+                            server takes it from. A discount bigger than that is a
+                            typo, so the refusal takes the preview's place: "฿0"
+                            beside "too big" reads as an offer. */}
+                        {discountCheck.ok ? (
+                            <p className="text-sm text-slate-500">
+                                {formatTHB(discountBase)} →{" "}
+                                <span className="font-bold text-slate-900">
+                                    {formatTHB(Math.ceil(discountBase - discountAmount(discountBase, discountKind, Number(discountInput))))}
+                                </span>
+                            </p>
+                        ) : (
+                            <p role="alert" className="text-sm font-bold text-slate-900 rounded-lg border-2 border-orange-300 bg-orange-50 px-3 py-2">
+                                {discountCheck.reason === "DISCOUNT_OVER_100_PERCENT"
+                                    ? t.discount_over_100
+                                    : t.discount_exceeds_total.replace("{n}", formatTHB(discountBase))}
+                            </p>
+                        )}
                         <Button
                             className="w-full h-12 rounded-xl bg-amber-600 hover:bg-amber-700 text-amber-950"
-                            disabled={!(Number(discountInput) > 0)}
+                            disabled={!(Number(discountInput) > 0) || !discountCheck.ok}
                             onClick={() => { setApprovalError(null); setApproving("DISCOUNT") }}
                         >
                             {t.approval_required}

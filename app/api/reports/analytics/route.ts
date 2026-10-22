@@ -7,6 +7,7 @@ import { sessionTotal, sessionBillTotal } from '@/lib/sessions'
 // rather than re-decided here. See lib/reporting.ts for what drifted.
 import { COUNTED_ORDER, COUNTED_LINE, periodDiscounts, areaStats } from '@/lib/reporting'
 import { startOfDay, endOfDay } from 'date-fns'
+import { isWalkIn } from '@/lib/counter'
 
 /** Movement types whose `reason` column holds a reason a person chose. */
 const REASONED_TYPES = new Set(['SHOP_ADJUST', 'WITHDRAW'])
@@ -59,6 +60,7 @@ export async function GET(request: Request) {
                 createdAt: true,
                 discount: true,
                 sessionId: true,
+                session: { select: { table: { select: { area: true } } } },
                 user: { select: { name: true } },
                 // Who served it. In a bar this is the person who sold the round;
                 // the one at the till keyed it in afterwards.
@@ -105,8 +107,9 @@ export async function GET(request: Request) {
         // Table service vs the walk-in counter. For a bar this is the split
         // that matters; takeaway vs dine-in is a cafe question - a bar is dine
         // in by definition, so that chart always read 100/0.
-        const tableOrders = orders.filter((o) => o.sessionId)
-        const walkInOrders = orders.filter((o) => !o.sessionId)
+        // A bill on the counter is a walk-in too (lib/counter).
+        const tableOrders = orders.filter((o) => !isWalkIn(o))
+        const walkInOrders = orders.filter((o) => isWalkIn(o))
         const serviceStats = [
             { name: 'Tables', revenue: tableOrders.reduce((s, o) => s + o.total, 0), count: tableOrders.length },
             { name: 'Walk-in', revenue: walkInOrders.reduce((s, o) => s + o.total, 0), count: walkInOrders.length },

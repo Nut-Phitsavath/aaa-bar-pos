@@ -9,6 +9,7 @@ import { decrementStock } from '@/lib/stock'
 import { refreshSessionPromo } from '@/lib/session-promo'
 import { requireOpenShift } from '@/lib/shift-guard'
 import { printRound } from '@/lib/printers'
+import { isCounter } from '@/lib/counter'
 
 // Force dynamic to prevent caching issues with Orders
 export const dynamic = 'force-dynamic'
@@ -564,9 +565,9 @@ export async function POST(request: Request) {
         // say "kitchen printer not answering" instead of the staff finding out
         // when the food never arrives.
         //
-        // ponytail: table rounds only. A counter sale is made in front of the
-        // customer and already prints a receipt; wire it here too the day the
-        // bar starts taking walk-in food orders.
+        // Table rounds only. A counter round is rung up by the bartender who
+        // pours it, so a slip would be paper for nobody - and the bar has no
+        // kitchen printer for the food side either.
         let dockets: Awaited<ReturnType<typeof printRound>> = []
         // Its own try: the round is already committed, so a failure from here
         // on must not become a 500 - the till would keep the cart, staff would
@@ -577,7 +578,7 @@ export async function POST(request: Request) {
             const printable = await prisma.order.findUnique({
                 where: { id: result.id },
                 include: {
-                    session: { include: { table: { select: { name: true } } } },
+                    session: { include: { table: { select: { name: true, area: true } } } },
                     waiter: { select: { name: true } },
                     items: {
                         where: { voidedAt: null },
@@ -585,7 +586,7 @@ export async function POST(request: Request) {
                     },
                 },
             })
-            if (printable) {
+            if (printable && !isCounter(printable.session?.table?.area)) {
                 dockets = await printRound({
                     table: printable.session?.table?.name ?? '—',
                     round: printable.tableOrderNumber,

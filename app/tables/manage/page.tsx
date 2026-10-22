@@ -83,6 +83,7 @@ export default function ManageTablesPage() {
         if (value === "INDOOR") return t.area_indoor
         if (value === "OUTDOOR") return t.area_outdoor
         if (value === "VIP") return t.area_vip
+        if (value === "COUNTER") return t.area_counter
         return value
     }, [t])
 

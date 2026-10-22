@@ -157,11 +157,15 @@ function POSPageInner() {
   const { t } = useTranslation()
 
   // --- Table session binding -------------------------------------------------
-  // With no ?session= param this whole block stays inert and the screen is the
-  // walk-in counter POS exactly as before.
+  // Every sale is a bill now: a walk-in is a bill on the counter (lib/counter),
+  // opened from the floor. With no ?session= there is nothing to ring up, so
+  // the old cafe counter screen is gone and this goes back to the floor.
   const router = useRouter()
   const searchParams = useSearchParams()
   const sessionIdParam = searchParams.get("session")
+  useEffect(() => {
+    if (!sessionIdParam) router.replace("/tables")
+  }, [sessionIdParam, router])
   const [session, setSession] = useState<TicketBill | null>(null)
   /** Lines this table was already served minutes ago, pending a yes or no. */
   const [duplicateWarnings, setDuplicateWarnings] = useState<DuplicateWarning[]>([])
@@ -1376,6 +1380,9 @@ function POSPageInner() {
     fxRateLAK: lastOrderInfo.fxRateLAK ?? null,
     tenders: counterTenders({ paymentMethod: lastOrderInfo.paymentMethod, total: lastOrderInfo.total, isReportable: lastOrderInfo.isReportable }),
   } : null
+
+  // On its way back to the floor (the effect near the top).
+  if (!sessionIdParam) return null
 
   return (
     <div className="h-screen flex flex-col bg-slate-50 text-slate-900 overflow-hidden">
