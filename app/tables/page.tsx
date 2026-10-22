@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { useShift } from "@/components/shift-provider"
 import { ShiftDialog } from "@/components/shift-dialog"
-import { Users, Clock, Receipt, ShoppingCart, AlertTriangle, LayoutGrid, Sparkles, CalendarClock, X } from "lucide-react"
+import { Users, Clock, Receipt, AlertTriangle, LayoutGrid, Sparkles, CalendarClock, X, Beer, Plus } from "lucide-react"
 import { formatTHB } from "@/lib/currency"
 import { BillPickerDialog } from "@/components/pos/bill-picker-dialog"
 // One place decides what a table is doing; the card, the counts and the legend
@@ -18,6 +18,8 @@ import { resolveTableState, isSeatable, type TableState } from "@/lib/table-stat
 import { formatDuration, openedClock } from "@/lib/sessions"
 import { canManageTables } from "@/lib/roles"
 import { notify } from "@/components/ui/sonner"
+import { isCounter } from "@/lib/counter"
+import { billLabel, orderBills } from "@/lib/table-ops"
 
 type TableBill = {
   id: string
@@ -140,12 +142,18 @@ export default function TablesPage() {
     return () => clearInterval(tick)
   }, [])
 
+  // The counter is not a table on the grid: it holds a bill per person at the
+  // bar and gets its own strip above the floor (lib/counter).
+  const floor = useMemo(() => tables.filter((tbl) => !isCounter(tbl.area)), [tables])
+  const counter = useMemo(() => tables.find((tbl) => isCounter(tbl.area)) ?? null, [tables])
+  const counterBills = useMemo(() => (counter ? orderBills(counter.sessions) : []), [counter])
+
   const areas = useMemo(
-    () => ["ALL", ...Array.from(new Set(tables.map((tbl) => tbl.area)))],
-    [tables]
+    () => ["ALL", ...Array.from(new Set(floor.map((tbl) => tbl.area)))],
+    [floor]
   )
 
-  const visible = area === "ALL" ? tables : tables.filter((tbl) => tbl.area === area)
+  const visible = area === "ALL" ? floor : floor.filter((tbl) => tbl.area === area)
 
   // One resolver for every table, then counted by state. The header used to
   // work these out with its own filters while the cards used different ones,
@@ -155,11 +163,11 @@ export default function TablesPage() {
   // states age: a booking expires and a wait becomes overdue with no request
   // to the server at all.
   const states = useMemo(
-    () => new Map(tables.map((tbl) => [tbl.id, resolveTableState(tbl, now)])),
-    [tables, now]
+    () => new Map(floor.map((tbl) => [tbl.id, resolveTableState(tbl, now)])),
+    [floor, now]
   )
   const countOf = (state: TableState) =>
-    tables.filter((tbl) => states.get(tbl.id)?.state === state).length
+    floor.filter((tbl) => states.get(tbl.id)?.state === state).length
 
   const freeCount = countOf("FREE")
   const occupiedCount = countOf("OCCUPIED")
@@ -168,7 +176,7 @@ export default function TablesPage() {
   const reservedCount = countOf("RESERVED")
   // Not a state - a table can be overdue while occupied by the next party's
   // eyes on it - so counted separately and shown only when it is happening.
-  const overdueCount = tables.filter((tbl) => states.get(tbl.id)?.overdue).length
+  const overdueCount = floor.filter((tbl) => states.get(tbl.id)?.overdue).length
 
   /** One set of words per state, so the card, the counts and a screen reader
    *  never describe the same table differently. */
@@ -185,6 +193,7 @@ export default function TablesPage() {
     if (value === "INDOOR") return t.area_indoor
     if (value === "OUTDOOR") return t.area_outdoor
     if (value === "VIP") return t.area_vip
+    if (isCounter(value)) return t.area_counter
     return value
   }, [t])
 
@@ -244,6 +253,40 @@ export default function TablesPage() {
       setTables((prev) => prev.map((x) =>
         x.id === table.id ? { ...x, reservedFor: null, reservedAt: null } : x))
     } catch { notify.error(t.save_failed) }
+  }
+
+  /** Shift and server first, the same gate a table has. */
+  const readyToOrder = () => {
+    if (shiftStatus !== "OPEN") { notify.warn(t.please_open_shift_first); return false }
+    if (!waiterId) { setServerPrompt(true); return false }
+    return true
+  }
+
+  /** A walk-in: a new bill on the counter, straight to the ticket. */
+  const openWalkIn = async () => {
+    if (!readyToOrder() || opening) return
+    setOpening("COUNTER")
+    try {
+      const res = await fetch("/api/table-sessions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ counter: true }),
+      })
+      if (res.ok) {
+        const session = await res.json()
+        router.push(`/pos?session=${session.id}`)
+      } else {
+        notify.error(t.save_failed)
+        setOpening(null)
+      }
+    } catch {
+      setOpening(null)
+    }
+  }
+
+  const openCounterBill = (sessionId: string) => {
+    if (!readyToOrder()) return
+    router.push(`/pos?session=${sessionId}`)
   }
 
   const openTable = async (table: TableWithSession) => {
@@ -358,11 +401,11 @@ export default function TablesPage() {
               {t.reserve_table}
             </Button>
             <Button
-              variant="outline"
-              className="h-11 border-slate-300 text-slate-700"
-              onClick={() => router.push("/pos")}
+              className="h-11 bg-amber-600 hover:bg-amber-700 text-amber-950 font-bold"
+              onClick={openWalkIn}
+              disabled={opening === "COUNTER"}
             >
-              <ShoppingCart className="w-4 h-4 mr-2" />
+              <Beer className="w-4 h-4 mr-2" />
               {t.walk_in_sale}
             </Button>
           </div>
@@ -439,6 +482,66 @@ export default function TablesPage() {
       </header>
 
       <main className="p-4 md:p-6">
+        {/* The counter: everyone standing at the bar, one bill each. A strip
+            rather than a card, because it holds many bills and each one should
+            be a single tap away - and above the floor, because a walk-in is
+            the sale that happens most often. Gold is a bill that wants paying,
+            as on a table card. */}
+        {!loading && (
+          <section
+            aria-label={t.area_counter}
+            className="mb-4 rounded-lg border-2 border-slate-300 bg-white flex flex-col sm:flex-row overflow-hidden"
+          >
+            <div className="bg-slate-900 text-white px-4 py-3 flex sm:flex-col items-center sm:items-start justify-between sm:justify-center gap-1 shrink-0 sm:min-w-[160px]">
+              <span className="flex items-center gap-2">
+                <Beer className="w-5 h-5 text-amber-400" aria-hidden />
+                <span className="text-xl font-black leading-none">{counter?.name ?? t.area_counter}</span>
+              </span>
+              <span className="text-xs text-slate-300 tabular-nums">
+                {counterBills.length
+                  ? `${counterBills.length} ${t.open_bills} · ${formatTHB(counterBills.reduce((sum, b) => sum + b.total, 0))}`
+                  : t.counter_empty}
+              </span>
+            </div>
+            <div className="flex gap-2 p-2.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden items-stretch flex-1 min-w-0 [contain:inline-size]">
+              {counterBills.map((b) => {
+                const asked = b.status === "BILL_REQUESTED"
+                return (
+                  <button
+                    key={b.id}
+                    onClick={() => openCounterBill(b.id)}
+                    className={`shrink-0 text-start rounded-lg border-2 px-3 py-2 min-w-[150px] transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 motion-safe:active:scale-[0.985] ${asked
+                      ? "bg-amber-400 border-amber-500 hover:bg-amber-300"
+                      : "bg-white border-slate-300 hover:border-slate-400"
+                      }`}
+                  >
+                    <span className="flex items-baseline justify-between gap-3">
+                      <span className="font-black text-slate-900">{billLabel(counter!.name, counter!.sessions, b.id)}</span>
+                      <span className={`text-[11px] tabular-nums ${asked ? "text-amber-900" : "text-slate-500"}`}>
+                        {formatDuration(b.openedAt, now)}
+                      </span>
+                    </span>
+                    <span className={`block text-[11px] font-black uppercase tracking-widest mt-1 truncate max-w-[180px] ${asked ? "text-amber-900" : "text-slate-500"}`}>
+                      {asked ? t.bill_requested : (b.customer?.name ?? t.occupied)}
+                    </span>
+                    <span className="block text-xl font-black text-slate-900 tabular-nums mt-1 leading-none">
+                      {formatTHB(b.total)}
+                    </span>
+                  </button>
+                )
+              })}
+              <button
+                onClick={openWalkIn}
+                disabled={opening === "COUNTER"}
+                className="shrink-0 rounded-lg border-2 border-dashed border-slate-300 hover:border-amber-500 hover:bg-amber-50 px-4 min-w-[130px] min-h-[76px] flex items-center justify-center gap-2 font-bold text-slate-700 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 disabled:opacity-60"
+              >
+                <Plus className="w-5 h-5" aria-hidden />
+                {t.op_new_bill}
+              </button>
+            </div>
+          </section>
+        )}
+
         {loading ? (
           <div className="grid gap-3 md:gap-4" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))" }}>
             {Array.from({ length: 8 }).map((_, i) => (
@@ -451,12 +554,11 @@ export default function TablesPage() {
               <Users className="w-6 h-6 text-slate-400" />
             </div>
             <p className="text-slate-900 font-semibold">{t.no_tables_yet}</p>
-            <p className="text-sm text-slate-500 mt-1">
-              {t.walk_in_sale} &rarr; {t.pos}
-            </p>
-            <Button variant="outline" className="mt-4 h-11" onClick={() => router.push("/pos")}>
-              {t.walk_in_sale}
-            </Button>
+            {canManage && (
+              <Button variant="outline" className="mt-4 h-11" onClick={() => router.push("/tables/manage")}>
+                {t.manage_floor}
+              </Button>
+            )}
           </div>
         ) : (
           <div className="grid gap-3 md:gap-4" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))" }}>
@@ -713,9 +815,9 @@ export default function TablesPage() {
           <DialogHeader><DialogTitle>{t.reserve_table}</DialogTitle></DialogHeader>
 
           {/* What is already held, each with the way to cancel it. */}
-          {tables.some((x) => states.get(x.id)?.reservation) && (
+          {floor.some((x) => states.get(x.id)?.reservation) && (
             <div className="rounded-xl border border-slate-200 overflow-hidden">
-              {tables.filter((x) => states.get(x.id)?.reservation).map((x) => {
+              {floor.filter((x) => states.get(x.id)?.reservation).map((x) => {
                 const r = states.get(x.id)!.reservation!
                 return (
                   <div key={x.id} className="flex items-center gap-3 px-3 py-2.5 border-b border-slate-100 last:border-0">
@@ -746,7 +848,7 @@ export default function TablesPage() {
               className="w-full h-11 rounded-xl border-2 border-slate-300 px-3 font-bold text-slate-800 bg-white"
             >
               <option value="">{t.tables}…</option>
-              {tables.filter((x) => x.sessions.length === 0).map((x) => (
+              {floor.filter((x) => x.sessions.length === 0).map((x) => (
                 <option key={x.id} value={x.id}>
                   {x.name} · {areaLabel(x.area)}
                   {x.minSpend ? ` · ${formatTHB(x.minSpend)}` : ""}

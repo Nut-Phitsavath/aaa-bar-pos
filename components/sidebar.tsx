@@ -5,7 +5,6 @@ import Link from "next/link"
 import { useEffect, useState } from "react"
 import {
     LayoutDashboard,
-    ShoppingCart,
     Receipt,
     List,
     Package,
@@ -88,7 +87,6 @@ export function Sidebar() {
     const mainNavItems = [
         { name: t.dashboard, href: "/dashboard", icon: LayoutDashboard },
         { name: t.tables, href: "/tables", icon: TableIcon },
-        { name: t.pos, href: "/pos", icon: ShoppingCart },
         { name: t.bill_history, href: "/orders", icon: Receipt },
         { name: t.menu, href: "/menu", icon: List },
         { name: t.inventory, href: "/inventory", icon: Package },
@@ -109,7 +107,8 @@ export function Sidebar() {
     const filteredNavItems = mainNavItems.filter(item => {
         // Staff restrictions
         if (isStaff) {
-            const staffAllowed = ['/pos', '/orders', '/users', '/inventory']
+            // The floor, not a POS item: walk-ins are bills on the counter there.
+            const staffAllowed = ['/tables', '/orders', '/users', '/inventory']
             return staffAllowed.includes(item.href)
         }
 

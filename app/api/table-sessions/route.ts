@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getSessionUser } from '@/lib/auth'
 import { requireOpenShift } from '@/lib/shift-guard'
+import { COUNTER_AREA, COUNTER_DEFAULT_NAME } from '@/lib/counter'
 
 export const dynamic = 'force-dynamic'
 
@@ -15,7 +16,24 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: shiftCheck.reason }, { status: 409 })
         }
 
-        const { tableId } = await request.json()
+        const { tableId, counter } = await request.json()
+
+        // Who opened it: the signed-in user as the database sees them (lib/auth).
+        const openedById = (await getSessionUser())?.id ?? null
+
+        // A walk-in: a new bill on the counter, every time. The counter holds
+        // everyone standing at the bar, one bill each, so unlike a table there is
+        // no "already open" bill to hand back. The spot is made the first time
+        // it is needed, so a fresh install has a counter without anyone setting
+        // one up; the owner can rename it in Manage floor.
+        if (counter) {
+            const session = await prisma.$transaction(async (tx) => {
+                const spot = await tx.table.findFirst({ where: { area: COUNTER_AREA, isActive: true }, orderBy: { displayOrder: 'asc' } })
+                    ?? await tx.table.create({ data: { name: COUNTER_DEFAULT_NAME, area: COUNTER_AREA, seats: 0 } })
+                return tx.tableSession.create({ data: { tableId: spot.id, status: 'OPEN', openedById } })
+            })
+            return NextResponse.json(session)
+        }
 
         if (!tableId) {
             return NextResponse.json({ error: 'tableId is required' }, { status: 400 })
@@ -25,9 +43,6 @@ export async function POST(request: Request) {
         if (!table || !table.isActive) {
             return NextResponse.json({ error: 'Table not found' }, { status: 404 })
         }
-
-        // Who opened it: the signed-in user as the database sees them (lib/auth).
-        const openedById = (await getSessionUser())?.id ?? null
 
         // Idempotent: tapping an already-open table returns its session rather
         // than opening a second bill on the same table. Two devices tapping T7

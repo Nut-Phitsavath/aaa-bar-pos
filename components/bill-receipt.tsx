@@ -225,16 +225,26 @@ export function BillReceipt({ data, settings }: { data: ReceiptData; settings: a
             </div>
 
             <div className="border-t border-dashed border-slate-300 pt-4 space-y-2">
-                <div className="flex justify-between gap-4 opacity-70 text-[11px]">
-                    <span>{t.subtotal_net}</span>
-                    <span>{formatTHB(data.total - data.tax)}</span>
-                </div>
+                {/* With a discount the slip runs gross, less discount, then the
+                    rest, so "3,500 less 500 is 3,000" can be checked by hand.
+                    Listing the discount between two figures already net of it
+                    made that sum unreadable. */}
+                {(data.discount ?? 0) > 0 && data.gross != null && (
+                    <div className="flex justify-between gap-4 text-[11px]">
+                        <span>{t.subtotal}</span>
+                        <span>{formatTHB(data.gross)}</span>
+                    </div>
+                )}
                 {(data.discount ?? 0) > 0 && (
                     <div className="flex justify-between gap-4 text-rose-600 font-bold text-[11px]">
                         <span>{t.discount}</span>
                         <span>-{formatTHB(data.discount!)}</span>
                     </div>
                 )}
+                <div className="flex justify-between gap-4 opacity-70 text-[11px]">
+                    <span>{t.subtotal_net}</span>
+                    <span>{formatTHB(data.total - data.tax)}</span>
+                </div>
                 {data.tax > 0 && (
                     <div className="flex justify-between gap-4 opacity-70 text-[11px]">
                         <span>VAT ({data.taxRate ?? settings?.taxRate ?? 0}%)</span>
