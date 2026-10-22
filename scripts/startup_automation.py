@@ -9,6 +9,11 @@ import os
 import shutil
 import tempfile
 
+# The customer-facing display on a second monitor. The bar has no customer
+# screen, so it stays off: with one monitor the window only landed on top of
+# the POS. Set to True if a second screen is ever added.
+CUSTOMER_VIEW = False
+
 
 def prepare_profile(name):
     """Return a persistent Chrome user-data-dir whose HTTP cache is cleared on
@@ -42,22 +47,9 @@ def get_new_window(existing_window_ids, timeout=15):
         time.sleep(0.5)
     return None
 
-def main():
-    # URLs
-    pos_url = "http://localhost:3000/pos"
+def launch_customer_view(monitors):
+    """The customer-facing display, moved to the second monitor."""
     customer_url = "http://localhost:3000/customer-view"
-
-    print("\n" + "="*40)
-    print("--- POS STARTUP (SEQUENTIAL MODE) ---")
-    print("="*40)
-    
-    # 0. Get monitor info
-    monitors = get_monitors()
-    print(f"\n[1/4] DETECTED {len(monitors)} MONITORS:")
-    for i, m in enumerate(monitors):
-        print(f"  Monitor {i}: {m.width}x{m.height} at ({m.x}, {m.y})")
-
-    # 1. Handle Customer View Window
     print(f"\n[2/4] STEP 1: Launching Customer View Window...")
     existing_ids = [w._hWnd for w in gw.getAllWindows()]
     
@@ -94,6 +86,26 @@ def main():
             print(f"  FAILED to move Customer View: {e}")
     else:
         print("  FAILED: Could not identify the new Customer View window.")
+
+def main():
+    # URLs
+    pos_url = "http://localhost:3000/pos"
+
+    print("\n" + "="*40)
+    print("--- POS STARTUP (SEQUENTIAL MODE) ---")
+    print("="*40)
+    
+    # 0. Get monitor info
+    monitors = get_monitors()
+    print(f"\n[1/4] DETECTED {len(monitors)} MONITORS:")
+    for i, m in enumerate(monitors):
+        print(f"  Monitor {i}: {m.width}x{m.height} at ({m.x}, {m.y})")
+
+    # 1. Customer View - only for a bar that has a customer screen.
+    if CUSTOMER_VIEW:
+        launch_customer_view(monitors)
+    else:
+        print("\n[2/4] STEP 1: Customer View is switched off (CUSTOMER_VIEW = False) - skipped.")
 
     # 2. Handle POS Window
     print(f"\n[3/4] STEP 2: Launching POS Window...")
