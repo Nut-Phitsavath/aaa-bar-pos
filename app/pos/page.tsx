@@ -1497,8 +1497,24 @@ function POSPageInner() {
         />
       )}
 
-      {/* Right Side - Cart */}
-      <div className={`w-[450px] flex-col bg-white shadow-2xl z-10 border-l ${session ? "hidden" : "flex"}`}>
+      {/* While the bill loads: the ticket's own outline, not the old cafe cart.
+          Keying off `session` showed that cart for the moment before the bill
+          arrived, so every table opened on the wrong screen first. */}
+      {!session && (
+        <div aria-busy="true" className="w-[440px] xl:w-[520px] flex flex-col bg-white border-l border-slate-200 shrink-0">
+          <div className="flex-1 p-4 space-y-3">
+            <div className="h-6 w-2/3 rounded bg-slate-100 animate-pulse" />
+            <div className="h-6 w-1/2 rounded bg-slate-100 animate-pulse" />
+          </div>
+          <div className="border-t border-slate-200 p-3">
+            <div className="h-12 rounded-md bg-slate-100 animate-pulse" />
+          </div>
+        </div>
+      )}
+
+      {/* The old walk-in cart. Never shown: every sale is a bill now (lib/counter).
+          Still mounted only because the table flow's dialogs below live in it. */}
+      <div className="hidden w-[450px] flex-col bg-white shadow-2xl z-10 border-l">
         <div className="p-4 border-b bg-slate-50 flex items-center justify-between">
           <h3 className="font-bold text-slate-800 flex items-center gap-2" id="cart-icon-header">
             <ShoppingCart className="w-5 h-5 transition-all duration-200" /> {t.cart}

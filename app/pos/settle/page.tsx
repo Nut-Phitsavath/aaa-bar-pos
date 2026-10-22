@@ -681,11 +681,9 @@ function SettleScreen() {
                     {t.pay_transfer}
                 </button>
 
-                {/* Not a tender: no money arrives, the bill just stops being
-                    owed. The gap is the whole point - as white space, because a
-                    solid grey bar read as a gap in the layout. */}
-                <div className="h-4 bg-white shrink-0" aria-hidden />
-
+                {/* Not tenders: no money arrives, the bill just stops being
+                    owed. The change from coloured to white is the separation;
+                    a bar or a gap between them read as a hole in the column. */}
                 <button
                     onClick={() => { setApprovalError(null); setApproving("COMP") }}
                     disabled={busy || bill.balance <= 0}
