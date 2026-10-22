@@ -372,9 +372,9 @@ export default function TablesPage() {
             open reads as a broken till; this says the till is fine and the
             night has not been started yet. */}
         {shiftStatus === "CLOSED" && (
-          <div className="mx-4 md:mx-6 mb-3 flex flex-wrap items-center gap-3 rounded-xl border-2 border-amber-300 bg-amber-50 px-4 py-3">
-            <AlertTriangle className="w-5 h-5 text-amber-800 shrink-0" />
-            <p className="font-bold text-amber-900">{t.please_open_shift_first}</p>
+          <div className="mx-4 md:mx-6 mb-3 flex flex-wrap items-center gap-3 rounded-xl border-2 border-orange-300 bg-orange-50 px-4 py-3">
+            <AlertTriangle className="w-5 h-5 text-orange-600 shrink-0" />
+            <p className="font-bold text-slate-900">{t.please_open_shift_first}</p>
             <Button
               className="ms-auto h-11 bg-amber-600 hover:bg-amber-700 text-amber-950 font-bold"
               onClick={() => setShiftDialogOpen(true)}

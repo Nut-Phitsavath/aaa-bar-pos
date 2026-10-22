@@ -185,7 +185,7 @@ export function ServerPerformance({ startDate, endDate }: { startDate: string; e
                                     </span>
                                 )}
                                 {r.voids > 0 && (
-                                    <span className="text-amber-800 font-semibold inline-flex items-center gap-1">
+                                    <span className="text-orange-700 font-semibold inline-flex items-center gap-1">
                                         <AlertTriangle className="w-3 h-3" />
                                         {r.voids} {t.state_void} ({formatTHB(r.voidValue)})
                                     </span>

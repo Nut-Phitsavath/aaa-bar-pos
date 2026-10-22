@@ -89,7 +89,7 @@ export function ShopAdjustDialog({ open, onOpenChange, ingredient, onSuccess }: 
             <DialogContent className="sm:max-w-md">
                 <DialogHeader>
                     <DialogTitle className="flex items-center gap-2">
-                        <AlertTriangle className="w-5 h-5 text-amber-800" />
+                        <AlertTriangle className="w-5 h-5 text-orange-600" />
                         {t.adjust_shop_stock}: {ingredient.name}
                     </DialogTitle>
                 </DialogHeader>

@@ -459,7 +459,7 @@ function SettleScreen() {
                     well decide the room is not owed it tonight. Nothing is
                     charged until somebody taps. */}
                 {shortfall > 0 && (
-                    <div className="shrink-0 bg-amber-400 text-slate-900">
+                    <div className="shrink-0 bg-orange-300 text-slate-900">
                         <div className="px-3 pt-2.5 pb-2 flex items-start gap-2.5">
                             <AlertTriangle className="w-5 h-5 shrink-0 mt-px" aria-hidden />
                             <div className="min-w-0">
@@ -745,7 +745,7 @@ function SettleScreen() {
                                 <img src={transferQrUrl} alt={t.store_transfer_qr} className="w-60 h-60 object-contain" />
                             </div>
                         ) : (
-                            <p className="rounded-xl border-2 border-dashed border-amber-300 bg-amber-50 px-4 py-8 text-sm font-bold text-amber-800">
+                            <p className="rounded-xl border-2 border-dashed border-orange-300 bg-orange-50 px-4 py-8 text-sm font-bold text-slate-800">
                                 {t.no_transfer_qr}
                             </p>
                         )}

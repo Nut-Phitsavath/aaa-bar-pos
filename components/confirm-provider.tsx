@@ -62,7 +62,7 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
                 <AlertDialogContent className="sm:max-w-md rounded-2xl">
                     <AlertDialogHeader>
                         <div className="flex items-start gap-3">
-                            <div className={`mt-0.5 rounded-full p-2 ${options?.destructive ? "bg-rose-100 text-rose-600" : "bg-amber-100 text-amber-800"}`}>
+                            <div className={`mt-0.5 rounded-full p-2 ${options?.destructive ? "bg-rose-100 text-rose-600" : "bg-orange-100 text-orange-600"}`}>
                                 <AlertTriangle className="h-5 w-5" />
                             </div>
                             <div className="flex-1 min-w-0">

@@ -149,7 +149,7 @@ export function ExchangeAudit({ startDate, endDate }: { startDate: string; endDa
 
             {data.totals.returnedValue > 0 && (
                 <p className="flex items-start gap-2 text-xs text-slate-500">
-                    <AlertTriangle className="w-4 h-4 text-amber-800 shrink-0 mt-0.5" />
+                    <AlertTriangle className="w-4 h-4 text-orange-600 shrink-0 mt-0.5" />
                     {t.exchange_audit_hint}
                 </p>
             )}

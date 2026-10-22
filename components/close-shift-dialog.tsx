@@ -122,8 +122,8 @@ export function CloseShiftDialog({ open, onOpenChange }: { open: boolean; onOpen
                                 deal with it - not a refusal that leaves staff hunting
                                 the floor at 3am. */}
                             {blocking.length > 0 && (
-                                <div className="rounded-xl border-2 border-amber-300 bg-amber-50 p-3 space-y-2">
-                                    <p className="text-sm font-bold text-amber-900">{t.tables_still_open}</p>
+                                <div className="rounded-xl border-2 border-orange-300 bg-orange-50 p-3 space-y-2">
+                                    <p className="text-sm font-bold text-slate-900">{t.tables_still_open}</p>
                                     {blocking.map((b) => (
                                         <div key={b.id} className="flex items-center gap-3 text-sm">
                                             <span className="font-bold text-slate-900">{b.table}</span>

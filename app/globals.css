@@ -77,21 +77,22 @@
   --sidebar-ring: oklch(0.439 0 0);
 }
 
-/* AAA's palette, built from the logo's own hue (OKLCH 78) so every grey and
-   the gold belong together - Impeccable colorize, checked on the test page.
+/* AAA's palette: the logo's gold, set against a cool graphite (the owner
+   picked it on the test page over charcoal, navy, green and the rest).
 
-   amber = the logo's gold, in its light-to-mid shades only (50-700): fills,
-   buttons, the active item. A gold that gets dark goes brown, so 800-950 are
-   a graphite with just a trace of the hue - text, never a muddy brown.
-   600 takes dark text (7.0:1), not white; 800 is the accent-text colour
-   (8.5:1 on white).
+   amber = the logo's gold (OKLCH hue 78), in its light-to-mid shades only
+   (50-700): fills, buttons, the active item. A gold that gets dark goes
+   brown, so amber 800-950 are the graphite instead - text, never a muddy
+   brown. 600 takes dark text (7.0:1), not white; 800 is the accent-text
+   colour (8.5:1 on white).
 
-   slate = the app's main grey, 956 uses. It was Tailwind's cool blue-grey,
-   which fought the gold; now near-neutral, tinted toward the brand at chroma
-   0.002-0.006 - too little to read as yellow. Same lightness steps as before.
+   slate = the app's main grey (956 uses) and stone = the sidebar and PIN
+   screen: one cool graphite family (hue 255) at low chroma, 0.002-0.012, so
+   it reads as grey rather than blue - Tailwind's own slate ran to 0.046.
+   stone-800 (#25292f) is the sidebar. The gold is the one warm colour.
 
-   stone = the sidebar and PIN screen's charcoal (800, L 0.29), lighter and
-   less brown than the logo's near-black: black there was too heavy. */
+   Warnings are Tailwind's orange, untouched: amber means the brand now, so a
+   caution in amber would read as decoration. */
 @theme {
   --color-amber-50: #fbf6ee;
   --color-amber-100: #f8eddc;
@@ -101,31 +102,31 @@
   --color-amber-500: #dca64b;
   --color-amber-600: #d39d40;
   --color-amber-700: #bc8930;
-  --color-amber-800: #514c46;
-  --color-amber-900: #36322d;
-  --color-amber-950: #1f1c19;
-  --color-slate-50: #fafaf8;
-  --color-slate-100: #f5f4f3;
-  --color-slate-200: #e8e7e6;
-  --color-slate-300: #d5d3d1;
-  --color-slate-400: #a19f9d;
-  --color-slate-500: #75726f;
-  --color-slate-600: #565450;
-  --color-slate-700: #42403d;
-  --color-slate-800: #2a2825;
-  --color-slate-900: #191815;
-  --color-slate-950: #080705;
-  --color-stone-50: #f6f5f3;
-  --color-stone-100: #f0eeeb;
-  --color-stone-200: #e0deda;
-  --color-stone-300: #c6c4c0;
-  --color-stone-400: #bab7b2;
-  --color-stone-500: #888682;
-  --color-stone-600: #66635e;
-  --color-stone-700: #3f3d38;
-  --color-stone-800: #2d2b27;
-  --color-stone-900: #1e1d1a;
-  --color-stone-950: #110f0d;
+  --color-amber-800: #494d54;
+  --color-amber-900: #2f3339;
+  --color-amber-950: #1a1d22;
+  --color-slate-50: #f9fafb;
+  --color-slate-100: #f3f4f6;
+  --color-slate-200: #e5e8eb;
+  --color-slate-300: #d1d4d8;
+  --color-slate-400: #9ca0a6;
+  --color-slate-500: #6e737a;
+  --color-slate-600: #50555b;
+  --color-slate-700: #3c4147;
+  --color-slate-800: #25292f;
+  --color-slate-900: #14181d;
+  --color-slate-950: #05070b;
+  --color-stone-50: #f4f7fb;
+  --color-stone-100: #f0f4f9;
+  --color-stone-200: #dadee3;
+  --color-stone-300: #caced3;
+  --color-stone-400: #bbbec2;
+  --color-stone-500: #898c92;
+  --color-stone-600: #5f6469;
+  --color-stone-700: #3a3d42;
+  --color-stone-800: #25292f;
+  --color-stone-900: #171b20;
+  --color-stone-950: #0a0e12;
 }
 
 @theme inline {

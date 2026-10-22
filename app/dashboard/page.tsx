@@ -335,21 +335,21 @@ export default function DashboardPage() {
 
           {/* Low Stock Highlight */}
           {data?.lowStockAlerts.length > 0 && (
-            <Card className="p-6 border-none shadow-sm bg-orange-50 border-l-4 border-orange-500">
+            <Card className="p-6 shadow-sm bg-orange-50 border border-orange-200">
               <div className="flex items-center gap-2 mb-3">
                 <AlertTriangle className="w-5 h-5 text-orange-600" />
-                <h3 className="font-bold text-orange-950">{t.low_stock_alerts}</h3>
+                <h3 className="font-bold text-slate-900">{t.low_stock_alerts}</h3>
               </div>
               <div className="space-y-2">
                 {data?.lowStockAlerts.slice(0, 2).map((item: any) => (
                   <div key={item.name} className="flex justify-between items-center text-xs">
-                    <span className="font-medium text-orange-800">{item.name}</span>
-                    <span className="font-bold text-orange-600">{item.current} {item.unit}</span>
+                    <span className="font-medium text-slate-800">{item.name}</span>
+                    <span className="font-bold text-orange-700">{item.current} {item.unit}</span>
                   </div>
                 ))}
                 <Button
                   variant="link"
-                  className="px-0 h-auto text-[11px] text-orange-700 font-bold hover:text-orange-900"
+                  className="px-0 h-auto text-[11px] text-orange-700 font-bold hover:underline"
                   onClick={() => router.push('/inventory')}
                 >
                   {t.manage_inventory || "Manage Inventory"} →

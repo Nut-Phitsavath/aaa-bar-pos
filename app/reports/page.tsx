@@ -296,7 +296,7 @@ export default function ReportsPage() {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
-            <Card className="border-l-4 border-l-amber-500 shadow-none bg-slate-50/50">
+            <Card className="shadow-none bg-slate-50/50">
               <CardHeader className="p-4">
                 <CardDescription>{t.revenue || "Revenue"}</CardDescription>
                 <CardTitle className="text-2xl font-bold">{formatTHB(data?.summary.totalRevenue || 0)}</CardTitle>
@@ -306,45 +306,47 @@ export default function ReportsPage() {
                 <p className="text-[14px] text-muted-foreground mt-1 uppercase tracking-wider font-semibold">{t.billed_tax_incl}</p>
               </CardHeader>
             </Card>
-            <Card className="border-l-4 border-l-emerald-500 shadow-none bg-slate-50/50">
+            <Card className="shadow-none bg-slate-50/50">
               <CardHeader className="p-4">
                 <CardDescription>{t.net_sales}</CardDescription>
                 <CardTitle className="text-2xl font-bold">{formatTHB(data?.summary.netSales || 0)}</CardTitle>
                 <p className="text-[14px] text-muted-foreground mt-1 uppercase tracking-wider font-semibold">{t.revenue_before_tax}</p>
               </CardHeader>
             </Card>
-            <Card className="border-l-4 border-l-blue-500 shadow-none bg-slate-50/50">
+            <Card className="shadow-none bg-slate-50/50">
               <CardHeader className="p-4">
                 <CardDescription>{t.tax_collected}</CardDescription>
                 <CardTitle className="text-2xl font-bold">{formatTHB(data?.summary.taxCollected || 0)}</CardTitle>
                 <p className="text-[14px] text-muted-foreground mt-1 uppercase tracking-wider font-semibold">{t.estimated_vat_sales_tax}</p>
               </CardHeader>
             </Card>
-            <Card className="border-l-4 border-l-purple-500 shadow-none bg-slate-50/50">
+            <Card className="shadow-none bg-slate-50/50">
               <CardHeader className="p-4">
                 <CardDescription>{t.orders}</CardDescription>
                 <CardTitle className="text-2xl font-bold">{data?.summary.totalOrders || 0}</CardTitle>
                 <p className="text-[14px] text-muted-foreground mt-1 uppercase tracking-wider font-semibold">{t.total_completed_transactions}</p>
               </CardHeader>
             </Card>
-            <Card className="border-l-4 border-l-amber-500 shadow-none bg-slate-50/50">
+            <Card className="shadow-none bg-slate-50/50">
               <CardHeader className="p-4">
                 <CardDescription>{t.aov}</CardDescription>
                 <CardTitle className="text-2xl font-bold">{formatTHB(data?.summary.aov || 0)}</CardTitle>
                 <p className="text-[14px] text-muted-foreground mt-1 uppercase tracking-wider font-semibold">{t.average_order_value}</p>
               </CardHeader>
             </Card>
-            <Card className="border-l-4 border-l-rose-500 shadow-none bg-slate-50/50">
+            <Card className="shadow-none bg-slate-50/50">
               <CardHeader className="p-4">
                 <CardDescription>{t.cogs}</CardDescription>
                 <CardTitle className="text-2xl font-bold">{formatTHB(data?.summary.totalCOGS || 0)}</CardTitle>
                 <p className="text-[14px] text-muted-foreground mt-1 uppercase tracking-wider font-semibold">{t.cost_of_goods_sold}</p>
               </CardHeader>
             </Card>
-            <Card className="border-l-4 border-l-indigo-500 shadow-none bg-slate-50/50">
+            <Card className="shadow-none bg-slate-50/50">
               <CardHeader className="p-4">
                 <CardDescription>{t.gross_profit}</CardDescription>
-                <CardTitle className="text-2xl font-bold text-indigo-600">{formatTHB(data?.summary.grossProfit || 0)}</CardTitle>
+                {/* Colour that says something: green while the bar makes money on what it
+                    sells, red if it does not. It was indigo either way. */}
+                <CardTitle className={`text-2xl font-bold ${(data?.summary.grossProfit || 0) < 0 ? "text-rose-600" : "text-emerald-700"}`}>{formatTHB(data?.summary.grossProfit || 0)}</CardTitle>
                 <p className="text-[14px] text-muted-foreground mt-1 uppercase tracking-wider font-semibold">{t.revenue_minus_cogs}</p>
               </CardHeader>
             </Card>
@@ -353,17 +355,17 @@ export default function ReportsPage() {
                 see the number even when it was right - and it was reading the
                 cafe's per-order column, which this bar never writes, so it was
                 ฿0 on every night a table was discounted. */}
-            <Card className="border-l-4 border-l-orange-500 shadow-none bg-slate-50/50">
+            <Card className="shadow-none bg-slate-50/50">
               <CardHeader className="p-4">
                 <CardDescription>{t.discounts_given}</CardDescription>
-                <CardTitle className="text-2xl font-bold text-orange-600">{formatTHB(data?.summary.totalDiscounts || 0)}</CardTitle>
+                <CardTitle className="text-2xl font-bold text-orange-700">{formatTHB(data?.summary.totalDiscounts || 0)}</CardTitle>
                 <p className="text-[14px] text-muted-foreground mt-1 uppercase tracking-wider font-semibold">{t.table_discounts_desc}</p>
               </CardHeader>
             </Card>
             {/* The number a bar is actually run on, and the one this page made
                 you derive from two other cards. Coloured against the same
                 bands the recipe editor uses. */}
-            <Card className="border-l-4 border-l-teal-500 shadow-none bg-slate-50/50">
+            <Card className="shadow-none bg-slate-50/50">
               <CardHeader className="p-4">
                 <CardDescription>{t.pour_cost}</CardDescription>
                 <CardTitle className="text-2xl font-bold tabular-nums">
@@ -685,7 +687,7 @@ export default function ReportsPage() {
                 </CardContent>
               </Card>
 
-              <Card className="border-l-4 border-l-rose-500">
+              <Card className="">
                 <CardHeader>
                   <CardTitle>{t.complimentary_orders}</CardTitle>
                   <CardDescription>{t.owner_friends_not_revenue}</CardDescription>
@@ -1069,7 +1071,7 @@ export default function ReportsPage() {
                 three of five cards read 0 every night while the movements
                 that do happen had no card at all. */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
-              <Card className="p-4 border-l-4 border-l-purple-500">
+              <Card className="p-4 ">
                 <div className="flex items-center gap-3">
                   <div className="bg-purple-100 p-2 rounded-lg">
                     <ShoppingCart className="w-5 h-5 text-purple-600" />
@@ -1080,7 +1082,7 @@ export default function ReportsPage() {
                   </div>
                 </div>
               </Card>
-              <Card className="p-4 border-l-4 border-l-green-500">
+              <Card className="p-4 ">
                 <div className="flex items-center gap-3">
                   <div className="bg-green-100 p-2 rounded-lg">
                     <Package className="w-5 h-5 text-green-600" />
@@ -1091,7 +1093,7 @@ export default function ReportsPage() {
                   </div>
                 </div>
               </Card>
-              <Card className="p-4 border-l-4 border-l-blue-500">
+              <Card className="p-4 ">
                 <div className="flex items-center gap-3">
                   <div className="bg-blue-100 p-2 rounded-lg">
                     <History className="w-5 h-5 text-blue-600" />
@@ -1102,7 +1104,7 @@ export default function ReportsPage() {
                   </div>
                 </div>
               </Card>
-              <Card className="p-4 border-l-4 border-l-indigo-500">
+              <Card className="p-4 ">
                 <div className="flex items-center gap-3">
                   <div className="bg-indigo-100 p-2 rounded-lg">
                     <ArrowRightLeft className="w-5 h-5 text-indigo-600" />
@@ -1113,7 +1115,7 @@ export default function ReportsPage() {
                   </div>
                 </div>
               </Card>
-              <Card className="p-4 border-l-4 border-l-amber-500">
+              <Card className="p-4 ">
                 <div className="flex items-center gap-3">
                   <div className="bg-amber-100 p-2 rounded-lg">
                     <Package className="w-5 h-5 text-amber-800" />
@@ -1124,7 +1126,7 @@ export default function ReportsPage() {
                   </div>
                 </div>
               </Card>
-              <Card className="p-4 border-l-4 border-l-rose-500">
+              <Card className="p-4 ">
                 <div className="flex items-center gap-3">
                   <div className="bg-rose-100 p-2 rounded-lg">
                     <AlertTriangle className="w-5 h-5 text-rose-600" />
